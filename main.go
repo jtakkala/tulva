@@ -1,10 +1,12 @@
 package main
 
 import (
-//	"crypto/sha1"
+	"crypto/sha1"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
+	"time"
 	"code.google.com/p/bencode-go"
 )
 
@@ -25,6 +27,24 @@ type Metainfo struct {
 	Info Info "info"
 	Announce string "announce"
 	AnnounceList [][]string "announce-list"
+}
+
+var PeerId = [20]byte {
+	'-',
+	'T',
+	'V',
+	'0',
+	'0',
+	'0',
+	'1',
+}
+
+func init() {
+	// Initialize PeerId
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	for i := 7; i < 20; i++ {
+		PeerId[i] = byte(r.Intn(256))
+	}
 }
 
 func main() {
@@ -52,9 +72,12 @@ func main() {
 		log.Fatal("Multiple File Mode not implemented")
 	}
 
-	err = bencode.Marshal(os.Stdout, m.Info)
+	h := sha1.New()
+
+	err = bencode.Marshal(h, m.Info)
 	if err != nil {
 		log.Fatal(err)
 	}
+	fmt.Println(h.Sum(nil))
 
 }
