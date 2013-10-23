@@ -27,7 +27,12 @@ type Metainfo struct {
 }
 
 func main() {
-	file, err := os.Open("archlinux-2013.10.01-dual.iso.torrent")
+	if len(os.Args) != 2 {
+		log.Fatalf("Usage: %s: torrent\n", os.Args[0])
+        }
+	torrent := os.Args[1]
+
+	file, err := os.Open(torrent)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -38,5 +43,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(m.Announce)
+
+	if (m.Info.Length != 0) {
+		fmt.Println(m.Info.Length)
+	}
 }
