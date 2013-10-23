@@ -3,9 +3,10 @@ package main
 import (
 	"crypto/sha1"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"math/rand"
-//	"net/http"
+	"net/http"
 	"net/url"
 	"os"
 	"time"
@@ -90,6 +91,31 @@ func main() {
 	if (err != nil) {
 		log.Fatal(err)
 	}
+	fmt.Println(announce_url)
 
-	fmt.Println(announce_url.Path)
+	// statically set these for now
+	port := "6881"
+	downloaded := "0"
+	uploaded := "0"
+
+	tracker_request := url.Values{}
+	tracker_request.Set("info_hash", string(info_hash))
+	tracker_request.Add("peer_id", string(PeerId[:]))
+	tracker_request.Add("port", port)
+	tracker_request.Add("uploaded", uploaded)
+	tracker_request.Add("downloaded", downloaded)
+	tracker_request.Add("left", string(m.Info.Length))
+	tracker_request.Add("compact", "1")
+	announce_url.RawQuery = tracker_request.Encode()
+
+	resp, err := http.Get(announce_url.String())
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("%s\n", body)
 }
