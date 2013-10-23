@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+//	"net/http"
+	"net/url"
 	"os"
 	"time"
 	"code.google.com/p/bencode-go"
@@ -49,6 +51,7 @@ func init() {
 
 func main() {
 	var m Metainfo
+	var announce_url *url.URL
 
 	if len(os.Args) != 2 {
 		log.Fatalf("Usage: %s: torrent\n", os.Args[0])
@@ -72,12 +75,21 @@ func main() {
 		log.Fatal("Multiple File Mode not implemented")
 	}
 
+	fmt.Println(m.Announce)
+
 	h := sha1.New()
 
 	err = bencode.Marshal(h, m.Info)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(h.Sum(nil))
+	info_hash := h.Sum(nil)
+	fmt.Println(info_hash)
 
+	announce_url, err = url.Parse(m.Announce)
+	if (err != nil) {
+		log.Fatal(err)
+	}
+
+	fmt.Println(announce_url.Path)
 }
