@@ -2,14 +2,13 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"log"
+	"os"
 	"code.google.com/p/bencode-go"
 )
 
 type Files struct {
 	Length int
-	Md5sum string
 	Path []string
 }
 
@@ -17,7 +16,7 @@ type Info struct {
 	Name string
 	Length int
 	Files []Files
-//	Pieces string
+	Pieces string
 	PieceLength int "piece length"
 }
 
@@ -39,5 +38,5 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(m)
+	fmt.Println(m.Announce)
 }
