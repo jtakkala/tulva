@@ -59,7 +59,7 @@ func init() {
 	}
 }
 
-func parseTorrent(torrent string) (metainfo Metainfo, infoHash []byte, err error) {
+func parseTorrent(torrent string) (metaInfo Metainfo, infoHash []byte, err error) {
 	file, err := os.Open(torrent)
 	if err != nil {
 		log.Fatal(err)
@@ -89,9 +89,9 @@ func parseTorrent(torrent string) (metainfo Metainfo, infoHash []byte, err error
 	h.Write(b.Bytes())
 	infoHash = append(infoHash, h.Sum(nil)...)
 
-	// populate the metainfo structure
+	// populate the metaInfo structure
 	file.Seek(0, 0)
-	bencode.Unmarshal(file, &metainfo)
+	bencode.Unmarshal(file, &metaInfo)
 
 	return
 }
@@ -127,15 +127,15 @@ func main() {
 	downloaded := "0"
 	uploaded := "0"
 
-	tracker_request := url.Values{}
-	tracker_request.Set("info_hash", string(infoHash))
-	tracker_request.Add("peer_id", string(PeerId[:]))
-	tracker_request.Add("port", port)
-	tracker_request.Add("uploaded", uploaded)
-	tracker_request.Add("downloaded", downloaded)
-	tracker_request.Add("left", string(metaInfo.Info.Length))
-	tracker_request.Add("compact", "1")
-	announceUrl.RawQuery = tracker_request.Encode()
+	trackerRequest := url.Values{}
+	trackerRequest.Set("info_hash", string(infoHash))
+	trackerRequest.Add("peer_id", string(PeerId[:]))
+	trackerRequest.Add("port", port)
+	trackerRequest.Add("uploaded", uploaded)
+	trackerRequest.Add("downloaded", downloaded)
+	trackerRequest.Add("left", string(metaInfo.Info.Length))
+	trackerRequest.Add("compact", "1")
+	announceUrl.RawQuery = trackerRequest.Encode()
 
 	resp, err := http.Get(announceUrl.String())
 	if err != nil {
