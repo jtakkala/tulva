@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha1"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -14,22 +16,29 @@ import (
 )
 
 type Files struct {
-	Length int "length"
-	Path []string "path"
+	Length int
+	Md5sum string
+	Path []string
 }
 
 type Info struct {
-	Name string "name"
-	Length int "length"
-//	Files []Files "files"
-	Pieces string "pieces"
 	PieceLength int "piece length"
+	Pieces string
+	Private int
+	Name string
+	Length int
+	Md5sum string
+	Files []Files
 }
 
 type Metainfo struct {
-	Info Info "info"
-	Announce string "announce"
+	Info Info
+	Announce string
 	AnnounceList [][]string "announce-list"
+	CreationDate int "creation date"
+	Comment string
+	CreatedBy string "created by"
+	Encoding string
 }
 
 var PeerId = [20]byte {
@@ -50,48 +59,68 @@ func init() {
 	}
 }
 
+func parseTorrent(torrent string) (metainfo Metainfo, infoHash []byte, err error) {
+	file, err := os.Open(torrent)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	m, err := bencode.Decode(file)
+	if err != nil {
+		log.Fatal(err)
+	}
+	metaMap, ok := m.(map[string]interface{})
+	if !ok {
+		err = errors.New("Couldn't parse torrent file")
+		return
+	}
+	infoDict, ok := metaMap["info"]
+	if !ok {
+		err = errors.New("Unable to locate info dict in torrent file")
+		return
+	}
+
+	var b bytes.Buffer
+	bencode.Marshal(&b, infoDict)
+
+	// compute the info hash
+	h := sha1.New()
+	h.Write(b.Bytes())
+	infoHash = append(infoHash, h.Sum(nil)...)
+
+	// populate the metainfo structure
+	file.Seek(0, 0)
+	bencode.Unmarshal(file, &metainfo)
+
+	return
+}
+
 func main() {
-	var m Metainfo
-	var announce_url *url.URL
+	var announceUrl *url.URL
 
 	if len(os.Args) != 2 {
 		log.Fatalf("Usage: %s: torrent\n", os.Args[0])
         }
 	torrent := os.Args[1]
 
-	file, err := os.Open(torrent)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	err = bencode.Unmarshal(file, &m)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if (m.Info.Length != 0) {
-		log.Println("Single File Mode")
-		fmt.Println(m.Info.Length)
-	} else {
-		log.Fatal("Multiple File Mode not implemented")
-	}
-
-	fmt.Println(m.Announce)
-
-	h := sha1.New()
-
-	err = bencode.Marshal(h, m.Info)
-	if err != nil {
-		log.Fatal(err)
-	}
-	info_hash := h.Sum(nil)
-	fmt.Println(info_hash)
-
-	announce_url, err = url.Parse(m.Announce)
+	metaInfo, infoHash, err := parseTorrent(torrent)
 	if (err != nil) {
 		log.Fatal(err)
 	}
-	fmt.Println(announce_url)
+
+	// select the tracker to connect to
+	if len(metaInfo.AnnounceList) > 0 {
+		announceUrl, err = url.Parse(metaInfo.AnnounceList[0][0])
+	} else {
+		announceUrl, err = url.Parse(metaInfo.Announce)
+	}
+	if (err != nil) {
+		log.Fatal(err)
+	}
+	if (announceUrl.Scheme != "http") {
+		log.Fatalf("URL Scheme: %s not supported\n", announceUrl.Scheme)
+	}
 
 	// statically set these for now
 	port := "6881"
@@ -99,16 +128,16 @@ func main() {
 	uploaded := "0"
 
 	tracker_request := url.Values{}
-	tracker_request.Set("info_hash", string(info_hash))
+	tracker_request.Set("info_hash", string(infoHash))
 	tracker_request.Add("peer_id", string(PeerId[:]))
 	tracker_request.Add("port", port)
 	tracker_request.Add("uploaded", uploaded)
 	tracker_request.Add("downloaded", downloaded)
-	tracker_request.Add("left", string(m.Info.Length))
+	tracker_request.Add("left", string(metaInfo.Info.Length))
 	tracker_request.Add("compact", "1")
-	announce_url.RawQuery = tracker_request.Encode()
+	announceUrl.RawQuery = tracker_request.Encode()
 
-	resp, err := http.Get(announce_url.String())
+	resp, err := http.Get(announceUrl.String())
 	if err != nil {
 		log.Fatal(err)
 	}
