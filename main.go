@@ -5,9 +5,9 @@ import (
 	"crypto/sha1"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -39,6 +39,24 @@ type Metainfo struct {
 	Comment string
 	CreatedBy string "created by"
 	Encoding string
+}
+
+type Peers struct {
+	PeerId string "peer id"
+	ip string
+	port int
+}
+
+type TrackerResponse struct {
+	FailureReason string "failure reason"
+	WarningMessage string "warning message"
+	Interval int
+	MinInterval int "min interval"
+	TrackerId string "tracker id"
+	Complete int
+	Incomplete int
+	Peers string "peers"
+//	Peers []Peers "peers"
 }
 
 var PeerId = [20]byte {
@@ -100,7 +118,7 @@ func main() {
 	var announceUrl *url.URL
 
 	if len(os.Args) != 2 {
-		log.Fatalf("Usage: %s: torrent\n", os.Args[0])
+		log.Fatalf("Usage: %s: <torrent file>\n", os.Args[0])
         }
 	torrent := os.Args[1]
 
@@ -137,14 +155,22 @@ func main() {
 	trackerRequest.Add("compact", "1")
 	announceUrl.RawQuery = trackerRequest.Encode()
 
+	log.Printf("Requesting %s\n", announceUrl.String())
+
 	resp, err := http.Get(announceUrl.String())
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatal(err)
+
+	var trackerResponse TrackerResponse
+
+	bencode.Unmarshal(resp.Body, &trackerResponse)
+	fmt.Printf("%x\n", trackerResponse)
+	for i := 0; i < len(trackerResponse.Peers); i += 6 {
+		ip := net.IPv4(trackerResponse.Peers[i], trackerResponse.Peers[i + 1], trackerResponse.Peers[i + 2], trackerResponse.Peers[i + 3])
+		pport := uint32(trackerResponse.Peers[i + 4]) << 32
+		pport = pport | uint32(trackerResponse.Peers[i + 5])
+		fmt.Println(ip, port)
 	}
-	fmt.Printf("%s\n", body)
 }
