@@ -70,15 +70,7 @@ type TrackerResponse struct {
 }
 
 // Unique client ID, encoded as '-' + 'TV' + <version number> + random digits
-var PeerId = [20]byte {
-	'-',
-	'T',
-	'V',
-	'0',
-	'0',
-	'0',
-	'1',
-}
+var PeerId = [20]byte { '-', 'T', 'V', '0', '0', '0', '1' }
 
 // init initializes a random PeerId for this client
 func init() {
