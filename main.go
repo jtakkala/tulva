@@ -6,6 +6,7 @@ package main
 
 import (
 	"bytes"
+	"code.google.com/p/bencode-go"
 	"crypto/sha1"
 	"errors"
 	"fmt"
@@ -16,61 +17,59 @@ import (
 	"net/url"
 	"os"
 	"time"
-	"code.google.com/p/bencode-go"
 )
 
 // Multiple File Mode
 type Files struct {
 	Length int
 	Md5sum string
-	Path []string
+	Path   []string
 }
 
 // Info dictionary
 type Info struct {
 	PieceLength int "piece length"
-	Pieces string
-	Private int
-	Name string
-	Length int
-	Md5sum string
-	Files []Files
+	Pieces      string
+	Private     int
+	Name        string
+	Length      int
+	Md5sum      string
+	Files       []Files
 }
 
 // Metainfo structure
 type Metainfo struct {
-	Info Info
-	Announce string
+	Info         Info
+	Announce     string
 	AnnounceList [][]string "announce-list"
-	CreationDate int "creation date"
-	Comment string
-	CreatedBy string "created by"
-	Encoding string
+	CreationDate int        "creation date"
+	Comment      string
+	CreatedBy    string "created by"
+	Encoding     string
 }
 
 // Peers dictionary model
 type Peers struct {
 	PeerId string "peer id"
-	ip string
-	port int
+	ip     string
+	port   int
 }
-
 
 // Tracker Response
 type TrackerResponse struct {
-	FailureReason string "failure reason"
+	FailureReason  string "failure reason"
 	WarningMessage string "warning message"
-	Interval int
-	MinInterval int "min interval"
-	TrackerId string "tracker id"
-	Complete int
-	Incomplete int
-	Peers string "peers"
-//	Peers []Peers "peers"
+	Interval       int
+	MinInterval    int    "min interval"
+	TrackerId      string "tracker id"
+	Complete       int
+	Incomplete     int
+	Peers          string "peers"
+//	Peers          []Peers "peers"
 }
 
 // Unique client ID, encoded as '-' + 'TV' + <version number> + random digits
-var PeerId = [20]byte { '-', 'T', 'V', '0', '0', '0', '1' }
+var PeerId = [20]byte{'-', 'T', 'V', '0', '0', '0', '1'}
 
 // init initializes a random PeerId for this client
 func init() {
@@ -128,12 +127,12 @@ func main() {
 
 	if len(os.Args) != 2 {
 		log.Fatalf("Usage: %s: <torrent file>\n", os.Args[0])
-        }
+	}
 	torrent := os.Args[1]
 
 	// Get the Metainfo and Info hash for this torrent
 	metaInfo, infoHash, err := parseTorrentFile(torrent)
-	if (err != nil) {
+	if err != nil {
 		log.Fatal(err)
 	}
 
@@ -145,11 +144,11 @@ func main() {
 	} else {
 		announceUrl, err = url.Parse(metaInfo.Announce)
 	}
-	if (err != nil) {
+	if err != nil {
 		log.Fatal(err)
 	}
 	// TODO: Implement UDP mode
-	if (announceUrl.Scheme != "http") {
+	if announceUrl.Scheme != "http" {
 		log.Fatalf("URL Scheme: %s not supported\n", announceUrl.Scheme)
 	}
 
@@ -185,9 +184,9 @@ func main() {
 
 	// Peers in binary mode. Parse the response and decode peer IP + port
 	for i := 0; i < len(trackerResponse.Peers); i += 6 {
-		ip := net.IPv4(trackerResponse.Peers[i], trackerResponse.Peers[i + 1], trackerResponse.Peers[i + 2], trackerResponse.Peers[i + 3])
-		pport := uint32(trackerResponse.Peers[i + 4]) << 32
-		pport = pport | uint32(trackerResponse.Peers[i + 5])
+		ip := net.IPv4(trackerResponse.Peers[i], trackerResponse.Peers[i+1], trackerResponse.Peers[i+2], trackerResponse.Peers[i+3])
+		pport := uint32(trackerResponse.Peers[i+4]) << 32
+		pport = pport | uint32(trackerResponse.Peers[i+5])
 		fmt.Println(ip, port)
 	}
 }
