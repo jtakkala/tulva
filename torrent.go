@@ -58,6 +58,7 @@ func (t *Torrent) Init() {
 }
 
 func (t *Torrent) Run(complete chan bool) {
+	t.Init()
 	fmt.Printf("%#v\n", t)
 	complete <- true
 }

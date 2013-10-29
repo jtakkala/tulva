@@ -34,8 +34,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// Complete the torrent initialization
-	t.Init()
 	// Create a completion channel
 	complete := make(chan bool)
 	// Launch the torrent's monitor routine
