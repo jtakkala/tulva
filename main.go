@@ -65,6 +65,7 @@ type TrackerResponse struct {
 	Complete       int
 	Incomplete     int
 	Peers          string "peers"
+	//TODO: Figure out how to handle dict of peers
 //	Peers          []Peers "peers"
 }
 
@@ -136,7 +137,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// Select the tracker to connect to, if it's a list, select the firs
+	// Select the tracker to connect to, if it's a list, select the first
 	// one in the list. TODO: If no response from first tracker in list,
 	// then try the next one, and so on.
 	if len(metaInfo.AnnounceList) > 0 {
@@ -187,6 +188,7 @@ func main() {
 		ip := net.IPv4(trackerResponse.Peers[i], trackerResponse.Peers[i+1], trackerResponse.Peers[i+2], trackerResponse.Peers[i+3])
 		pport := uint32(trackerResponse.Peers[i+4]) << 32
 		pport = pport | uint32(trackerResponse.Peers[i+5])
+		// TODO: Assign result to a TCPAddr type here
 		fmt.Println(ip, port)
 	}
 }
