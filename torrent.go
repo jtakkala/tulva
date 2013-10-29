@@ -5,6 +5,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 )
 
@@ -59,6 +60,11 @@ func (t *Torrent) Init() {
 
 func (t *Torrent) Run(complete chan bool) {
 	t.Init()
+	if t.left == 0 {
+		err := errors.New("Unable to deterimine bytes left to download")
+		fmt.Println(err)
+		// TODO: Bail out here
+	}
 	fmt.Printf("%#v\n", t)
 	complete <- true
 }
