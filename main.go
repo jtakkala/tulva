@@ -17,7 +17,7 @@ import (
 var PeerId = [20]byte{'-', 'T', 'V', '0', '0', '0', '1'}
 
 // init initializes a random PeerId for this client
-func init() {
+func initPeerId() {
 	// Initialize PeerId
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for i := 7; i < 20; i++ {
@@ -33,6 +33,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	initPeerId()
 
 	// Create a completion channel
 	complete := make(chan bool)
