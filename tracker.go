@@ -80,16 +80,16 @@ func (tr *Tracker) Announce(t *Torrent) {
 	var trackerResponse TrackerResponse
 
 	bencode.Unmarshal(resp.Body, &trackerResponse)
-	fmt.Printf("%x\n", trackerResponse)
+	fmt.Printf("%#v\n", trackerResponse)
 
 	// Peers in binary mode. Parse the response and decode peer IP + port
 	fmt.Printf("Peers: ")
 	for i := 0; i < len(trackerResponse.Peers); i += 6 {
 		ip := net.IPv4(trackerResponse.Peers[i], trackerResponse.Peers[i+1], trackerResponse.Peers[i+2], trackerResponse.Peers[i+3])
-		pport := uint32(trackerResponse.Peers[i+4]) << 32
-		pport = pport | uint32(trackerResponse.Peers[i+5])
+		pport := uint16(trackerResponse.Peers[i+4]) << 8
+		pport = pport | uint16(trackerResponse.Peers[i+5])
 		// TODO: Assign result to a TCPAddr type here
-		fmt.Printf("%s:%d", ip, port)
+		fmt.Printf("%s:%d ", ip, pport)
 	}
 	fmt.Println()
 }
