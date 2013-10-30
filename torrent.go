@@ -5,8 +5,8 @@
 package main
 
 import (
-	"errors"
 	"fmt"
+	"log"
 )
 
 type Torrent struct {
@@ -57,10 +57,8 @@ func (t *Torrent) Init() {
 	} else {
 		t.left = t.metaInfo.Info.Length
 	}
-	if t.left != 0 {
-		err := errors.New("Unable to deterimine bytes left to download")
-		fmt.Println(err)
-		// TODO: Bail out here
+	if t.left == 0 {
+		log.Fatal("Unable to deterimine bytes left to download")
 	}
 }
 
