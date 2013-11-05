@@ -6,7 +6,6 @@ package main
 
 import (
 //	"errors"
-	"fmt"
 	"log"
 	"math/rand"
 	"os"
@@ -33,6 +32,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Println("main : main : Started")
 
 	// Launch the torrent
 	go t.Run()
@@ -44,8 +44,9 @@ func main() {
 			break
 		}
 	}
-	t.Quit <- true
 	*/
+	time.Sleep(time.Second)
+	t.Quit <- true
 	<-t.Quit
-	fmt.Println("Torrent complete! Exiting...")
+	log.Println("main : main : Exiting")
 }

@@ -64,6 +64,8 @@ func (t *Torrent) Init() {
 
 // Run starts the Torrent session and orchestrates all the child processes
 func (t *Torrent) Run() {
+	log.Println("Torrent : Run : Started")
+	defer log.Println("Torrent : Run : Completed")
 	t.Init()
 
 	command := make(chan string)
@@ -76,12 +78,12 @@ func (t *Torrent) Run() {
 		select {
 		case <- t.Quit:
 			log.Println("Quitting Torrent")
+			tr.Stop()
 			t.Quit <- true
 			return
 		case peer := <- peer:
 			fmt.Println("Peer:", peer.IP.String(), peer.Port)
 		}
 	}
-	fmt.Println("Exiting t.Run()")
 }
 

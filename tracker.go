@@ -7,6 +7,7 @@ package main
 import (
 	"code.google.com/p/bencode-go"
 	"fmt"
+	"launchpad.net/tomb"
 	"log"
 	"net"
 	"net/http"
@@ -45,10 +46,12 @@ type TrackerResponse struct {
 type Tracker struct {
 	url string
 	trackerResponse TrackerResponse
-	Quit chan bool
+	t tomb.Tomb
 }
 
 func (tr *Tracker) Announce(t *Torrent, peerCh chan Peer, event string) {
+	log.Println("Tracker : Announce : Started")
+	defer log.Println("Tracker : Announce : Completed")
 	var announceUrl *url.URL
 
 	// Select the tracker to connect to, if it's a list, select the first
@@ -106,6 +109,8 @@ func (tr *Tracker) Announce(t *Torrent, peerCh chan Peer, event string) {
 //		fmt.Printf("%s:%d ", ip, pport)
 		peer.IP = ip
 		peer.Port = pport
+		peerCh <- peer
+		/*
 		select {
 		case <- t.Quit:
 			t.Quit <- true
@@ -113,19 +118,25 @@ func (tr *Tracker) Announce(t *Torrent, peerCh chan Peer, event string) {
 		case peerCh <- peer:
 			continue
 		}
+		*/
 	}
 }
 
+func (tr *Tracker) Stop() error {
+	tr.t.Kill(nil)
+	return tr.t.Wait()
+}
+
 func (tr *Tracker) Run(t *Torrent, event chan string, peer chan Peer) {
+	log.Println("Tracker : Run : Started")
+	defer log.Println("Tracker : Run : Completed")
+	defer tr.t.Done()
 	for {
 		select {
 		case e := <- event:
 			go tr.Announce(t, peer, e)
-			time.Sleep(5 * time.Second)
-			t.Quit <- true
-		case <- t.Quit:
-			log.Println("Quitting Tracker")
-			t.Quit <- true
+			time.Sleep(time.Second)
+		case <- tr.t.Dying():
 			return
 		}
 	}
