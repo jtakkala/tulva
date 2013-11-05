@@ -8,6 +8,8 @@ import (
 //	"errors"
 	"log"
 	"math/rand"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"time"
 )
@@ -33,20 +35,14 @@ func main() {
 		log.Fatal(err)
 	}
 	log.Println("main : main : Started")
+	defer log.Println("main : main : Exiting")
+
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
 
 	// Launch the torrent
 	go t.Run()
-	/*
-	for {
-		select {
-		case <- t.Quit:
-			fmt.Println("Got quit in main()")
-			break
-		}
-	}
-	*/
-	time.Sleep(time.Second)
-	t.Quit <- true
-	<-t.Quit
-	log.Println("main : main : Exiting")
+	time.Sleep(3 * time.Second)
+	t.Stop()
 }

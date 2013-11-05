@@ -44,8 +44,7 @@ type TrackerResponse struct {
 }
 
 type Tracker struct {
-	url string
-	trackerResponse TrackerResponse
+	announceUrl *url.URL
 	t tomb.Tomb
 }
 
@@ -129,8 +128,8 @@ func (tr *Tracker) Stop() error {
 
 func (tr *Tracker) Run(t *Torrent, event chan string, peer chan Peer) {
 	log.Println("Tracker : Run : Started")
-	defer log.Println("Tracker : Run : Completed")
 	defer tr.t.Done()
+	defer log.Println("Tracker : Run : Completed")
 	for {
 		select {
 		case e := <- event:

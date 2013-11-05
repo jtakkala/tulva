@@ -5,7 +5,8 @@
 package main
 
 import (
-	"fmt"
+//	"fmt"
+	"launchpad.net/tomb"
 	"log"
 )
 
@@ -13,8 +14,8 @@ type Torrent struct {
 	metaInfo MetaInfo
 	infoHash []byte
 	left int
-	Quit chan bool
 	peer chan Peer
+	t tomb.Tomb
 }
 
 // Multiple File Mode
@@ -48,7 +49,6 @@ type MetaInfo struct {
 
 // Init completes the initalization of the Torrent structure
 func (t *Torrent) Init() {
-	t.Quit = make(chan bool)
 	// Initialize bytes left to download
 	if len(t.metaInfo.Info.Files) > 0 {
 		for _, file := range(t.metaInfo.Info.Files) {
@@ -62,27 +62,33 @@ func (t *Torrent) Init() {
 	}
 }
 
+func (t *Torrent) Stop() error {
+	t.t.Kill(nil)
+	return t.t.Wait()
+}
+
 // Run starts the Torrent session and orchestrates all the child processes
 func (t *Torrent) Run() {
 	log.Println("Torrent : Run : Started")
+	defer t.t.Done()
 	defer log.Println("Torrent : Run : Completed")
 	t.Init()
 
-	command := make(chan string)
-	peer := make(chan Peer)
+	trackerEvent := make(chan string)
+	peersCh := make(chan Peer)
 	tr := new(Tracker)
-	go tr.Run(t, command, peer)
+	go tr.Run(t, trackerEvent, peersCh)
 
-	command <- "started"
+	peers := make(map[string]uint16)
+
+	trackerEvent <- "started"
 	for {
 		select {
-		case <- t.Quit:
-			log.Println("Quitting Torrent")
+		case <- t.t.Dying():
 			tr.Stop()
-			t.Quit <- true
 			return
-		case peer := <- peer:
-			fmt.Println("Peer:", peer.IP.String(), peer.Port)
+		case peer := <- peersCh:
+			peers[peer.IP.String()] = peer.Port
 		}
 	}
 }
