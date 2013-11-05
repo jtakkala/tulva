@@ -5,7 +5,6 @@
 package main
 
 import (
-//	"fmt"
 	"launchpad.net/tomb"
 	"log"
 	"net/url"

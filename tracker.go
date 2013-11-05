@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 )
 
@@ -59,13 +60,12 @@ func (tr *Tracker) Announce(t *Torrent, peerCh chan Peer, event string) {
 	trackerRequest := url.Values{}
 	trackerRequest.Set("info_hash", string(t.infoHash))
 	trackerRequest.Add("peer_id", string(PeerId[:]))
-	trackerRequest.Add("port", string(port))
-	trackerRequest.Add("uploaded", string(0))
-	trackerRequest.Add("downloaded", string(0))
-	trackerRequest.Add("left", string(t.metaInfo.Info.Length))
-//	trackerRequest.Add("uploaded", string(t.uploaded))
-//	trackerRequest.Add("downloaded", string(t.downloaded))
-//	trackerRequest.Add("left", string(metaInfo.Info.Length))
+	trackerRequest.Add("port", strconv.Itoa(port))
+	trackerRequest.Add("uploaded", strconv.Itoa(0))
+	trackerRequest.Add("downloaded", strconv.Itoa(0))
+	trackerRequest.Add("left", strconv.Itoa(t.metaInfo.Info.Length))
+//	trackerRequest.Add("uploaded", strconv.Itoa(t.uploaded))
+//	trackerRequest.Add("downloaded", strconv.Itoa(t.downloaded))
 	trackerRequest.Add("compact", "1")
 	if event != "" {
 		trackerRequest.Add("event", event)
