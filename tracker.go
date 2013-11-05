@@ -57,20 +57,20 @@ func (tr *Tracker) Announce(t *Torrent, peerCh chan Peer, event string) {
 	port := 6881
 
 	// Build and encode the Tracker Request
-	trackerRequest := url.Values{}
-	trackerRequest.Set("info_hash", string(t.infoHash))
-	trackerRequest.Add("peer_id", string(PeerId[:]))
-	trackerRequest.Add("port", strconv.Itoa(port))
-	trackerRequest.Add("uploaded", strconv.Itoa(0))
-	trackerRequest.Add("downloaded", strconv.Itoa(0))
-	trackerRequest.Add("left", strconv.Itoa(t.metaInfo.Info.Length))
-//	trackerRequest.Add("uploaded", strconv.Itoa(t.uploaded))
-//	trackerRequest.Add("downloaded", strconv.Itoa(t.downloaded))
-	trackerRequest.Add("compact", "1")
+	u := url.Values{}
+	u.Set("info_hash", string(t.infoHash))
+	u.Add("peer_id", string(PeerId[:]))
+	u.Add("port", strconv.Itoa(port))
+	u.Add("uploaded", strconv.Itoa(0))
+	u.Add("downloaded", strconv.Itoa(0))
+	u.Add("left", strconv.Itoa(t.metaInfo.Info.Length))
+//	u.Add("uploaded", strconv.Itoa(t.uploaded))
+//	u.Add("downloaded", strconv.Itoa(t.downloaded))
+	u.Add("compact", "1")
 	if event != "" {
-		trackerRequest.Add("event", event)
+		u.Add("event", event)
 	}
-	tr.announceUrl.RawQuery = trackerRequest.Encode()
+	tr.announceUrl.RawQuery = u.Encode()
 
 	// Make a request to the tracker
 	log.Printf("Announce %s\n", tr.announceUrl.String())
