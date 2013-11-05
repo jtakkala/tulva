@@ -17,7 +17,7 @@ import (
 var PeerId = [20]byte{'-', 'T', 'V', '0', '0', '0', '1'}
 
 // init initializes a random PeerId for this client
-func initPeerId() {
+func init() {
 	// Initialize PeerId
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for i := 7; i < 20; i++ {
@@ -34,13 +34,18 @@ func main() {
 		log.Fatal(err)
 	}
 
-	initPeerId()
-
-	// Create a completion channel
-	complete := make(chan bool)
-	// Launch the torrent's monitor routine
-	go t.Run(complete)
-	// Block until torrent is complete
-	<-complete
+	// Launch the torrent
+	go t.Run()
+	/*
+	for {
+		select {
+		case <- t.Quit:
+			fmt.Println("Got quit in main()")
+			break
+		}
+	}
+	t.Quit <- true
+	*/
+	<-t.Quit
 	fmt.Println("Torrent complete! Exiting...")
 }

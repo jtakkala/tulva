@@ -11,13 +11,21 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"time"
 )
 
+/*
 // Peers dictionary model
 type Peers struct {
 	PeerId string "peer id"
 	Ip     string
 	Port   int
+}
+*/
+
+type Peer struct {
+	IP net.IP
+	Port uint16
 }
 
 // Tracker Response
@@ -37,9 +45,10 @@ type TrackerResponse struct {
 type Tracker struct {
 	url string
 	trackerResponse TrackerResponse
+	Quit chan bool
 }
 
-func (tr *Tracker) Announce(t *Torrent) {
+func (tr *Tracker) Announce(t *Torrent, peerCh chan Peer, event string) {
 	var announceUrl *url.URL
 
 	// Select the tracker to connect to, if it's a list, select the first
@@ -63,10 +72,16 @@ func (tr *Tracker) Announce(t *Torrent) {
 	trackerRequest.Set("info_hash", string(t.infoHash))
 	trackerRequest.Add("peer_id", string(PeerId[:]))
 	trackerRequest.Add("port", string(port))
-	trackerRequest.Add("uploaded", string(t.uploaded))
-	trackerRequest.Add("downloaded", string(t.downloaded))
+	trackerRequest.Add("uploaded", string(0))
+	trackerRequest.Add("downloaded", string(0))
+	trackerRequest.Add("left", string(t.metaInfo.Info.Length))
+//	trackerRequest.Add("uploaded", string(t.uploaded))
+//	trackerRequest.Add("downloaded", string(t.downloaded))
 //	trackerRequest.Add("left", string(metaInfo.Info.Length))
 	trackerRequest.Add("compact", "1")
+	if event != "" {
+		trackerRequest.Add("event", event)
+	}
 	announceUrl.RawQuery = trackerRequest.Encode()
 
 	// Make a request to the tracker
@@ -83,19 +98,35 @@ func (tr *Tracker) Announce(t *Torrent) {
 	fmt.Printf("%#v\n", trackerResponse)
 
 	// Peers in binary mode. Parse the response and decode peer IP + port
-	fmt.Printf("Peers: ")
+	var peer Peer
 	for i := 0; i < len(trackerResponse.Peers); i += 6 {
 		ip := net.IPv4(trackerResponse.Peers[i], trackerResponse.Peers[i+1], trackerResponse.Peers[i+2], trackerResponse.Peers[i+3])
 		pport := uint16(trackerResponse.Peers[i+4]) << 8
 		pport = pport | uint16(trackerResponse.Peers[i+5])
-		// TODO: Assign result to a TCPAddr type here
-		fmt.Printf("%s:%d ", ip, pport)
+//		fmt.Printf("%s:%d ", ip, pport)
+		peer.IP = ip
+		peer.Port = pport
+		select {
+		case <- t.Quit:
+			t.Quit <- true
+			return
+		case peerCh <- peer:
+			continue
+		}
 	}
-	fmt.Println()
 }
 
-func (tr *Tracker) Run(t *Torrent, trackerMonitor chan bool) {
-	tr.Announce(t)
-	// do something, loop forever and update very interval
-	trackerMonitor <- true
+func (tr *Tracker) Run(t *Torrent, event chan string, peer chan Peer) {
+	for {
+		select {
+		case e := <- event:
+			go tr.Announce(t, peer, e)
+			time.Sleep(5 * time.Second)
+			t.Quit <- true
+		case <- t.Quit:
+			log.Println("Quitting Tracker")
+			t.Quit <- true
+			return
+		}
+	}
 }

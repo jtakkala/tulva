@@ -10,12 +10,11 @@ import (
 )
 
 type Torrent struct {
-	tracker Tracker
 	metaInfo MetaInfo
 	infoHash []byte
-	uploaded int
-	downloaded int
 	left int
+	Quit chan bool
+	peer chan Peer
 }
 
 // Multiple File Mode
@@ -49,6 +48,7 @@ type MetaInfo struct {
 
 // Init completes the initalization of the Torrent structure
 func (t *Torrent) Init() {
+	t.Quit = make(chan bool)
 	// Initialize bytes left to download
 	if len(t.metaInfo.Info.Files) > 0 {
 		for _, file := range(t.metaInfo.Info.Files) {
@@ -63,15 +63,25 @@ func (t *Torrent) Init() {
 }
 
 // Run starts the Torrent session and orchestrates all the child processes
-func (t *Torrent) Run(complete chan bool) {
+func (t *Torrent) Run() {
 	t.Init()
-	fmt.Printf("%#v\n", t)
-	
-	// Spawn the tracker and wait for it to complete
-	trackerMonitor := make(chan bool)
-	go t.tracker.Run(t, trackerMonitor)
-	<-trackerMonitor
 
-	complete <- true
+	command := make(chan string)
+	peer := make(chan Peer)
+	tr := new(Tracker)
+	go tr.Run(t, command, peer)
+
+	command <- "started"
+	for {
+		select {
+		case <- t.Quit:
+			log.Println("Quitting Torrent")
+			t.Quit <- true
+			return
+		case peer := <- peer:
+			fmt.Println("Peer:", peer.IP.String(), peer.Port)
+		}
+	}
+	fmt.Println("Exiting t.Run()")
 }
 
