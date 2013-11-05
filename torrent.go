@@ -8,6 +8,7 @@ import (
 //	"fmt"
 	"launchpad.net/tomb"
 	"log"
+	"net/url"
 )
 
 type Torrent struct {
@@ -67,16 +68,34 @@ func (t *Torrent) Stop() error {
 	return t.t.Wait()
 }
 
+func (t *Torrent) selectTracker(tr *Tracker) {
+	log.Println("Torrent : selectTracker : Started")
+	defer log.Println("Torrent : selectTracker : Completed")
+	// Select the tracker to connect to, if it's a list, select the first
+	// one in the list. TODO: If no response from first tracker in list,
+	// then try the next one, and so on.
+	if len(t.metaInfo.AnnounceList) > 0 {
+		tr.announceUrl, _ = url.Parse(t.metaInfo.AnnounceList[0][0])
+	} else {
+		tr.announceUrl, _ = url.Parse(t.metaInfo.Announce)
+	}
+	// TODO: Implement UDP mode
+	if tr.announceUrl.Scheme != "http" {
+		log.Fatalf("URL Scheme: %s not supported\n", tr.announceUrl.Scheme)
+	}
+}
+
 // Run starts the Torrent session and orchestrates all the child processes
 func (t *Torrent) Run() {
 	log.Println("Torrent : Run : Started")
 	defer t.t.Done()
 	defer log.Println("Torrent : Run : Completed")
 	t.Init()
+	tr := new(Tracker)
+	t.selectTracker(tr)
 
 	trackerEvent := make(chan string)
 	peersCh := make(chan Peer)
-	tr := new(Tracker)
 	go tr.Run(t, trackerEvent, peersCh)
 
 	peers := make(map[string]uint16)

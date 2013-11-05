@@ -51,20 +51,6 @@ type Tracker struct {
 func (tr *Tracker) Announce(t *Torrent, peerCh chan Peer, event string) {
 	log.Println("Tracker : Announce : Started")
 	defer log.Println("Tracker : Announce : Completed")
-	var announceUrl *url.URL
-
-	// Select the tracker to connect to, if it's a list, select the first
-	// one in the list. TODO: If no response from first tracker in list,
-	// then try the next one, and so on.
-	if len(t.metaInfo.AnnounceList) > 0 {
-		announceUrl, _ = url.Parse(t.metaInfo.AnnounceList[0][0])
-	} else {
-		announceUrl, _ = url.Parse(t.metaInfo.Announce)
-	}
-	// TODO: Implement UDP mode
-	if announceUrl.Scheme != "http" {
-		log.Fatalf("URL Scheme: %s not supported\n", announceUrl.Scheme)
-	}
 
 	// FIXME: Set our real listening port
 	port := 6881
@@ -84,11 +70,11 @@ func (tr *Tracker) Announce(t *Torrent, peerCh chan Peer, event string) {
 	if event != "" {
 		trackerRequest.Add("event", event)
 	}
-	announceUrl.RawQuery = trackerRequest.Encode()
+	tr.announceUrl.RawQuery = trackerRequest.Encode()
 
 	// Make a request to the tracker
-	log.Printf("Announce %s\n", announceUrl.String())
-	resp, err := http.Get(announceUrl.String())
+	log.Printf("Announce %s\n", tr.announceUrl.String())
+	resp, err := http.Get(tr.announceUrl.String())
 	if err != nil {
 		log.Fatal(err)
 	}
