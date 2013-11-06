@@ -7,7 +7,7 @@ package main
 
 import (
 	"code.google.com/p/bencode-go"
-	"fmt"
+//	"fmt"
 	"launchpad.net/tomb"
 	"log"
 	"net"
@@ -79,7 +79,6 @@ func (ar *Announcer) Announce(peerCh chan Peer) {
 	defer resp.Body.Close()
 
 	bencode.Unmarshal(resp.Body, &ar.response)
-	fmt.Printf("%#v\n", ar)
 
 	// Peers in binary mode. Parse the response and decode peer IP + port
 	var peer Peer
@@ -114,8 +113,8 @@ func (ar *Announcer) Run(torrent chan Torrent, announce chan bool, event chan st
 			log.Println("Announcer: received event", ar.event)
 			ar.event = e
 		case t := <- torrent:
+			log.Printf("Announcer: received torrent with info_hash %x\n", t.infoHash)
 			ar.torrent = t
-			log.Printf("Announcer: received torrent with info_hash %x\n", ar.torrent.infoHash)
 		case <- ar.t.Dying():
 			return
 		}
