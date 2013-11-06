@@ -1,3 +1,4 @@
+
 // Copyright 2013 Jari Takkala. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
@@ -13,25 +14,14 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"time"
 )
-
-/*
-// Peers dictionary model
-type Peers struct {
-	PeerId string "peer id"
-	Ip     string
-	Port   int
-}
-*/
 
 type Peer struct {
 	IP net.IP
 	Port uint16
 }
 
-// Tracker Response
-type TrackerResponse struct {
+type AnnounceResponse struct {
 	FailureReason  string "failure reason"
 	WarningMessage string "warning message"
 	Interval       int
@@ -44,84 +34,89 @@ type TrackerResponse struct {
 //	Peers          []Peers "peers"
 }
 
-type Tracker struct {
+type Announcer struct {
 	announceUrl *url.URL
+	torrent Torrent
+	response AnnounceResponse
+	event string
 	t tomb.Tomb
 }
 
-func (tr *Tracker) Announce(t *Torrent, peerCh chan Peer, event string) {
-	log.Println("Tracker : Announce : Started")
-	defer log.Println("Tracker : Announce : Completed")
+func (ar *Announcer) Announce(peerCh chan Peer) {
+	log.Println("Announcer : Announce : Started")
+	defer log.Println("Announcer : Announce : Completed")
+
+	if (ar.torrent.infoHash == nil) {
+		log.Println("Announce: Error: infoHash undefined")
+		return
+	}
 
 	// FIXME: Set our real listening port
 	port := 6881
 
 	// Build and encode the Tracker Request
 	u := url.Values{}
-	u.Set("info_hash", string(t.infoHash))
+	u.Set("info_hash", string(ar.torrent.infoHash))
 	u.Add("peer_id", string(PeerId[:]))
 	u.Add("port", strconv.Itoa(port))
 	u.Add("uploaded", strconv.Itoa(0))
 	u.Add("downloaded", strconv.Itoa(0))
-	u.Add("left", strconv.Itoa(t.metaInfo.Info.Length))
+	u.Add("left", strconv.Itoa(ar.torrent.metaInfo.Info.Length))
 //	u.Add("uploaded", strconv.Itoa(t.uploaded))
 //	u.Add("downloaded", strconv.Itoa(t.downloaded))
 	u.Add("compact", "1")
-	if event != "" {
-		u.Add("event", event)
+	if ar.event != "" {
+		u.Add("event", ar.event)
 	}
-	tr.announceUrl.RawQuery = u.Encode()
+	ar.announceUrl.RawQuery = u.Encode()
 
 	// Make a request to the tracker
-	log.Printf("Announce %s\n", tr.announceUrl.String())
-	resp, err := http.Get(tr.announceUrl.String())
+	log.Printf("Announce %s\n", ar.announceUrl.String())
+	resp, err := http.Get(ar.announceUrl.String())
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer resp.Body.Close()
 
-	var trackerResponse TrackerResponse
-
-	bencode.Unmarshal(resp.Body, &trackerResponse)
-	fmt.Printf("%#v\n", trackerResponse)
+	bencode.Unmarshal(resp.Body, &ar.response)
+	fmt.Printf("%#v\n", ar)
 
 	// Peers in binary mode. Parse the response and decode peer IP + port
 	var peer Peer
-	for i := 0; i < len(trackerResponse.Peers); i += 6 {
-		ip := net.IPv4(trackerResponse.Peers[i], trackerResponse.Peers[i+1], trackerResponse.Peers[i+2], trackerResponse.Peers[i+3])
-		pport := uint16(trackerResponse.Peers[i+4]) << 8
-		pport = pport | uint16(trackerResponse.Peers[i+5])
+	for i := 0; i < len(ar.response.Peers); i += 6 {
+		ip := net.IPv4(ar.response.Peers[i], ar.response.Peers[i+1], ar.response.Peers[i+2], ar.response.Peers[i+3])
+		pport := uint16(ar.response.Peers[i+4]) << 8
+		pport = pport | uint16(ar.response.Peers[i+5])
 //		fmt.Printf("%s:%d ", ip, pport)
 		peer.IP = ip
 		peer.Port = pport
 		peerCh <- peer
-		/*
-		select {
-		case <- t.Quit:
-			t.Quit <- true
-			return
-		case peerCh <- peer:
-			continue
-		}
-		*/
 	}
+	// Unset ar.event
+	ar.event = ""
 }
 
-func (tr *Tracker) Stop() error {
-	tr.t.Kill(nil)
-	return tr.t.Wait()
+func (ar *Announcer) Stop() error {
+	ar.t.Kill(nil)
+	return ar.t.Wait()
 }
 
-func (tr *Tracker) Run(t *Torrent, event chan string, peer chan Peer) {
-	log.Println("Tracker : Run : Started")
-	defer tr.t.Done()
-	defer log.Println("Tracker : Run : Completed")
+func (ar *Announcer) Run(torrent chan Torrent, announce chan bool, event chan string, peerCh chan Peer) {
+	log.Println("Announcer : Run : Started")
+	defer ar.t.Done()
+	defer log.Println("Announcer : Run : Completed")
 	for {
 		select {
+		case <- announce:
+			log.Println("Announcer: received announce request")
+			ar.Announce(peerCh)
 		case e := <- event:
-			go tr.Announce(t, peer, e)
-			time.Sleep(time.Second)
-		case <- tr.t.Dying():
+			log.Println("Announcer: received event", ar.event)
+			ar.event = e
+		case t := <- torrent:
+			ar.torrent = t
+			log.Printf("Announcer: received torrent with info_hash %x\n", ar.torrent.infoHash)
+		case <- ar.t.Dying():
 			return
 		}
 	}
