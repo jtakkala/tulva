@@ -34,7 +34,7 @@ type Stats struct {
 }
 
 type TrackerManager struct {
-	Completed bool
+	completedCh chan bool
 	statsCh chan Stats
 	peersCh chan Peer
 	t tomb.Tomb
@@ -56,6 +56,7 @@ type TrackerResponse struct {
 type Tracker struct {
 	announceUrl *url.URL
 	response TrackerResponse
+	completedCh chan bool
 	statsCh chan Stats
 	peersCh chan Peer
 	stats Stats
@@ -129,11 +130,14 @@ func (tr *Tracker) Run() {
 	defer tr.t.Done()
 	defer log.Printf("Tracker : Run : Completed (%s)\n", tr.announceUrl)
 
-	tr.Announce(Started)
+	// TODO: Start this in a go-routine?
+	go tr.Announce(Started)
 	for {
 		select {
 		case <- tr.t.Dying():
 			return
+		case <- tr.completedCh:
+			go tr.Announce(Completed)
 		}
 	}
 }
@@ -149,6 +153,7 @@ func (trm *TrackerManager) Run(m MetaInfo, infoHash []byte) {
 	defer trm.t.Done()
 	defer log.Println("Tracker : TrackerManager : Completed")
 
+	// TODO: Handle multiple announce URL's
 	/*
 	for announceUrl := m.AnnounceList {
 		tr := new(Tracker)
@@ -161,6 +166,7 @@ func (trm *TrackerManager) Run(m MetaInfo, infoHash []byte) {
 	tr := new(Tracker)
 	tr.statsCh = trm.statsCh
 	tr.peersCh = trm.peersCh
+	tr.completedCh = trm.completedCh
 	tr.infoHash = make([]byte, len(infoHash))
 	copy(tr.infoHash, infoHash)
 	tr.announceUrl, _ = url.Parse(m.Announce)

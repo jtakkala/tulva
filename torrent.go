@@ -75,11 +75,13 @@ func (t *Torrent) Run() {
 	t.Init()
 
 	peers := make(map[string]uint16)
+	completedCh := make(chan bool)
 	peersCh := make(chan Peer)
 //	statsCh := make(chan Stats)
 
 	trackerManager := new(TrackerManager)
 	trackerManager.peersCh = peersCh
+	trackerManager.completedCh = completedCh
 	go trackerManager.Run(t.metaInfo, t.infoHash)
 
 	for {
