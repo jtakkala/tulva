@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"launchpad.net/tomb"
 	"log"
-	"net/url"
 )
 
 type Torrent struct {
@@ -68,23 +67,6 @@ func (t *Torrent) Stop() error {
 	return t.t.Wait()
 }
 
-func (t *Torrent) selectTracker(ar *Announcer) {
-	log.Println("Torrent : selectTracker : Started")
-	defer log.Println("Torrent : selectTracker : Completed")
-	// Select the tracker to connect to, if it's a list, select the first
-	// one in the list. TODO: If no response from first tracker in list,
-	// then try the next one, and so on.
-	if len(t.metaInfo.AnnounceList) > 0 {
-		ar.announceUrl, _ = url.Parse(t.metaInfo.AnnounceList[0][0])
-	} else {
-		ar.announceUrl, _ = url.Parse(t.metaInfo.Announce)
-	}
-	// TODO: Implement UDP mode
-	if ar.announceUrl.Scheme != "http" {
-		log.Fatalf("URL Scheme: %s not supported\n", ar.announceUrl.Scheme)
-	}
-}
-
 // Run starts the Torrent session and orchestrates all the child processes
 func (t *Torrent) Run() {
 	log.Println("Torrent : Run : Started")
@@ -92,26 +74,20 @@ func (t *Torrent) Run() {
 	defer log.Println("Torrent : Run : Completed")
 	t.Init()
 
-	ar := new(Announcer)
-	t.selectTracker(ar)
-
-	torrentCh := make(chan Torrent)
-	announceCh := make(chan bool)
-	eventCh := make(chan string)
-	peerCh := make(chan Peer)
-	go ar.Run(torrentCh, announceCh, eventCh, peerCh)
-
-	torrentCh <- *t
-	announceCh <- true
-
 	peers := make(map[string]uint16)
+	peersCh := make(chan Peer)
+//	statsCh := make(chan Stats)
+
+	trackerManager := new(TrackerManager)
+	trackerManager.peersCh = peersCh
+	go trackerManager.Run(t.metaInfo, t.infoHash)
 
 	for {
 		select {
 		case <- t.t.Dying():
-			ar.Stop()
+			trackerManager.Stop()
 			return
-		case peer := <- peerCh:
+		case peer := <- peersCh:
 			peers[peer.IP.String()] = peer.Port
 			fmt.Println(peer)
 		}
