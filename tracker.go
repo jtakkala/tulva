@@ -6,13 +6,14 @@ package main
 
 import (
 	"code.google.com/p/bencode-go"
-//	"fmt"
+	"fmt"
 	"launchpad.net/tomb"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 )
 
 const (
@@ -59,6 +60,7 @@ type Tracker struct {
 	completedCh chan bool
 	statsCh chan Stats
 	peersCh chan Peer
+	timerCh <-chan time.Time
 	stats Stats
 	infoHash []byte
 	t tomb.Tomb
@@ -105,6 +107,10 @@ func (tr *Tracker) Announce(event int) {
 
 	bencode.Unmarshal(resp.Body, &tr.response)
 
+	if (tr.response.Interval != 0) {
+		tr.timerCh = time.After(time.Second * time.Duration(tr.response.Interval))
+	}
+
 	if event != Stopped {
 		// Parse peers in binary mode and return peer IP + port
 		var peer Peer
@@ -130,14 +136,19 @@ func (tr *Tracker) Run() {
 	defer tr.t.Done()
 	defer log.Printf("Tracker : Run : Completed (%s)\n", tr.announceUrl)
 
-	// TODO: Start this in a go-routine?
+	tr.timerCh = make(<-chan time.Time)
 	go tr.Announce(Started)
+
 	for {
 		select {
 		case <- tr.t.Dying():
 			return
 		case <- tr.completedCh:
 			go tr.Announce(Completed)
+		case <- tr.timerCh:
+//			time.After(time.Second * time.Duration(tr.response.Interval)):
+			fmt.Println("Time expired")
+//			go tr.Announce(0)
 		}
 	}
 }
@@ -147,7 +158,7 @@ func (trm *TrackerManager) Stop() error {
 	return trm.t.Wait()
 }
 
-// NewTracker spanws trackers
+// NewTracker spawns trackers
 func (trm *TrackerManager) Run(m MetaInfo, infoHash []byte) {
 	log.Println("Tracker : TrackerManager : Started")
 	defer trm.t.Done()
