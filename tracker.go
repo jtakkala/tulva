@@ -6,7 +6,7 @@ package main
 
 import (
 	"code.google.com/p/bencode-go"
-	"fmt"
+//	"fmt"
 	"launchpad.net/tomb"
 	"log"
 	"net"
@@ -95,11 +95,12 @@ func (tr *Tracker) Announce(event int) {
 	case Completed:
 		urlParams.Add("event", "completed")
 	}
-	tr.announceUrl.RawQuery = urlParams.Encode()
+	announceUrl := *tr.announceUrl
+	announceUrl.RawQuery = urlParams.Encode()
 
 	// Make a request to the tracker
-	log.Printf("Announce: %s\n", tr.announceUrl.String())
-	resp, err := http.Get(tr.announceUrl.String())
+	log.Printf("Announce: %s\n", announceUrl.String())
+	resp, err := http.Get(announceUrl.String())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -107,10 +108,12 @@ func (tr *Tracker) Announce(event int) {
 
 	bencode.Unmarshal(resp.Body, &tr.response)
 
+	// Schedule a timer to poll this announce URL every interval
 	if (tr.response.Interval != 0) {
 		tr.timerCh = time.After(time.Second * time.Duration(tr.response.Interval))
 	}
 
+	// If we're not stopping, send the list of peers to the peers channel
 	if event != Stopped {
 		// Parse peers in binary mode and return peer IP + port
 		var peer Peer
@@ -137,7 +140,7 @@ func (tr *Tracker) Run() {
 	defer log.Printf("Tracker : Run : Completed (%s)\n", tr.announceUrl)
 
 	tr.timerCh = make(<-chan time.Time)
-	go tr.Announce(Started)
+	tr.Announce(Started)
 
 	for {
 		select {
@@ -146,9 +149,8 @@ func (tr *Tracker) Run() {
 		case <- tr.completedCh:
 			go tr.Announce(Completed)
 		case <- tr.timerCh:
-//			time.After(time.Second * time.Duration(tr.response.Interval)):
-			fmt.Println("Time expired")
-//			go tr.Announce(0)
+			log.Printf("Tracker : Run : Interval Timer Expired (%s)\n", tr.announceUrl)
+			go tr.Announce(0)
 		}
 	}
 }
@@ -158,7 +160,7 @@ func (trm *TrackerManager) Stop() error {
 	return trm.t.Wait()
 }
 
-// NewTracker spawns trackers
+// Run spawns trackers for each announce URL
 func (trm *TrackerManager) Run(m MetaInfo, infoHash []byte) {
 	log.Println("Tracker : TrackerManager : Started")
 	defer trm.t.Done()
