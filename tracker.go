@@ -57,9 +57,9 @@ type TrackerResponse struct {
 type Tracker struct {
 	announceUrl *url.URL
 	response TrackerResponse
-	completedCh chan bool
-	statsCh chan Stats
-	peersCh chan Peer
+	completedCh <-chan bool
+	statsCh <-chan Stats
+	peersCh chan<- Peer
 	timerCh <-chan time.Time
 	stats Stats
 	infoHash []byte
