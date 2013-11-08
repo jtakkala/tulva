@@ -16,6 +16,7 @@ import (
 	"time"
 )
 
+// Possible reasons for tracker requests with the event parameter
 const (
 	_ int = iota
 	Started
@@ -81,24 +82,24 @@ func (tr *Tracker) Announce(event int) {
 	// Build and encode the Tracker Request
 	urlParams := url.Values{}
 	urlParams.Set("info_hash", string(tr.infoHash))
-	urlParams.Add("peer_id", string(PeerId[:]))
-	urlParams.Add("port", strconv.Itoa(port))
-	urlParams.Add("uploaded", strconv.Itoa(tr.stats.Uploaded))
-	urlParams.Add("downloaded", strconv.Itoa(tr.stats.Downloaded))
-	urlParams.Add("left", strconv.Itoa(tr.stats.Left))
-	urlParams.Add("compact", "1")
+	urlParams.Set("peer_id", string(PeerId[:]))
+	urlParams.Set("port", strconv.Itoa(port))
+	urlParams.Set("uploaded", strconv.Itoa(tr.stats.Uploaded))
+	urlParams.Set("downloaded", strconv.Itoa(tr.stats.Downloaded))
+	urlParams.Set("left", strconv.Itoa(tr.stats.Left))
+	urlParams.Set("compact", "1")
 	switch (event) {
 	case Started:
-		urlParams.Add("event", "started")
+		urlParams.Set("event", "started")
 	case Stopped:
-		urlParams.Add("event", "stopped")
+		urlParams.Set("event", "stopped")
 	case Completed:
-		urlParams.Add("event", "completed")
+		urlParams.Set("event", "completed")
 	}
 	announceUrl := *tr.announceUrl
 	announceUrl.RawQuery = urlParams.Encode()
 
-	// Make a request to the tracker
+	// Send a request to the Tracker
 	log.Printf("Announce: %s\n", announceUrl.String())
 	resp, err := http.Get(announceUrl.String())
 	if err != nil {
@@ -106,7 +107,12 @@ func (tr *Tracker) Announce(event int) {
 	}
 	defer resp.Body.Close()
 
-	bencode.Unmarshal(resp.Body, &tr.response)
+	// Unmarshall the Tracker Response
+	err = bencode.Unmarshal(resp.Body, &tr.response)
+	if err != nil {
+		log.Println(err)
+		return
+	}
 
 	// Schedule a timer to poll this announce URL every interval
 	if (tr.response.Interval != 0 && event != Stopped) {
@@ -118,14 +124,12 @@ func (tr *Tracker) Announce(event int) {
 	// If we're not stopping, send the list of peers to the peers channel
 	if event != Stopped {
 		// Parse peers in binary mode and return peer IP + port
-		var peer Peer
 		for i := 0; i < len(tr.response.Peers); i += 6 {
-			ip := net.IPv4(tr.response.Peers[i], tr.response.Peers[i+1], tr.response.Peers[i+2], tr.response.Peers[i+3])
-			pport := uint16(tr.response.Peers[i+4]) << 8
-			pport = pport | uint16(tr.response.Peers[i+5])
-			peer.IP = ip
-			peer.Port = pport
-			tr.peersCh <- peer
+			peerIP := net.IPv4(tr.response.Peers[i], tr.response.Peers[i+1], tr.response.Peers[i+2], tr.response.Peers[i+3])
+			peerPort := uint16(tr.response.Peers[i+4]) << 8
+			peerPort = peerPort | uint16(tr.response.Peers[i+5])
+			// Send the peer IP+port to the Torrent Manager
+			tr.peersCh <- Peer { peerIP, peerPort }
 		}
 	}
 }

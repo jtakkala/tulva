@@ -42,7 +42,10 @@ func ParseTorrentFile(filename string) (torrent Torrent, err error) {
 
 	// Create an Info dict based on the decoded file
 	var b bytes.Buffer
-	bencode.Marshal(&b, infoDict)
+	err = bencode.Marshal(&b, infoDict)
+	if err != nil {
+		log.Println(err)
+	}
 
 	// Compute the info hash
 	h := sha1.New()
@@ -51,7 +54,10 @@ func ParseTorrentFile(filename string) (torrent Torrent, err error) {
 
 	// Populate the metaInfo structure
 	file.Seek(0, 0)
-	bencode.Unmarshal(file, &torrent.metaInfo)
+	err = bencode.Unmarshal(file, &torrent.metaInfo)
+	if err != nil {
+		log.Println(err)
+	}
 
 	return
 }
