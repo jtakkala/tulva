@@ -109,8 +109,10 @@ func (tr *Tracker) Announce(event int) {
 	bencode.Unmarshal(resp.Body, &tr.response)
 
 	// Schedule a timer to poll this announce URL every interval
-	if (tr.response.Interval != 0) {
-		tr.timerCh = time.After(time.Second * time.Duration(tr.response.Interval))
+	if (tr.response.Interval != 0 && event != Stopped) {
+		nextAnnounce :=  time.Second * time.Duration(tr.response.Interval)
+		log.Printf("Tracker : Announce : Scheduling next announce in %v\n", nextAnnounce)
+		tr.timerCh = time.After(nextAnnounce)
 	}
 
 	// If we're not stopping, send the list of peers to the peers channel
