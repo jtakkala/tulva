@@ -13,9 +13,15 @@ import (
 type Torrent struct {
 	metaInfo MetaInfo
 	infoHash []byte
-	left int
 	peer chan Peer
+	Stats Stats
 	t tomb.Tomb
+}
+
+type Stats struct {
+	Left int
+	Uploaded int
+	Downloaded int
 }
 
 // Metainfo File Structure
@@ -46,14 +52,12 @@ func (t *Torrent) Init() {
 	// Initialize bytes left to download
 	if len(t.metaInfo.Info.Files) > 0 {
 		for _, file := range(t.metaInfo.Info.Files) {
-			t.left += file.Length
+			t.Stats.Left += file.Length
 		}
 	} else {
-		t.left = t.metaInfo.Info.Length
+		t.Stats.Left = t.metaInfo.Info.Length
 	}
-	if t.left == 0 {
-		log.Fatal("Unable to deterimine bytes left to download")
-	}
+	// TODO: Read in the file and adjust bytes left
 }
 
 func (t *Torrent) Stop() error {

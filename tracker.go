@@ -31,12 +31,6 @@ type Peer struct {
 	Port uint16
 }
 
-type Stats struct {
-	Uploaded int
-	Downloaded int
-	Left int
-}
-
 type TrackerManager struct {
 	completedCh chan bool
 	statsCh chan Stats
