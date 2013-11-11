@@ -95,6 +95,7 @@ func (tr *Tracker) Announce(event int) {
 	urlParams := url.Values{}
 	urlParams.Set("info_hash", string(tr.infoHash))
 	urlParams.Set("peer_id", string(PeerId[:]))
+	urlParams.Set("key", tr.key)
 	urlParams.Set("port", strconv.Itoa(port))
 	urlParams.Set("uploaded", strconv.Itoa(tr.stats.Uploaded))
 	urlParams.Set("downloaded", strconv.Itoa(tr.stats.Downloaded))
