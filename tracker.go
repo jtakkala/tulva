@@ -26,11 +26,6 @@ const (
 	Completed
 )
 
-type Peer struct {
-	IP net.IP
-	Port uint16
-}
-
 type TrackerManager struct {
 	completedCh chan bool
 	statsCh chan Stats

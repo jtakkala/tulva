@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"launchpad.net/tomb"
 	"log"
+	"net"
 )
 
 type Torrent struct {
@@ -16,6 +17,11 @@ type Torrent struct {
 	peer chan Peer
 	Stats Stats
 	t tomb.Tomb
+}
+
+type Peer struct {
+	IP net.IP
+	Port uint16
 }
 
 type Stats struct {
