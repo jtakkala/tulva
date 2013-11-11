@@ -6,9 +6,11 @@ package main
 
 import (
 	"code.google.com/p/bencode-go"
+	"encoding/hex"
 //	"fmt"
 	"launchpad.net/tomb"
 	"log"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/url"
@@ -18,7 +20,7 @@ import (
 
 // Possible reasons for tracker requests with the event parameter
 const (
-	_ int = iota
+	Interval int = iota
 	Started
 	Stopped
 	Completed
@@ -63,8 +65,18 @@ type Tracker struct {
 	peersCh chan<- Peer
 	timerCh <-chan time.Time
 	stats Stats
+	key string
 	infoHash []byte
 	t tomb.Tomb
+}
+
+func initKey() (key []byte) {
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	key = make([]byte, 4)
+	for i := 0; i < 4; i++ {
+		key[i] = byte(r.Intn(256))
+	}
+	return
 }
 
 func (tr *Tracker) Announce(event int) {
@@ -156,7 +168,7 @@ func (tr *Tracker) Run() {
 			go tr.Announce(Completed)
 		case <- tr.timerCh:
 			log.Printf("Tracker : Run : Interval Timer Expired (%s)\n", tr.announceUrl)
-			go tr.Announce(0)
+			go tr.Announce(Interval)
 		}
 	}
 }
@@ -183,6 +195,7 @@ func (trm *TrackerManager) Run(m MetaInfo, infoHash []byte) {
 	*/
 
 	tr := new(Tracker)
+	tr.key = hex.EncodeToString(initKey())
 	tr.statsCh = trm.statsCh
 	tr.peersCh = trm.peersCh
 	tr.completedCh = trm.completedCh
