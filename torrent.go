@@ -18,27 +18,21 @@ type Torrent struct {
 	t tomb.Tomb
 }
 
-// Multiple File Mode
-type Files struct {
-	Length int
-	Md5sum string
-	Path   []string
-}
-
-// Info dictionary
-type Info struct {
-	PieceLength int "piece length"
-	Pieces      string
-	Private     int
-	Name        string
-	Length      int
-	Md5sum      string
-	Files       []Files
-}
-
-// Metainfo structure
+// Metainfo File Structure
 type MetaInfo struct {
-	Info         Info
+	Info struct {
+		PieceLength int "piece length"
+		Pieces      string
+		Private     int
+		Name        string
+		Length      int
+		Md5sum      string
+		Files []struct {
+			Length int
+			Md5sum string
+			Path   []string
+		}
+	}
 	Announce     string
 	AnnounceList [][]string "announce-list"
 	CreationDate int        "creation date"
