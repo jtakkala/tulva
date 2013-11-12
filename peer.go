@@ -11,9 +11,14 @@ import (
 	"net"
 )
 
+// PeerTuple represents a single IP+port pair of a peer
 type PeerTuple struct {
 	IP net.IP
 	Port uint16
+}
+
+type Peer struct {
+	peer PeerTuple
 }
 
 type PeerManager struct {
@@ -32,12 +37,18 @@ func (pm *PeerManager) Run() {
 	defer pm.t.Done()
 	defer log.Println("PeerManager : Run : Completed")
 
-	peers := make(map[string]uint16)
-
 	for {
 		select {
 		case peer := <- pm.peersCh:
-			peers[peer.IP.String()] = peer.Port
+			/*
+			_, ok := peers[peer]
+			if ok {
+				// peer already exists
+				fmt.Println("Peer already in map")
+			} else {
+				peers[peer] = "foo"
+			}
+			*/
 			fmt.Println(peer)
 		case <- pm.t.Dying():
 			return
