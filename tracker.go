@@ -29,7 +29,7 @@ const (
 type TrackerManager struct {
 	completedCh chan bool
 	statsCh chan Stats
-	peersCh chan Peer
+	peersCh chan PeerTuple
 	t tomb.Tomb
 }
 
@@ -51,7 +51,7 @@ type Tracker struct {
 	response TrackerResponse
 	completedCh <-chan bool
 	statsCh <-chan Stats
-	peersCh chan<- Peer
+	peersCh chan<- PeerTuple
 	timerCh <-chan time.Time
 	stats Stats
 	key string
@@ -131,7 +131,7 @@ func (tr *Tracker) Announce(event int) {
 			peerPort := uint16(tr.response.Peers[i+4]) << 8
 			peerPort = peerPort | uint16(tr.response.Peers[i+5])
 			// Send the peer IP+port to the Torrent Manager
-			tr.peersCh <- Peer { peerIP, peerPort }
+			tr.peersCh <- PeerTuple { peerIP, peerPort }
 		}
 	}
 }

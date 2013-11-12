@@ -12,7 +12,7 @@ import (
 type Torrent struct {
 	metaInfo MetaInfo
 	infoHash []byte
-	peer chan Peer
+	peer chan PeerTuple
 	Stats Stats
 	t tomb.Tomb
 }
@@ -72,7 +72,7 @@ func (t *Torrent) Run() {
 	t.Init()
 
 	completedCh := make(chan bool)
-	peersCh := make(chan Peer)
+	peersCh := make(chan PeerTuple)
 	statsCh := make(chan Stats)
 
 	trackerManager := new(TrackerManager)

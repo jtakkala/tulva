@@ -11,13 +11,13 @@ import (
 	"net"
 )
 
-type Peer struct {
+type PeerTuple struct {
 	IP net.IP
 	Port uint16
 }
 
 type PeerManager struct {
-	peersCh <-chan Peer
+	peersCh <-chan PeerTuple
 	statsCh chan Stats
 	t tomb.Tomb
 }
