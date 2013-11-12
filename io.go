@@ -49,6 +49,7 @@ func (io *IO) Init() {
 					}
 				}
 			}
+			// Create the file if it doesn't exist
 			path := filepath.Join(file.Path...)
 			var file *os.File
 			if _, err := os.Stat(path); os.IsNotExist(err) {
@@ -57,15 +58,15 @@ func (io *IO) Init() {
 					log.Fatal(err)
 				}
 			}
+			// Open a file handle to the file
 			file, err = os.Open(path)
 			if err != nil {
 				log.Fatal(err)
 			}
 			fmt.Println(file)
 		}
-
 	} else {
-		// single file mode
+		// Single File Mode
 	}
 }
 
