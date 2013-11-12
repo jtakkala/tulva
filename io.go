@@ -24,6 +24,7 @@ func (io *IO) Stop() error {
 }
 
 func (io *IO) Init() {
+	io.files = make(map[string]*os.File)
 	if len(io.metaInfo.Info.Files) > 0 {
 		// Multiple File Mode
 		directory := io.metaInfo.Info.Name
@@ -51,19 +52,21 @@ func (io *IO) Init() {
 			}
 			// Create the file if it doesn't exist
 			path := filepath.Join(file.Path...)
-			var file *os.File
+			var fh *os.File
 			if _, err := os.Stat(path); os.IsNotExist(err) {
-				file, err = os.Create(path)
+				// Create the file and return a handle
+				fh, err = os.Create(path)
+				if err != nil {
+					log.Fatal(err)
+				}
+			} else {
+				// Open the file and return a handle
+				fh, err = os.Open(path)
 				if err != nil {
 					log.Fatal(err)
 				}
 			}
-			// Open a file handle to the file
-			file, err = os.Open(path)
-			if err != nil {
-				log.Fatal(err)
-			}
-			fmt.Println(file)
+			io.files[path] = fh
 		}
 	} else {
 		// Single File Mode
@@ -76,6 +79,7 @@ func (io *IO) Run() {
 	defer log.Println("IO : Run : Completed")
 
 	io.Init()
+	fmt.Println(io.files)
 
 	for {
 		select {
