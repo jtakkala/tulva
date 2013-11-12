@@ -5,10 +5,8 @@
 package main
 
 import (
-	"fmt"
 	"launchpad.net/tomb"
 	"log"
-	"net"
 )
 
 type Torrent struct {
@@ -17,11 +15,6 @@ type Torrent struct {
 	peer chan Peer
 	Stats Stats
 	t tomb.Tomb
-}
-
-type Peer struct {
-	IP net.IP
-	Port uint16
 }
 
 type Stats struct {
@@ -78,24 +71,26 @@ func (t *Torrent) Run() {
 	defer log.Println("Torrent : Run : Completed")
 	t.Init()
 
-	peers := make(map[string]uint16)
 	completedCh := make(chan bool)
 	peersCh := make(chan Peer)
-//	statsCh := make(chan Stats)
+	statsCh := make(chan Stats)
 
 	trackerManager := new(TrackerManager)
 	trackerManager.peersCh = peersCh
 	trackerManager.completedCh = completedCh
+	trackerManager.statsCh = statsCh
 	go trackerManager.Run(t.metaInfo, t.infoHash)
+
+	peerManager := new(PeerManager)
+	peerManager.peersCh = peersCh
+	peerManager.statsCh = statsCh
+	go peerManager.Run()
 
 	for {
 		select {
 		case <- t.t.Dying():
 			trackerManager.Stop()
 			return
-		case peer := <- peersCh:
-			peers[peer.IP.String()] = peer.Port
-			fmt.Println(peer)
 		}
 	}
 }

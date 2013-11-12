@@ -159,6 +159,8 @@ func (tr *Tracker) Run() {
 		case <- tr.timerCh:
 			log.Printf("Tracker : Run : Interval Timer Expired (%s)\n", tr.announceUrl)
 			go tr.Announce(Interval)
+		case stats := <- tr.statsCh:
+			log.Println("read from stats", stats)
 		}
 	}
 }
@@ -170,9 +172,9 @@ func (trm *TrackerManager) Stop() error {
 
 // Run spawns trackers for each announce URL
 func (trm *TrackerManager) Run(m MetaInfo, infoHash []byte) {
-	log.Println("Tracker : TrackerManager : Started")
+	log.Println("TrackerManager : Run : Started")
 	defer trm.t.Done()
-	defer log.Println("Tracker : TrackerManager : Completed")
+	defer log.Println("TrackerManager : Run : Completed")
 
 	// TODO: Handle multiple announce URL's
 	/*
