@@ -165,6 +165,14 @@ func (tr *Tracker) Run() {
 	}
 }
 
+func NewTrackerManager() *TrackerManager {
+	tm := new(TrackerManager)
+	tm.peersCh = make(chan PeerTuple)
+	tm.completedCh = make(chan bool)
+	tm.statsCh = make(chan Stats)
+	return tm
+}
+
 func (trm *TrackerManager) Stop() error {
 	trm.t.Kill(nil)
 	return trm.t.Wait()
