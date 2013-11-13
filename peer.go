@@ -35,6 +35,7 @@ func NewPeerManager(peersCh chan PeerTuple, statsCh chan Stats) *PeerManager {
 }
 
 func (pm *PeerManager) Stop() error {
+	log.Println("PeerManager : Stop : Stopping")
 	pm.t.Kill(nil)
 	return pm.t.Wait()
 }

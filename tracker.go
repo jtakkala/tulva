@@ -137,6 +137,7 @@ func (tr *Tracker) Announce(event int) {
 }
 
 func (tr *Tracker) Stop() error {
+	log.Println("Tracker : Stop : Stopping")
 	tr.Announce(Stopped)
 	tr.t.Kill(nil)
 	return tr.t.Wait()
@@ -174,6 +175,7 @@ func NewTrackerManager() *TrackerManager {
 }
 
 func (trm *TrackerManager) Stop() error {
+	log.Println("TrackerManager : Stop : Stopping")
 	trm.t.Kill(nil)
 	return trm.t.Wait()
 }
