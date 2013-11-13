@@ -71,23 +71,17 @@ func (t *Torrent) Run() {
 	defer log.Println("Torrent : Run : Completed")
 	t.Init()
 
-	completedCh := make(chan bool)
-	peersCh := make(chan PeerTuple)
-	statsCh := make(chan Stats)
-
 	io := new(IO)
 	io.metaInfo = t.metaInfo
 	go io.Run()
 
-	trackerManager := new(TrackerManager)
-	trackerManager.peersCh = peersCh
-	trackerManager.completedCh = completedCh
-	trackerManager.statsCh = statsCh
+	trackerManager := NewTrackerManager()
+
 //	go trackerManager.Run(t.metaInfo, t.infoHash)
 
 	peerManager := new(PeerManager)
-	peerManager.peersCh = peersCh
-	peerManager.statsCh = statsCh
+	peerManager.peersCh = trackerManager.peersCh
+	peerManager.statsCh = trackerManager.statsCh
 	go peerManager.Run()
 
 	for {
