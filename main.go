@@ -43,7 +43,7 @@ func main() {
 
 	// Launch the torrent
 	go t.Run()
-	time.Sleep(5 * time.Second)
+	time.Sleep(10 * time.Second)
 	log.Println("main : sending stop signal")
 	t.Stop()
 }
