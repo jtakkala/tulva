@@ -5,6 +5,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha1"
 	"fmt"
 	sysio "io"
@@ -23,27 +24,22 @@ type IO struct {
 // Reads in files and verifies them, returns a map of pieces we already have
 func (io *IO) Verify() {
 	pieceLength := io.metaInfo.Info.PieceLength
-
-	// Create a buffer of size PieceLength
 	buf := make([]byte, pieceLength)
+	h := sha1.New()
+
 	if len(io.metaInfo.Info.Files) > 0 {
 		// Multiple File Mode
-		var offset int64
 		var piece, n, m int
 		var err error
-		h := sha1.New()
 		// Iterate over each file
-		for i, file := range io.metaInfo.Info.Files {
-			for offset = 0; offset < int64(file.Length); {
-				// Reset out hash
-				h.Reset()
+		for i, _ := range io.metaInfo.Info.Files {
+			for offset := int64(0); ; {
 				// Read from file at offset, up to buf size or
 				// less if last read was incomplete due to EOF
 				n, err = io.files[i].ReadAt(buf[m:], offset)
 				if err != nil {
 					if err == sysio.EOF {
-						fmt.Printf("%s %d\n", file.Path, n)
-						// Reached EOF
+						// Reached EOF. Increment partial read counter by bytes read
 						m += n
 						break
 					}
@@ -52,27 +48,61 @@ func (io *IO) Verify() {
 				// We have a full buf, generate a hash and compare with
 				// corresponding pieces part of the torrent file
 				h.Write(buf)
-				fmt.Printf("sha1: %x %x\n", h.Sum(nil), io.metaInfo.Info.Pieces[piece:piece + 20])
+				if bytes.Equal(h.Sum(nil), []byte(io.metaInfo.Info.Pieces[piece:piece + 20])) {
+					fmt.Printf("SHA1 match: %x\n", h.Sum(nil))
+				}
+				// Reset hash
+				h.Reset()
+				// Reset partial read counter
+				m = 0
 				// Increment offset by number of bytes read
 				offset += int64(n)
-				m = 0
 				// Increment piece by the length of a SHA-1 hash (20 bytes)
 				piece += 20
 			}
-			if (n == pieceLength) {
-				h.Write(buf)
-				fmt.Printf("sha1: %x %x\n", h.Sum(nil), io.metaInfo.Info.Pieces[piece:piece + 20])
+		}
+		// If the final iteration resulted in a partial read, then compute a hash
+		if (m > 0) {
+			h.Write(buf[:m])
+			if bytes.Equal(h.Sum(nil), []byte(io.metaInfo.Info.Pieces[piece:piece + 20])) {
+				fmt.Printf("SHA1 match: %x\n", h.Sum(nil))
 			}
 		}
 	} else {
 		// Single File Mode
+		var piece, n int
+		var err error
+		for offset := int64(0); ; {
+			// Read from file at offset, up to buf size or
+			// less if last read was incomplete due to EOF
+			n, err = io.files[0].ReadAt(buf, offset)
+			if err != nil {
+				if err == sysio.EOF {
+					// Reached EOF
+					break
+				}
+				log.Fatal(err)
+			}
+			// We have a full buf, generate a hash and compare with
+			// corresponding pieces part of the torrent file
+			h.Write(buf)
+			if bytes.Equal(h.Sum(nil), []byte(io.metaInfo.Info.Pieces[piece:piece + 20])) {
+				fmt.Printf("SHA1 match: %x\n", h.Sum(nil))
+			}
+			// Reset hash
+			h.Reset()
+			// Increment offset by number of bytes read
+			offset += int64(n)
+			// Increment piece by the length of a SHA-1 hash (20 bytes)
+			piece += 20
+		}
+		if (n > 0) {
+			h.Write(buf[:n])
+			if bytes.Equal(h.Sum(nil), []byte(io.metaInfo.Info.Pieces[piece:piece + 20])) {
+				fmt.Printf("SHA1 match: %x\n", h.Sum(nil))
+			}
+		}
 	}
-
-}
-
-func (io *IO) Stop() error {
-	io.t.Kill(nil)
-	return io.t.Wait()
 }
 
 func checkError(err error) {
@@ -125,6 +155,11 @@ func (io *IO) Init() {
 		// Single File Mode
 		io.files = append(io.files, openOrCreateFile(io.metaInfo.Info.Name))
 	}
+}
+
+func (io *IO) Stop() error {
+	io.t.Kill(nil)
+	return io.t.Wait()
 }
 
 func (io *IO) Run() {
