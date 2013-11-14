@@ -81,15 +81,17 @@ func checkError(err error) {
 	}
 }
 
-func openOrCreateFile(fileName string) (file *os.File) {
+// openOrCreateFile opens the named file or creates it if it doesn't already
+// exist. If successful it returns a file handle that can be used for I/O.
+func openOrCreateFile(name string) (file *os.File) {
 	// Create the file if it doesn't exist
-	if _, err := os.Stat(fileName); os.IsNotExist(err) {
+	if _, err := os.Stat(name); os.IsNotExist(err) {
 		// Create the file and return a handle
-		file, err = os.Create(fileName)
+		file, err = os.Create(name)
 		checkError(err)
 	} else {
 		// Open the file and return a handle
-		file, err = os.Open(fileName)
+		file, err = os.Open(name)
 		checkError(err)
 	}
 	return
@@ -116,8 +118,8 @@ func (io *IO) Init() {
 				}
 			}
 			// Create the file if it doesn't exist
-			fileName := filepath.Join(file.Path...)
-			io.files = append(io.files, openOrCreateFile(fileName))
+			name := filepath.Join(file.Path...)
+			io.files = append(io.files, openOrCreateFile(name))
 		}
 	} else {
 		// Single File Mode
