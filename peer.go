@@ -27,11 +27,65 @@ type PeerManager struct {
 	t tomb.Tomb
 }
 
+type PeerInfo struct {
+	peerId string
+	availablePieces []int
+	activeRequests map[int]struct{}
+	downloadPriority []int
+	requestPieceCh chan<- RequestPiece  // Other end is Peer. Used to tell the peer to request a particular piece.  
+	cancelPieceCh chan<- CancelPiece  // Other end is Peer. Used to tell the peer to cancel a particular piece. 
+}
+
+type SortedPeers []PeerNeediness
+
+func (sp *SortedPeers) Less(i, j int) bool {
+	return sp[i].numPiecesNeeded <= sp[j].numPiecesNeeded
+}
+
+func (sp *SortedPeers) Swap(i, j int) {
+	tmp := sp[i]
+	sp[i] = sp[j]
+	sp[j] = tmp
+}
+
+func (sp *SortedPeers) Len() int {
+	len(sp)
+}
+
+type PeerNeediness struct {
+	peerId string
+	numPiecesNeeded int
+}
+
+func sortedPeerIds(peers map[string]PeerInfo) []string {
+	sorted := make(SortedPeers, 0)
+	for peerId, peerInfo := range peers {
+		sorted = append(sorted, PeerNeediness{peerId, len(peerInfo.downloadPriority)})
+	}
+	sort.Sort(sorted)
+
+	sortedPeerIds := make([]string, 0)
+	for _, pn := range sorted {
+		sortedPeerIds = append(sortedPeerIds, pn.peerId)
+	}
+
+	return sortedPeerIds
+}
+
 func NewPeerManager(peersCh chan PeerTuple, statsCh chan Stats) *PeerManager {
 	pm := new(PeerManager)
 	pm.peersCh = peersCh
 	pm.statsCh = statsCh
 	return pm
+}
+
+func NewPeerInfo(quantityOfPieces int) *PeerInfo {
+	pi := new(PeerInfo)
+	pi.availablePieces = make([]int, quantityOfPieces)
+	pi.activeRequests = make(map[int]struct{})
+	pi.requestPieceCh = make(chan<- RequestPiece)
+	pi.cancelPieceCh = make(chan<- CancelPiece)
+	return pi
 }
 
 func (pm *PeerManager) Stop() error {
