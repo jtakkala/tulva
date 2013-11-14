@@ -71,6 +71,7 @@ func (io *IO) Verify() {
 }
 
 func (io *IO) Stop() error {
+	log.Println("IO : Stop : Stopping")
 	io.t.Kill(nil)
 	return io.t.Wait()
 }
