@@ -31,16 +31,20 @@ func (io *IO) checkHash(buf []byte, pieceIndex int) {
 
 // Reads in files and verifies them, returns a map of pieces we already have
 func (io *IO) Verify() {
+	log.Println("IO : Verify : Started")
+	defer log.Println("IO : Verify : Completed")
+
 	pieceLength := io.metaInfo.Info.PieceLength
 	buf := make([]byte, pieceLength)
+	var pieceIndex, n int
+	var err error
 
 	if len(io.metaInfo.Info.Files) > 0 {
 		// Multiple File Mode
-		var piece, n, m int
-		var err error
+		var m int
 		// Iterate over each file
 		for i, _ := range io.metaInfo.Info.Files {
-			for offset := int64(0); ; {
+			for offset := int64(0); ; offset += int64(n) {
 				// Read from file at offset, up to buf size or
 				// less if last read was incomplete due to EOF
 				n, err = io.files[i].ReadAt(buf[m:], offset)
@@ -54,24 +58,20 @@ func (io *IO) Verify() {
 				}
 				// We have a full buf, generate a hash and compare with
 				// corresponding pieces part of the torrent file
-				io.checkHash(buf, piece)
+				io.checkHash(buf, pieceIndex)
 				// Reset partial read counter
 				m = 0
-				// Increment offset by number of bytes read
-				offset += int64(n)
 				// Increment piece by the length of a SHA-1 hash (20 bytes)
-				piece += 20
+				pieceIndex += 20
 			}
 		}
 		// If the final iteration resulted in a partial read, then compute a hash
 		if (m > 0) {
-			io.checkHash(buf[:m], piece)
+			io.checkHash(buf[:m], pieceIndex)
 		}
 	} else {
 		// Single File Mode
-		var piece, n int
-		var err error
-		for offset := int64(0); ; {
+		for offset := int64(0); ; offset += int64(n) {
 			// Read from file at offset, up to buf size or
 			// less if last read was incomplete due to EOF
 			n, err = io.files[0].ReadAt(buf, offset)
@@ -84,15 +84,13 @@ func (io *IO) Verify() {
 			}
 			// We have a full buf, generate a hash and compare with
 			// corresponding pieces part of the torrent file
-			io.checkHash(buf, piece)
-			// Increment offset by number of bytes read
-			offset += int64(n)
+			io.checkHash(buf, pieceIndex)
 			// Increment piece by the length of a SHA-1 hash (20 bytes)
-			piece += 20
+			pieceIndex += 20
 		}
 		// If the final iteration resulted in a partial read, then compute a hash
 		if (n > 0) {
-			io.checkHash(buf[:n], piece)
+			io.checkHash(buf[:n], pieceIndex)
 		}
 	}
 }
