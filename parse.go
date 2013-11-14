@@ -59,6 +59,10 @@ func ParseTorrentFile(filename string) (torrent Torrent, err error) {
 		log.Println(err)
 	}
 
+	// Print a summary about the torrent file 
+	log.Printf("Parse : ParseTorrentFile : Successfully parsed %s", filename)
+	log.Printf("Parse : ParseTorrentFile : Determined that %d pieces exist in the torrent", (len(torrent.metaInfo.Info.Pieces) / 20))
+
 	return
 }
 

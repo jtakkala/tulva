@@ -27,7 +27,15 @@ type PeerManager struct {
 	t tomb.Tomb
 }
 
+func NewPeerManager(peersCh chan PeerTuple, statsCh chan Stats) *PeerManager {
+	pm := new(PeerManager)
+	pm.peersCh = peersCh
+	pm.statsCh = statsCh
+	return pm
+}
+
 func (pm *PeerManager) Stop() error {
+	log.Println("PeerManager : Stop : Stopping")
 	pm.t.Kill(nil)
 	return pm.t.Wait()
 }

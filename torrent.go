@@ -60,6 +60,7 @@ func (t *Torrent) Init() {
 }
 
 func (t *Torrent) Stop() error {
+	log.Println("Torrent : Stop : Stopping")
 	t.t.Kill(nil)
 	return t.t.Wait()
 }
@@ -76,12 +77,9 @@ func (t *Torrent) Run() {
 	go io.Run()
 
 	trackerManager := NewTrackerManager()
+	go trackerManager.Run(t.metaInfo, t.infoHash)
 
-//	go trackerManager.Run(t.metaInfo, t.infoHash)
-
-	peerManager := new(PeerManager)
-	peerManager.peersCh = trackerManager.peersCh
-	peerManager.statsCh = trackerManager.statsCh
+	peerManager := NewPeerManager(trackerManager.peersCh, trackerManager.statsCh)
 	go peerManager.Run()
 
 	for {
