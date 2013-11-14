@@ -21,11 +21,18 @@ type IO struct {
 	t tomb.Tomb
 }
 
+func (io *IO) checkHash(buf []byte, pieceIndex int) {
+	h := sha1.New()
+	h.Write(buf)
+	if bytes.Equal(h.Sum(nil), []byte(io.metaInfo.Info.Pieces[pieceIndex:pieceIndex + h.Size()])) {
+		fmt.Printf("SHA1 match: %x\n", h.Sum(nil))
+	}
+}
+
 // Reads in files and verifies them, returns a map of pieces we already have
 func (io *IO) Verify() {
 	pieceLength := io.metaInfo.Info.PieceLength
 	buf := make([]byte, pieceLength)
-	h := sha1.New()
 
 	if len(io.metaInfo.Info.Files) > 0 {
 		// Multiple File Mode
@@ -47,12 +54,7 @@ func (io *IO) Verify() {
 				}
 				// We have a full buf, generate a hash and compare with
 				// corresponding pieces part of the torrent file
-				h.Write(buf)
-				if bytes.Equal(h.Sum(nil), []byte(io.metaInfo.Info.Pieces[piece:piece + 20])) {
-					fmt.Printf("SHA1 match: %x\n", h.Sum(nil))
-				}
-				// Reset hash
-				h.Reset()
+				io.checkHash(buf, piece)
 				// Reset partial read counter
 				m = 0
 				// Increment offset by number of bytes read
@@ -63,10 +65,7 @@ func (io *IO) Verify() {
 		}
 		// If the final iteration resulted in a partial read, then compute a hash
 		if (m > 0) {
-			h.Write(buf[:m])
-			if bytes.Equal(h.Sum(nil), []byte(io.metaInfo.Info.Pieces[piece:piece + 20])) {
-				fmt.Printf("SHA1 match: %x\n", h.Sum(nil))
-			}
+			io.checkHash(buf[:m], piece)
 		}
 	} else {
 		// Single File Mode
@@ -85,22 +84,15 @@ func (io *IO) Verify() {
 			}
 			// We have a full buf, generate a hash and compare with
 			// corresponding pieces part of the torrent file
-			h.Write(buf)
-			if bytes.Equal(h.Sum(nil), []byte(io.metaInfo.Info.Pieces[piece:piece + 20])) {
-				fmt.Printf("SHA1 match: %x\n", h.Sum(nil))
-			}
-			// Reset hash
-			h.Reset()
+			io.checkHash(buf, piece)
 			// Increment offset by number of bytes read
 			offset += int64(n)
 			// Increment piece by the length of a SHA-1 hash (20 bytes)
 			piece += 20
 		}
+		// If the final iteration resulted in a partial read, then compute a hash
 		if (n > 0) {
-			h.Write(buf[:n])
-			if bytes.Equal(h.Sum(nil), []byte(io.metaInfo.Info.Pieces[piece:piece + 20])) {
-				fmt.Printf("SHA1 match: %x\n", h.Sum(nil))
-			}
+			io.checkHash(buf[:n], piece)
 		}
 	}
 }
