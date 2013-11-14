@@ -81,6 +81,20 @@ func checkError(err error) {
 	}
 }
 
+func openOrCreateFile(fileName string) (file *os.File) {
+	// Create the file if it doesn't exist
+	if _, err := os.Stat(fileName); os.IsNotExist(err) {
+		// Create the file and return a handle
+		file, err = os.Create(fileName)
+		checkError(err)
+	} else {
+		// Open the file and return a handle
+		file, err = os.Open(fileName)
+		checkError(err)
+	}
+	return
+}
+
 func (io *IO) Init() {
 	if len(io.metaInfo.Info.Files) > 0 {
 		// Multiple File Mode
@@ -102,21 +116,12 @@ func (io *IO) Init() {
 				}
 			}
 			// Create the file if it doesn't exist
-			path := filepath.Join(file.Path...)
-			var fh *os.File
-			if _, err := os.Stat(path); os.IsNotExist(err) {
-				// Create the file and return a handle
-				fh, err = os.Create(path)
-				checkError(err)
-			} else {
-				// Open the file and return a handle
-				fh, err = os.Open(path)
-				checkError(err)
-			}
-			io.files = append(io.files, fh)
+			fileName := filepath.Join(file.Path...)
+			io.files = append(io.files, openOrCreateFile(fileName))
 		}
 	} else {
 		// Single File Mode
+		io.files = append(io.files, openOrCreateFile(io.metaInfo.Info.Name))
 	}
 }
 
