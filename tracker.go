@@ -174,16 +174,16 @@ func NewTrackerManager(port uint16) *TrackerManager {
 	return tm
 }
 
-func (trm *TrackerManager) Stop() error {
+func (tm *TrackerManager) Stop() error {
 	log.Println("TrackerManager : Stop : Stopping")
-	trm.t.Kill(nil)
-	return trm.t.Wait()
+	tm.t.Kill(nil)
+	return tm.t.Wait()
 }
 
 // Run spawns trackers for each announce URL
-func (trm *TrackerManager) Run(m MetaInfo, infoHash []byte) {
+func (tm *TrackerManager) Run(m MetaInfo, infoHash []byte) {
 	log.Println("TrackerManager : Run : Started")
-	defer trm.t.Done()
+	defer tm.t.Done()
 	defer log.Println("TrackerManager : Run : Completed")
 
 	// TODO: Handle multiple announce URL's
@@ -198,10 +198,10 @@ func (trm *TrackerManager) Run(m MetaInfo, infoHash []byte) {
 
 	tr := new(Tracker)
 	tr.key = hex.EncodeToString(initKey())
-	tr.statsCh = trm.statsCh
-	tr.peersCh = trm.peersCh
-	tr.completedCh = trm.completedCh
-	tr.port = trm.port
+	tr.statsCh = tm.statsCh
+	tr.peersCh = tm.peersCh
+	tr.completedCh = tm.completedCh
+	tr.port = tm.port
 	tr.infoHash = make([]byte, len(infoHash))
 	copy(tr.infoHash, infoHash)
 	tr.announceUrl, _ = url.Parse(m.Announce)
@@ -209,7 +209,7 @@ func (trm *TrackerManager) Run(m MetaInfo, infoHash []byte) {
 
 	for {
 		select {
-		case <-trm.t.Dying():
+		case <-tm.t.Dying():
 			tr.Stop()
 			return
 		}
