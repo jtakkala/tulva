@@ -67,7 +67,7 @@ func (sv *Server) Run() {
 	defer sv.t.Done()
 	defer log.Println("Server : Run : Completed")
 
-	fmt.Println("Listening on port", sv.Port)
+	log.Println("Server : Listening on port", sv.Port)
 	for {
 		select {
 		case peer := <-sv.peersCh:
