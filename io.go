@@ -38,8 +38,7 @@ func (io *IO) Verify() (finishedPieces []bool) {
 	log.Println("IO : Verify : Started")
 	defer log.Println("IO : Verify : Completed")
 
-	pieceLength := io.metaInfo.Info.PieceLength
-	buf := make([]byte, pieceLength)
+	buf := make([]byte, io.metaInfo.Info.PieceLength)
 	var pieceIndex, n int
 	var err error
 
@@ -167,7 +166,6 @@ func (io *IO) Run() {
 
 	io.Init()
 	finishedPieces := io.Verify()
-	fmt.Println(finishedPieces)
 
 	for {
 		select {
