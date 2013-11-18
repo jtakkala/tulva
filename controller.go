@@ -203,8 +203,75 @@ func (cont *Controller) recreateDownloadPriorities(raritySlice []int) {
 	}
 }*/
 
-/*
-func (cont *Controller) sendRequests(peersSortedByDownloadLen []peerInfo) {
+type PiecePriority struct {
+	pieceNum int
+	activeRequestsTotal int
+	rarityIndex int
+}
+
+type PiecePrioritySlice []PiecePriority
+
+func (pps PiecePrioritySlice) Less(i, j int) bool {
+	if pps[i].activeRequestsTotal != pps[j].activeRequestsTotal {
+		// Determine which is less ONLY by activeRequestsTotal, and not by rarityIndex
+		// because activeRequestsTotals influences sorting order more than rarityIndex. 
+		return pps[i].activeRequestsTotal <= pps[j].activeRequestsTotal
+
+	} else {
+		// Since activeRequestsTotal is the same for both, use rarityIndex as a tie
+		// breaker
+		return pps[i].rarityIndex <= pps[j].rarityIndex
+	} 
+}
+
+func (pps PiecePrioritySlice) Swap(i, j int) {
+	pps[i], pps[j] = pps[j], pps[i]
+}
+
+func (pps PiecePrioritySlice) Len() int {
+	return len(pps)
+}
+
+// Convert the PiecePrioritySlice to a simple slice of integers (pieces) sorted by priority
+func (pps PiecePrioritySlice) toPieceSlice() []int {
+	pieceSlice := make([]int, 0)
+	
+	for _, pp := range pps {
+		pieceSlice = append(pieceSlice, pp.pieceNum)
+	}
+
+	return pieceSlice
+}
+
+func (cont *Controller) createDownloadPriorityForPeer(peerInfo PeerInfo, raritySlice []int) []int {
+	// Create an unsorted PiecePrioritySlice object for each available piece on this peer that we need. 
+	piecePrioritySlice := make(PiecePrioritySlice, 0)
+	for rarityIndex, pieceNum := range raritySlice {
+		if peerInfo.availablePieces[pieceNum] == 1 {
+			// The peer has this piece available AND we also need this piece, because the raritySlice
+			// only contains pieces that we need.
+			pp := new(PiecePriority)
+			pp.pieceNum = pieceNum
+			pp.activeRequestsTotal = cont.activeRequestsTotals[pieceNum]
+			pp.rarityIndex = rarityIndex
+
+			piecePrioritySlice = append(piecePrioritySlice, *pp)
+		}
+	}
+
+	sort.Sort(piecePrioritySlice)
+
+	return piecePrioritySlice.toPieceSlice()
+}
+
+
+
+
+func (cont *Controller) sendRequests(peersSortedByDownloadLen SortedPeers, raritySlice []int) {
+
+
+
+	/*
 	for _, peerInfo := range peersSortedByDownloadLen {
 
 		// Confirm that this peer is still connected and is available to take requests
@@ -228,7 +295,8 @@ func (cont *Controller) sendRequests(peersSortedByDownloadLen []peerInfo) {
 
 		}
 	}
-}*/
+	*/
+}
 
 const (
 	maxSimultaneousDownloadsPerPeer = 3
@@ -242,7 +310,7 @@ func (cont *Controller) Run() {
 	for {
 		select {
 		case piece := <- cont.rxChannels.receivedPieceCh:
-			log.Printf("Controller: Run: %s just finished downloading piece number %d", piece.peerId, piece.pieceNum)
+			log.Printf("Controller: Run : %s finished downloading piece number %d", piece.peerId, piece.pieceNum)
 
 			// Update our bitfield to show that we now have that piece
 			cont.finishedPieces[piece.pieceNum] = true
@@ -255,29 +323,25 @@ func (cont *Controller) Run() {
 			// Create a slice of pieces sorted by rarity
 			raritySlice := cont.createRaritySlice()
 
-			// PLACEHOLDER
-			log.Println(raritySlice)
-
 			// Given the updated finishedPieces slice, update the quantity of pieces
 			// that are needed from each peer. This step is required to later sort 
 			// peerInfo slices by the quantity of needed pieces. 
 			cont.updateQuantityNeededForAllPeers()
 
 			// Create a PeerInfo slice sorted by qtyPiecesNeeded
-			//sortedPeers := sortedPeersByQtyPiecesNeeded(cont.peers)
+			sortedPeers := sortedPeersByQtyPiecesNeeded(cont.peers)
 
 			// Iterate through the sorted peerInfo slice. For each Peer that isn't 
 			// currently requesting the max amount of pieces, send more piece requests. 
-			//cont.sendRequests(sortedPeers, raritySlice)
+			cont.sendRequests(sortedPeers, raritySlice)
 
 
 		case piece := <- cont.rxChannels.cancelPieceCh:
-			// PLACEHOLDER
-			log.Println(piece)
+			log.Printf("Controller : Run : Received a CancelPiece from %s for pieceNum %d", piece.peerId, piece.pieceNum)
 
 		case peerInfo := <- cont.rxChannels.newPeerCh:
-			// PLACEHOLDER
-			log.Println(peerInfo)
+			log.Printf("Controller : Run : Received a new PeerInfo with peerId of %s", peerInfo.peerId)
+
 
 			// Throw an error if the peer is duplicate (same IP/Port. should never happen)
 
@@ -288,8 +352,8 @@ func (cont *Controller) Run() {
 			// 
 
 		case piece := <- cont.rxChannels.havePieceCh:
-			// PLACEHOLDER
-			log.Println(piece)
+			log.Printf("Controller : Run : Received a HavePiece from %s for pieceNum %d with haveBool of %t", piece.peerId, piece.pieceNum, piece.haveMore)
+
 
 		case <- cont.t.Dying():
 			return
