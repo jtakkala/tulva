@@ -29,6 +29,7 @@ type PeerManager struct {
 
 type PeerInfo struct {
 	peerId string
+	isActive bool // The peer is connected and unchoked
 	availablePieces []int
 	activeRequests map[int]struct{}
 	downloadPriority []int

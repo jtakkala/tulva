@@ -55,6 +55,13 @@ func (r *RarityMap) getPiecesByRarity() []int {
 	pieces := make([]int, 0)
 
 	r.sortKeys()
+
+	// put all rarity map keys into a temporary slice (unsorted at first)
+
+	// sort the temporary slice
+
+	// iterate through the temporary slice, and concatenate the pieces for 
+	// each rarity to the result
 	for _, rarity := range r.sortedKeys {
 		pieceNums := r.data[rarity]
 		pieces = append(pieces, pieceNums...)
@@ -131,7 +138,6 @@ func (cont *Controller) Stop() error {
 	return cont.t.Wait()
 }
 
-
 func (cont *Controller) createRaritySlice() []int {
 
 	rarityMap := NewRarityMap()
@@ -158,11 +164,12 @@ func (cont *Controller) recreateDownloadPriorities(raritySlice []int) {
 	}
 }
 
-func (cont *Controller) sendRequests(sortedPeers []string) {
-	for _, peerId := range sortedPeers {
-		peerInfo := cont.peers[peerId]
+func (cont *Controller) sendRequests(peersSortedByDownloadLen []string) {
+	for _, peerId := range peersSortedByDownloadLen {
+		peer := cont.peers[peerId]
 
 		// Confirm that this peer is still connected and is available to take requests
+		if peer.isActive {
 
 		// Need to keep track of which pieces were already requested to be downloaded by
 		// this peer
@@ -172,9 +179,12 @@ func (cont *Controller) sendRequests(sortedPeers []string) {
 
 		// While the number if active requests is less than the max simultaneous for a single peer,
 		// tell the peer to send more requests
-		for peerInfo.activeRequests < maxSimultaneousDownloads && 
+		for peer.activeRequests < maxSimultaneousDownloads
+			// Track the number of pieces that are requested in this iteration of the loop. If none are
+			// requestd,
+			piecesRequestCount := 0
 
-
+		}
 	}
 }
 
@@ -200,7 +210,7 @@ func (cont *Controller) Run() {
 			cont.recreateDownloadPriorities(raritySlice)
 
 			// Create a PeerInfo slice sorted by downloadPriority length
-			sortedPeers := sortedPeerIds(peers)
+			sortedPeers := sortedPeerIds(cont.peers)
 
 			// Iterate through the just-sorted PeerInfo slice, for each Peer that isn't currently
 			// requesting the max amount of pieces, send more piece requests. 
