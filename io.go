@@ -7,7 +7,6 @@ package main
 import (
 	"bytes"
 	"crypto/sha1"
-	"fmt"
 	sysio "io"
 	"launchpad.net/tomb"
 	"log"
