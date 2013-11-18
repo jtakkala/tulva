@@ -9,16 +9,16 @@ import (
 	"crypto/sha1"
 	"fmt"
 	sysio "io"
-	"path/filepath"
 	"launchpad.net/tomb"
 	"log"
 	"os"
+	"path/filepath"
 )
 
 type IO struct {
 	metaInfo MetaInfo
-	files []*os.File
-	t tomb.Tomb
+	files    []*os.File
+	t        tomb.Tomb
 }
 
 // checkHash accepts a byte buffer and pieceIndex, computes the SHA-1 hash of
@@ -26,7 +26,7 @@ type IO struct {
 func (io *IO) checkHash(buf []byte, pieceIndex int) bool {
 	h := sha1.New()
 	h.Write(buf)
-	if bytes.Equal(h.Sum(nil), []byte(io.metaInfo.Info.Pieces[pieceIndex:pieceIndex + h.Size()])) {
+	if bytes.Equal(h.Sum(nil), []byte(io.metaInfo.Info.Pieces[pieceIndex:pieceIndex+h.Size()])) {
 		return true
 	}
 	return false
@@ -60,8 +60,8 @@ func (io *IO) Verify() (finishedPieces []bool) {
 					}
 					log.Fatal(err)
 				}
-				// We have a full buf, generate a hash and compare with
-				// corresponding pieces part of the torrent file
+				// We have a full buf, check the hash of buf and
+				// append the result to the finished pieces
 				finishedPieces = append(finishedPieces, io.checkHash(buf, pieceIndex))
 				// Reset partial read counter
 				m = 0
@@ -69,8 +69,9 @@ func (io *IO) Verify() (finishedPieces []bool) {
 				pieceIndex += 20
 			}
 		}
-		// If the final iteration resulted in a partial read, then compute a hash
-		if (m > 0) {
+		// If the final iteration resulted in a partial read, then
+		// check the hash of it and append the result
+		if m > 0 {
 			finishedPieces = append(finishedPieces, io.checkHash(buf[:m], pieceIndex))
 		}
 	} else {
@@ -86,14 +87,14 @@ func (io *IO) Verify() (finishedPieces []bool) {
 				}
 				log.Fatal(err)
 			}
-			// We have a full buf, generate a hash and compare with
-			// corresponding pieces part of the torrent file
+			// We have a full buf, check the hash of buf and
+			// append the result to the finished pieces
 			finishedPieces = append(finishedPieces, io.checkHash(buf, pieceIndex))
 			// Increment piece by the length of a SHA-1 hash (20 bytes)
 			pieceIndex += 20
 		}
 		// If the final iteration resulted in a partial read, then compute a hash
-		if (n > 0) {
+		if n > 0 {
 			finishedPieces = append(finishedPieces, io.checkHash(buf[:n], pieceIndex))
 		}
 	}
@@ -129,7 +130,7 @@ func (io *IO) Init() {
 		directory := io.metaInfo.Info.Name
 		// Create the directory if it doesn't exist
 		if _, err := os.Stat(directory); os.IsNotExist(err) {
-			err = os.Mkdir(directory, os.ModeDir | os.ModePerm)
+			err = os.Mkdir(directory, os.ModeDir|os.ModePerm)
 			checkError(err)
 		}
 		err := os.Chdir(directory)
@@ -139,7 +140,7 @@ func (io *IO) Init() {
 			if len(file.Path) > 1 {
 				directory = filepath.Join(file.Path[1:]...)
 				if _, err := os.Stat(directory); os.IsNotExist(err) {
-					err = os.MkdirAll(directory, os.ModeDir | os.ModePerm)
+					err = os.MkdirAll(directory, os.ModeDir|os.ModePerm)
 					checkError(err)
 				}
 			}
@@ -170,7 +171,7 @@ func (io *IO) Run() {
 
 	for {
 		select {
-		case <- io.t.Dying():
+		case <-io.t.Dying():
 			return
 		}
 	}
