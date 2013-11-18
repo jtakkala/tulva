@@ -32,15 +32,15 @@ type PeerInfo struct {
 	isActive bool // The peer is connected and unchoked
 	availablePieces []int
 	activeRequests map[int]struct{}
-	downloadPriority []int
+	qtyPiecesNeeded int // The quantity of pieces that this peer has that we haven't yet downloaded. 
 	requestPieceCh chan<- RequestPiece  // Other end is Peer. Used to tell the peer to request a particular piece.  
 	cancelPieceCh chan<- CancelPiece  // Other end is Peer. Used to tell the peer to cancel a particular piece. 
 }
 
-type SortedPeers []PeerNeediness
+type SortedPeers []PeerInfo
 
 func (sp *SortedPeers) Less(i, j int) bool {
-	return sp[i].numPiecesNeeded <= sp[j].numPiecesNeeded
+	return sp[i].qtyPiecesNeeded <= sp[j].qtyPiecesNeeded
 }
 
 func (sp *SortedPeers) Swap(i, j int) {
@@ -53,24 +53,14 @@ func (sp *SortedPeers) Len() int {
 	len(sp)
 }
 
-type PeerNeediness struct {
-	peerId string
-	numPiecesNeeded int
-}
-
-func sortedPeerIds(peers map[string]PeerInfo) []string {
-	sorted := make(SortedPeers, 0)
-	for peerId, peerInfo := range peers {
-		sorted = append(sorted, PeerNeediness{peerId, len(peerInfo.downloadPriority)})
+func sortedPeersByQtyPiecesNeeded(peers map[string]PeerInfo) []PeerInfo {
+	peerInfoSlice := make(SortedPeers, 0)
+	for peerId, peerInfoSlice := range peers {
+		sorted = append(sorted, peerInfoSlice)
 	}
-	sort.Sort(sorted)
+	sort.Sort(peerInfoSlice)
 
-	sortedPeerIds := make([]string, 0)
-	for _, pn := range sorted {
-		sortedPeerIds = append(sortedPeerIds, pn.peerId)
-	}
-
-	return sortedPeerIds
+	return peerInfoSlice
 }
 
 func NewPeerManager(peersCh chan PeerTuple, statsCh chan Stats) *PeerManager {
