@@ -54,11 +54,11 @@ func (sp SortedPeers) Len() int {
 	return len(sp)
 }
 
-func sortedPeersByQtyPiecesNeeded(peers map[string]PeerInfo) []PeerInfo {
+func sortedPeersByQtyPiecesNeeded(peers map[string]PeerInfo) SortedPeers {
 	peerInfoSlice := make(SortedPeers, 0)
-	sorted := make([]PeerInfo, 0)
-	for _, peerInfoSlice := range peers {
-		sorted = append(sorted, peerInfoSlice)
+	
+	for _, peerInfo := range peers {
+		peerInfoSlice = append(peerInfoSlice, peerInfo)
 	}
 	sort.Sort(peerInfoSlice)
 
