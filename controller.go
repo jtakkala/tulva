@@ -11,38 +11,15 @@ import (
 
 type RarityMap struct {
 	data map[int][]int
-	sortedKeys []int
 }
 
 func NewRarityMap() *RarityMap {
 	r := new(RarityMap)
 	r.data = make(map[int][]int)
-	r.sortedKeys = make([]int, 0)
 	return r
 }
 
-func (r *RarityMap) Len() int {
-	return len(sortedKeys)
-}
-
-func (r *RarityMap) Less(i, j int) bool {
-	return sortedKeys[i] <= sortedKeys[i]
-} 
-
-func (r *RarityMap) Swap(i, j int) {
-	tmp := sortedKeys[i]
-	sortedKeys[i] = sortedKeys[j]
-	sortedKeys[j] = tmp
-}
-
-func (r *RarityMap) sortKeys() {
-	r.sortedKeys = make([]int, 0)
-	for key, _ := range r.data {
-		r.sortedKeys = append(r.sortedKeys, key)
-	}
-	sort.Sort(r)
-}
-
+// Add a new rarity -> pieceNum mapping. 
 func (r *RarityMap) put(rarity int, pieceNum int) {
 	if _, ok := r.data[rarity]; !ok {
 		r.data[rarity] = make([]int)
@@ -51,26 +28,28 @@ func (r *RarityMap) put(rarity int, pieceNum int) {
 	r.data[rarity] = append(r.data[rarity], pieceNum)
 }
 
+// Flatten out the map into a slice that's sorted by rarity. 
 func (r *RarityMap) getPiecesByRarity() []int {
 	pieces := make([]int, 0)
 
-	r.sortKeys()
+	// put all rarity map keys into a temporary unsorted slice
+	keys := make([]int, 0)
+	for rarity, _ := range r.data {
+		keys = append(keys, rarity)
+	}
 
-	// put all rarity map keys into a temporary slice (unsorted at first)
+	// sort the slice of keys (rarity) in ascending order
+	Sort.Ints(keys)
 
-	// sort the temporary slice
-
-	// iterate through the temporary slice, and concatenate the pieces for 
-	// each rarity to the result
-	for _, rarity := range r.sortedKeys {
+	// Get the map value for each key (starting with the lowest) and 
+	// concatenate that slice of pieces (for that rarity) to the result
+	for _, rarity := range keys {
 		pieceNums := r.data[rarity]
 		pieces = append(pieces, pieceNums...)
 	}
 
 	return pieces
 }
-
-
 
 type Controller struct {
 	finishedPieces []bool
@@ -139,7 +118,6 @@ func (cont *Controller) Stop() error {
 }
 
 func (cont *Controller) createRaritySlice() []int {
-
 	rarityMap := NewRarityMap()
 
 	for pieceNum, total := range cont.peerPieceTotals {
@@ -150,6 +128,10 @@ func (cont *Controller) createRaritySlice() []int {
 		rarityMap.put(total, pieceNum)
 	}
 	return rarityMap.getPiecesByRarity()
+}
+
+func (cont *Controller) updateQuantityNeededForAllPeers() {
+	for 
 }
 
 func (cont *Controller) recreateDownloadPriorities(raritySlice []int) {
@@ -179,7 +161,7 @@ func (cont *Controller) sendRequests(peersSortedByDownloadLen []string) {
 
 		// While the number if active requests is less than the max simultaneous for a single peer,
 		// tell the peer to send more requests
-		for peer.activeRequests < maxSimultaneousDownloads
+		for peer.activeRequests < maxSimultaneousDownloadsPerPeer
 			// Track the number of pieces that are requested in this iteration of the loop. If none are
 			// requestd,
 			piecesRequestCount := 0
@@ -189,7 +171,7 @@ func (cont *Controller) sendRequests(peersSortedByDownloadLen []string) {
 }
 
 const (
-	maxSimultaneousDownloads = 5
+	maxSimultaneousDownloadsPerPeer = 3
 )
 
 func (cont *Controller) Run() {
@@ -206,14 +188,17 @@ func (cont *Controller) Run() {
 			// Create a slice of pieces sorted by rarity
 			raritySlice := cont.createRaritySlice()
 
-			// Recreate all download priority slices within each PeerInfo struct
-			cont.recreateDownloadPriorities(raritySlice)
+			// Given the updated finishedPieces slice, update the quantity of pieces
+			// that are needed from each peer. This step is required to later sort 
+			// peerInfo slices by the quantity of needed pieces. 
+			cont.updateQuantityNeededForAllPeers()
 
-			// Create a PeerInfo slice sorted by downloadPriority length
+			// Create a PeerId slice sorted by qtyPiecesNeeded
 			sortedPeers := sortedPeerIds(cont.peers)
 
-			// Iterate through the just-sorted PeerInfo slice, for each Peer that isn't currently
-			// requesting the max amount of pieces, send more piece requests. 
+			// Iterate through the peerIds sorted by qtyPiecesNeeded,
+			// for each Peer that isn't currently requesting the max amount 
+			// of pieces, send more piece requests. 
 			cont.sendRequests(sortedPeers)
 
 
