@@ -21,16 +21,20 @@ type IO struct {
 	t tomb.Tomb
 }
 
-func (io *IO) checkHash(buf []byte, pieceIndex int) {
+// checkHash accepts a byte buffer and pieceIndex, computes the SHA-1 hash of
+// the buffer and returns true or false if it's correct.
+func (io *IO) checkHash(buf []byte, pieceIndex int) bool {
 	h := sha1.New()
 	h.Write(buf)
 	if bytes.Equal(h.Sum(nil), []byte(io.metaInfo.Info.Pieces[pieceIndex:pieceIndex + h.Size()])) {
-		fmt.Printf("SHA1 match: %x\n", h.Sum(nil))
+		return true
 	}
+	return false
 }
 
-// Reads in files and verifies them, returns a map of pieces we already have
-func (io *IO) Verify() {
+// Verify reads in each file and verifies the SHA-1 checksum of each piece.
+// Return the boolean list pieces that are correct.
+func (io *IO) Verify() (finishedPieces []bool) {
 	log.Println("IO : Verify : Started")
 	defer log.Println("IO : Verify : Completed")
 
@@ -58,7 +62,7 @@ func (io *IO) Verify() {
 				}
 				// We have a full buf, generate a hash and compare with
 				// corresponding pieces part of the torrent file
-				io.checkHash(buf, pieceIndex)
+				finishedPieces = append(finishedPieces, io.checkHash(buf, pieceIndex))
 				// Reset partial read counter
 				m = 0
 				// Increment piece by the length of a SHA-1 hash (20 bytes)
@@ -67,7 +71,7 @@ func (io *IO) Verify() {
 		}
 		// If the final iteration resulted in a partial read, then compute a hash
 		if (m > 0) {
-			io.checkHash(buf[:m], pieceIndex)
+			finishedPieces = append(finishedPieces, io.checkHash(buf[:m], pieceIndex))
 		}
 	} else {
 		// Single File Mode
@@ -84,15 +88,17 @@ func (io *IO) Verify() {
 			}
 			// We have a full buf, generate a hash and compare with
 			// corresponding pieces part of the torrent file
-			io.checkHash(buf, pieceIndex)
+			finishedPieces = append(finishedPieces, io.checkHash(buf, pieceIndex))
 			// Increment piece by the length of a SHA-1 hash (20 bytes)
 			pieceIndex += 20
 		}
 		// If the final iteration resulted in a partial read, then compute a hash
 		if (n > 0) {
-			io.checkHash(buf[:n], pieceIndex)
+			finishedPieces = append(finishedPieces, io.checkHash(buf[:n], pieceIndex))
 		}
 	}
+
+	return finishedPieces
 }
 
 func checkError(err error) {
@@ -159,7 +165,8 @@ func (io *IO) Run() {
 	defer log.Println("IO : Run : Completed")
 
 	io.Init()
-	io.Verify()
+	finishedPieces := io.Verify()
+	fmt.Println(finishedPieces)
 
 	for {
 		select {
