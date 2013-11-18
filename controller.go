@@ -131,7 +131,16 @@ func (cont *Controller) createRaritySlice() []int {
 }
 
 func (cont *Controller) updateQuantityNeededForAllPeers() {
-	for 
+	for _, peerInfo := range cont.peers {
+		qtyPiecesNeeded := 0
+		for pieceNum, pieceFinished := range cont.finishedPieces {
+			if !pieceFinished && peerInfo.availablePieces[pieceNum] {
+				qtyPiecesNeeded++
+			}
+		}
+		// Overwrite the old value with the new value just computed
+		peerInfo.qtyPiecesNeeded = qtyPiecesNeeded
+	}
 }
 
 func (cont *Controller) recreateDownloadPriorities(raritySlice []int) {
