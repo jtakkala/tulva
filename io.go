@@ -7,6 +7,7 @@ package main
 import (
 	"bytes"
 	"crypto/sha1"
+	"fmt"
 	sysio "io"
 	"launchpad.net/tomb"
 	"log"
@@ -41,6 +42,7 @@ func (io *IO) Verify() (finishedPieces []bool) {
 	var pieceIndex, n int
 	var err error
 
+	fmt.Printf("Verifying downloaded files")
 	if len(io.metaInfo.Info.Files) > 0 {
 		// Multiple File Mode
 		var m int
@@ -49,6 +51,7 @@ func (io *IO) Verify() (finishedPieces []bool) {
 			for offset := int64(0); ; offset += int64(n) {
 				// Read from file at offset, up to buf size or
 				// less if last read was incomplete due to EOF
+				fmt.Printf(".")
 				n, err = io.files[i].ReadAt(buf[m:], offset)
 				if err != nil {
 					if err == sysio.EOF {
@@ -77,6 +80,7 @@ func (io *IO) Verify() (finishedPieces []bool) {
 		for offset := int64(0); ; offset += int64(n) {
 			// Read from file at offset, up to buf size or
 			// less if last read was incomplete due to EOF
+			fmt.Printf(".")
 			n, err = io.files[0].ReadAt(buf, offset)
 			if err != nil {
 				if err == sysio.EOF {
@@ -96,6 +100,7 @@ func (io *IO) Verify() (finishedPieces []bool) {
 			finishedPieces = append(finishedPieces, io.checkHash(buf[:n], pieceIndex))
 		}
 	}
+	fmt.Println()
 
 	return finishedPieces
 }
@@ -165,6 +170,7 @@ func (io *IO) Run() {
 
 	io.Init()
 	finishedPieces := io.Verify()
+	fmt.Println(finishedPieces)
 
 	for {
 		select {
