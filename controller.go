@@ -190,19 +190,6 @@ func (cont *Controller) updateQuantityNeededForAllPeers() {
 	}
 }
 
-/*
-func (cont *Controller) recreateDownloadPriorities(raritySlice []int) {
-	for _, peerInfo := range cont.peers {
-		downloadPriority := make([]int, 0)
-		for _, pieceNum := range raritySlice {
-			if peerInfo.availablePieces[pieceNum] == 1 {
-				downloadPriority = append(downloadPriority, pieceNum)
-			}
-		}
-		peerInfo.downloadPriority = downloadPriority
-	}
-}*/
-
 type PiecePriority struct {
 	pieceNum int
 	activeRequestsTotal int
@@ -250,16 +237,21 @@ func (pps PiecePrioritySlice) toSortedPieceSlice() []int {
 func (cont *Controller) createDownloadPriorityForPeer(peerInfo PeerInfo, raritySlice []int) []int {
 	// Create an unsorted PiecePrioritySlice object for each available piece on this peer that we need. 
 	piecePrioritySlice := make(PiecePrioritySlice, 0)
+
 	for rarityIndex, pieceNum := range raritySlice {
 		if peerInfo.availablePieces[pieceNum] == 1 {
-			// The peer has this piece available AND we also need this piece, because the raritySlice
-			// only contains pieces that we need.
-			pp := new(PiecePriority)
-			pp.pieceNum = pieceNum
-			pp.activeRequestsTotal = cont.activeRequestsTotals[pieceNum]
-			pp.rarityIndex = rarityIndex
+			if _, ok := peerInfo.activeRequests[pieceNum]; !ok {				
+				// 1) The peer has this piece available
+				// 2) We need this piece, because it's in the raritySlice
+				// 3) The peer is not already working on this piece (not in activeRequests)
 
-			piecePrioritySlice = append(piecePrioritySlice, *pp)
+				pp := new(PiecePriority)
+				pp.pieceNum = pieceNum
+				pp.activeRequestsTotal = cont.activeRequestsTotals[pieceNum]
+				pp.rarityIndex = rarityIndex
+
+				piecePrioritySlice = append(piecePrioritySlice, *pp)
+			}
 		}
 	}
 
@@ -271,33 +263,38 @@ func (cont *Controller) createDownloadPriorityForPeer(peerInfo PeerInfo, rarityS
 
 func (cont *Controller) sendRequests(peersSortedByDownloadLen SortedPeers, raritySlice []int) {
 
-
-
-	/*
 	for _, peerInfo := range peersSortedByDownloadLen {
 
 		// Confirm that this peer is still connected and is available to take requests
 		// and also that the peer needs more requests
-		if peerInfo.isActive && peerInfo.activeRequests < maxSimultaneousDownloadsPerPeer {
+		if peerInfo.isActive && len(peerInfo.activeRequests) < maxSimultaneousDownloadsPerPeer {
 
-			// 
+			// Create the slice of pieces that this peer should work on next. It will not 
+			// include pieces that have already been written to disk, or pieces that the 
+			// peer is already working on. 
+			downloadPriority := cont.createDownloadPriorityForPeer(peerInfo, raritySlice)
 
-		// Need to keep track of which pieces were already requested to be downloaded by
-		// this peer
+			for _, pieceNum := range downloadPriority {
+				if len(peerInfo.activeRequests) < maxSimultaneousDownloadsPerPeer {
+					// We've sent enough requests
+					break
+				}
 
-		// Need to loop through pieces that haven't been asked of anyone else first, 
-		// then loop through pieces that have been asked of 1 person, etc. 
+				// Create a new RequestPiece message and send it to the peer
+				requestMessage := new(RequestPiece)
+				requestMessage.pieceNum = pieceNum
+				requestMessage.expectedHash = cont.pieceHashes[pieceNum]
+				go func() { peerInfo.requestPieceCh <- *requestMessage }()
 
-		// While the number if active requests is less than the max simultaneous for a single peer,
-		// tell the peer to send more requests
-			for peerInfo.activeRequests < maxSimultaneousDownloadsPerPeer
-				// Track the number of pieces that are requested in this iteration of the loop. If none are
-				// requestd,
-				piecesRequestCount := 0
+				// Add this pieceNum to the set of pieces that this peer is working on
+				peerInfo.activeRequests[pieceNum] = struct{}{}
 
+				// Increment the number of peers that are working on this piece. 
+				cont.activeRequestsTotals[pieceNum]++
+
+			}
 		}
 	}
-	*/
 }
 
 const (

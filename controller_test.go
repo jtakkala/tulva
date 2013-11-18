@@ -89,7 +89,6 @@ func TestPiecePrioritySliceSortingThree(t *testing.T) {
 	assertOrder(t, sorted, 6, 5)
 	assertOrder(t, sorted, 7, 2)
 
-
 }
 
 
