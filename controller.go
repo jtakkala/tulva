@@ -233,8 +233,12 @@ func (pps PiecePrioritySlice) Len() int {
 }
 
 // Convert the PiecePrioritySlice to a simple slice of integers (pieces) sorted by priority
-func (pps PiecePrioritySlice) toPieceSlice() []int {
+func (pps PiecePrioritySlice) toSortedPieceSlice() []int {
+
 	pieceSlice := make([]int, 0)
+
+	// Sort the PiecePrioritySlice before iterating over it. 
+	sort.Sort(pps)
 	
 	for _, pp := range pps {
 		pieceSlice = append(pieceSlice, pp.pieceNum)
@@ -259,9 +263,7 @@ func (cont *Controller) createDownloadPriorityForPeer(peerInfo PeerInfo, rarityS
 		}
 	}
 
-	sort.Sort(piecePrioritySlice)
-
-	return piecePrioritySlice.toPieceSlice()
+	return piecePrioritySlice.toSortedPieceSlice()
 }
 
 
