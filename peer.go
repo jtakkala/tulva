@@ -83,6 +83,8 @@ func NewPeerInfo(quantityOfPieces int) *PeerInfo {
 	pi := new(PeerInfo)
 	pi.availablePieces = make([]int, quantityOfPieces)
 	pi.activeRequests = make(map[int]struct{})
+
+	// FIXME Not finished. Need to hook these channels into the Peer struct
 	pi.requestPieceCh = make(chan<- RequestPiece)
 	pi.cancelPieceCh = make(chan<- CancelPiece)
 	return pi

@@ -71,10 +71,7 @@ type Controller struct {
 	activeRequestsTotals []int 
 	peerPieceTotals []int
 	peers map[string]PeerInfo
-	receivedPieceCh <-chan ReceivedPiece  // Other end is IO 
-	newPeerCh <-chan PeerInfo  // Other end is the PeerManager
-	cancelPieceCh <-chan CancelPiece  // Other end is Peer. Used when the peer is unable to retrieve a piece
-	havePieceCh <-chan HavePiece // Other end is Peer. used When the peer receives a HAVE message
+	channels ControllerRxChannels 
 	t tomb.Tomb
 }
 
@@ -106,14 +103,23 @@ type ReceivedPiece struct {
 	peer string
 }
 
-func NewController(finishedPieces []int, pieceHashes []string) *Controller {
+type ControllerRxChannels struct {
+	receivedPieceCh <-chan ReceivedPiece // Other end is IO 
+	newPeerCh <-chan PeerInfo  // Other end is the PeerManager
+	cancelPieceCh <-chan CancelPiece  // Other end is Peer. Used when the peer is unable to retrieve a piece
+	havePieceCh <-chan HavePiece  // Other end is Peer. used When the peer receives a HAVE message
+}
+
+func NewController(finishedPieces []bool, 
+					pieceHashes []string, 
+					receivedPieceCh chan ReceivedPiece) *Controller {
 	cont := new(Controller)
 	cont.finishedPieces = finishedPieces
 	cont.pieceHashes = pieceHashes
-	cont.receivedPieceCh = make(chan ReceivedPiece)
+	cont.receivedPieceCh = receivedPieceCh
 	cont.newPeerCh = make(chan string)
-	cont.cancelPieceCh = make(CancelPiece)
-	cont.havePieceCh = make(HavePiece)
+	cont.cancelPieceCh = make(chan CancelPiece)
+	cont.havePieceCh = make(chan HavePiece)
 	cont.peers = make(map[string]PeerInfo)
 	cont.activeRequestsTotals = make([]int, len(finishedPieces))
 	return cont
@@ -137,7 +143,6 @@ func (cont *Controller) createRaritySlice() []int {
 
 		rarityMap.put(total, pieceNum)
 	}
-
 	return rarityMap.getPiecesByRarity()
 }
 
@@ -153,10 +158,23 @@ func (cont *Controller) recreateDownloadPriorities(raritySlice []int) {
 	}
 }
 
-func (cont *Controller) sendRequests(sortedPeerIds []string) {
-	for _, peerId := range sortedPeerIds {
-		peerInfo := peers[peerId]
+func (cont *Controller) sendRequests(sortedPeers []string) {
+	for _, peerId := range sortedPeers {
+		peerInfo := cont.peers[peerId]
+
+		// Confirm that this peer is still connected and is available to take requests
+
+		// Need to keep track of which pieces were already requested to be downloaded by
+		// this peer
+
+		// Need to loop through pieces that haven't been asked of anyone else first, 
+		// then loop through pieces that have been asked of 1 person, etc. 
+
+		// While the number if active requests is less than the max simultaneous for a single peer,
+		// tell the peer to send more requests
 		for peerInfo.activeRequests < maxSimultaneousDownloads && 
+
+
 	}
 }
 
@@ -166,7 +184,7 @@ const (
 
 func (cont *Controller) Run() {
 	log.Println("Controller : Run : Started")
-	defer pm.t.Done()
+	defer cont.t.Done()
 	defer log.Println("Controller : Run : Completed")
 
 	for {
@@ -175,23 +193,23 @@ func (cont *Controller) Run() {
 			// Update our bitfield to show that we now have that piece
 			cont.finishedPieces[piece.index] = true
 
-			// Create a slice of piece sorted by rarity
+			// Create a slice of pieces sorted by rarity
 			raritySlice := cont.createRaritySlice()
 
-			// Recreate all download priority slices for each PeerInfo struct
+			// Recreate all download priority slices within each PeerInfo struct
 			cont.recreateDownloadPriorities(raritySlice)
 
-			// Create a PeerInfo slice, then sort it by downloadPriority length
-			sortedPeerIds := sortedPeerIds(peers)
+			// Create a PeerInfo slice sorted by downloadPriority length
+			sortedPeers := sortedPeerIds(peers)
 
-			// Iterate through PeerInfo slice, for each Peer that isn't requesting
-			// the max amount, send more requests. 
-			sendRequests(sortedPeerIds)
+			// Iterate through the just-sorted PeerInfo slice, for each Peer that isn't currently
+			// requesting the max amount of pieces, send more piece requests. 
+			cont.sendRequests(sortedPeers)
 
 
 		case piece := <- cont.cancelPieceCh:
 
-		case peer := <- cont.newPeerCh:
+		case peerInfo := <- cont.newPeerCh:
 			// Throw an error if the peer is duplicate (same IP/Port. should never happen)
 
 			// Create a new PeerInfo struct 
