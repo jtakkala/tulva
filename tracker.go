@@ -30,6 +30,7 @@ type TrackerManager struct {
 	completedCh chan bool
 	statsCh     chan Stats
 	peersCh     chan PeerTuple
+	port        uint16
 	t           tomb.Tomb
 }
 
@@ -55,6 +56,7 @@ type Tracker struct {
 	timerCh     <-chan time.Time
 	stats       Stats
 	key         string
+	port        uint16
 	infoHash    []byte
 	t           tomb.Tomb
 }
@@ -77,15 +79,12 @@ func (tr *Tracker) Announce(event int) {
 		return
 	}
 
-	// FIXME: Set our real listening port
-	port := 6881
-
 	// Build and encode the Tracker Request
 	urlParams := url.Values{}
 	urlParams.Set("info_hash", string(tr.infoHash))
 	urlParams.Set("peer_id", string(PeerId[:]))
 	urlParams.Set("key", tr.key)
-	urlParams.Set("port", strconv.Itoa(port))
+	urlParams.Set("port", strconv.FormatUint(uint64(tr.port), 10))
 	urlParams.Set("uploaded", strconv.Itoa(tr.stats.Uploaded))
 	urlParams.Set("downloaded", strconv.Itoa(tr.stats.Downloaded))
 	urlParams.Set("left", strconv.Itoa(tr.stats.Left))
@@ -166,11 +165,12 @@ func (tr *Tracker) Run() {
 	}
 }
 
-func NewTrackerManager() *TrackerManager {
+func NewTrackerManager(port uint16) *TrackerManager {
 	tm := new(TrackerManager)
 	tm.peersCh = make(chan PeerTuple)
 	tm.completedCh = make(chan bool)
 	tm.statsCh = make(chan Stats)
+	tm.port = port
 	return tm
 }
 
@@ -201,6 +201,7 @@ func (trm *TrackerManager) Run(m MetaInfo, infoHash []byte) {
 	tr.statsCh = trm.statsCh
 	tr.peersCh = trm.peersCh
 	tr.completedCh = trm.completedCh
+	tr.port = trm.port
 	tr.infoHash = make([]byte, len(infoHash))
 	copy(tr.infoHash, infoHash)
 	tr.announceUrl, _ = url.Parse(m.Announce)
