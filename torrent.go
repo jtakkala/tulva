@@ -12,14 +12,14 @@ import (
 type Torrent struct {
 	metaInfo MetaInfo
 	infoHash []byte
-	peer chan PeerTuple
-	Stats Stats
-	t tomb.Tomb
+	peer     chan PeerTuple
+	Stats    Stats
+	t        tomb.Tomb
 }
 
 type Stats struct {
-	Left int
-	Uploaded int
+	Left       int
+	Uploaded   int
 	Downloaded int
 }
 
@@ -32,7 +32,7 @@ type MetaInfo struct {
 		Name        string
 		Length      int
 		Md5sum      string
-		Files []struct {
+		Files       []struct {
 			Length int
 			Md5sum string
 			Path   []string
@@ -50,7 +50,7 @@ type MetaInfo struct {
 func (t *Torrent) Init() {
 	// Initialize bytes left to download
 	if len(t.metaInfo.Info.Files) > 0 {
-		for _, file := range(t.metaInfo.Info.Files) {
+		for _, file := range t.metaInfo.Info.Files {
 			t.Stats.Left += file.Length
 		}
 	} else {
@@ -59,6 +59,7 @@ func (t *Torrent) Init() {
 	// TODO: Read in the file and adjust bytes left
 }
 
+// Stop stops this Torrent session
 func (t *Torrent) Stop() error {
 	log.Println("Torrent : Stop : Stopping")
 	t.t.Kill(nil)
@@ -77,17 +78,16 @@ func (t *Torrent) Run() {
 	go io.Run()
 
 	trackerManager := NewTrackerManager()
-	go trackerManager.Run(t.metaInfo, t.infoHash)
+	//go trackerManager.Run(t.metaInfo, t.infoHash)
 
 	peerManager := NewPeerManager(trackerManager.peersCh, trackerManager.statsCh)
 	go peerManager.Run()
 
 	for {
 		select {
-		case <- t.t.Dying():
+		case <-t.t.Dying():
 			trackerManager.Stop()
 			return
 		}
 	}
 }
-

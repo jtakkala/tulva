@@ -7,7 +7,7 @@ package main
 import (
 	"code.google.com/p/bencode-go"
 	"encoding/hex"
-//	"fmt"
+	//"fmt"
 	"launchpad.net/tomb"
 	"log"
 	"math/rand"
@@ -28,9 +28,9 @@ const (
 
 type TrackerManager struct {
 	completedCh chan bool
-	statsCh chan Stats
-	peersCh chan PeerTuple
-	t tomb.Tomb
+	statsCh     chan Stats
+	peersCh     chan PeerTuple
+	t           tomb.Tomb
 }
 
 type TrackerResponse struct {
@@ -43,20 +43,20 @@ type TrackerResponse struct {
 	Incomplete     int
 	Peers          string "peers"
 	//TODO: Figure out how to handle dict of peers
-//	Peers          []Peers "peers"
+	//	Peers          []Peers "peers"
 }
 
 type Tracker struct {
 	announceUrl *url.URL
-	response TrackerResponse
+	response    TrackerResponse
 	completedCh <-chan bool
-	statsCh <-chan Stats
-	peersCh chan<- PeerTuple
-	timerCh <-chan time.Time
-	stats Stats
-	key string
-	infoHash []byte
-	t tomb.Tomb
+	statsCh     <-chan Stats
+	peersCh     chan<- PeerTuple
+	timerCh     <-chan time.Time
+	stats       Stats
+	key         string
+	infoHash    []byte
+	t           tomb.Tomb
 }
 
 func initKey() (key []byte) {
@@ -72,7 +72,7 @@ func (tr *Tracker) Announce(event int) {
 	log.Println("Tracker : Announce : Started")
 	defer log.Println("Tracker : Announce : Completed")
 
-	if (tr.infoHash == nil) {
+	if tr.infoHash == nil {
 		log.Println("Tracker : Announce : Error: infoHash undefined")
 		return
 	}
@@ -90,7 +90,7 @@ func (tr *Tracker) Announce(event int) {
 	urlParams.Set("downloaded", strconv.Itoa(tr.stats.Downloaded))
 	urlParams.Set("left", strconv.Itoa(tr.stats.Left))
 	urlParams.Set("compact", "1")
-	switch (event) {
+	switch event {
 	case Started:
 		urlParams.Set("event", "started")
 	case Stopped:
@@ -117,8 +117,8 @@ func (tr *Tracker) Announce(event int) {
 	}
 
 	// Schedule a timer to poll this announce URL every interval
-	if (tr.response.Interval != 0 && event != Stopped) {
-		nextAnnounce :=  time.Second * time.Duration(tr.response.Interval)
+	if tr.response.Interval != 0 && event != Stopped {
+		nextAnnounce := time.Second * time.Duration(tr.response.Interval)
 		log.Printf("Tracker : Announce : Scheduling next announce in %v\n", nextAnnounce)
 		tr.timerCh = time.After(nextAnnounce)
 	}
@@ -131,7 +131,7 @@ func (tr *Tracker) Announce(event int) {
 			peerPort := uint16(tr.response.Peers[i+4]) << 8
 			peerPort = peerPort | uint16(tr.response.Peers[i+5])
 			// Send the peer IP+port to the Torrent Manager
-			tr.peersCh <- PeerTuple { peerIP, peerPort }
+			tr.peersCh <- PeerTuple{peerIP, peerPort}
 		}
 	}
 }
@@ -153,14 +153,14 @@ func (tr *Tracker) Run() {
 
 	for {
 		select {
-		case <- tr.t.Dying():
+		case <-tr.t.Dying():
 			return
-		case <- tr.completedCh:
+		case <-tr.completedCh:
 			go tr.Announce(Completed)
-		case <- tr.timerCh:
+		case <-tr.timerCh:
 			log.Printf("Tracker : Run : Interval Timer Expired (%s)\n", tr.announceUrl)
 			go tr.Announce(Interval)
-		case stats := <- tr.statsCh:
+		case stats := <-tr.statsCh:
 			log.Println("read from stats", stats)
 		}
 	}
@@ -188,12 +188,12 @@ func (trm *TrackerManager) Run(m MetaInfo, infoHash []byte) {
 
 	// TODO: Handle multiple announce URL's
 	/*
-	for announceUrl := m.AnnounceList {
-		tr := new(Tracker)
-		tr.metaInfo = m
-		tr.announceUrl = announceUrl
-		tr.Run()
-	}
+		for announceUrl := m.AnnounceList {
+			tr := new(Tracker)
+			tr.metaInfo = m
+			tr.announceUrl = announceUrl
+			tr.Run()
+		}
 	*/
 
 	tr := new(Tracker)
@@ -208,7 +208,7 @@ func (trm *TrackerManager) Run(m MetaInfo, infoHash []byte) {
 
 	for {
 		select {
-		case <- trm.t.Dying():
+		case <-trm.t.Dying():
 			tr.Stop()
 			return
 		}
