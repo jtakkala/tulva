@@ -155,12 +155,14 @@ func (cont *Controller) recreateDownloadPriorities(raritySlice []int) {
 	}
 }
 
-func (cont *Controller) sendRequests(peersSortedByDownloadLen []string) {
-	for _, peerId := range peersSortedByDownloadLen {
-		peer := cont.peers[peerId]
+func (cont *Controller) sendRequests(peersSortedByDownloadLen []peerInfo) {
+	for _, peerInfo := range peersSortedByDownloadLen {
 
 		// Confirm that this peer is still connected and is available to take requests
-		if peer.isActive {
+		// and also that the peer needs more requests
+		if peerInfo.isActive && peerInfo.activeRequests < maxSimultaneousDownloadsPerPeer {
+
+			// 
 
 		// Need to keep track of which pieces were already requested to be downloaded by
 		// this peer
@@ -170,10 +172,10 @@ func (cont *Controller) sendRequests(peersSortedByDownloadLen []string) {
 
 		// While the number if active requests is less than the max simultaneous for a single peer,
 		// tell the peer to send more requests
-		for peer.activeRequests < maxSimultaneousDownloadsPerPeer
-			// Track the number of pieces that are requested in this iteration of the loop. If none are
-			// requestd,
-			piecesRequestCount := 0
+			for peerInfo.activeRequests < maxSimultaneousDownloadsPerPeer
+				// Track the number of pieces that are requested in this iteration of the loop. If none are
+				// requestd,
+				piecesRequestCount := 0
 
 		}
 	}
@@ -194,6 +196,12 @@ func (cont *Controller) Run() {
 			// Update our bitfield to show that we now have that piece
 			cont.finishedPieces[piece.index] = true
 
+			// TODO Decrement activeRequestsTotals for this piece by one if it's
+			// in the activeRequests set for this peer. If it's not in the peer's
+			// activeRequests set, then there was probably a 'race' with multiple
+			// peers finishing the same piece at the same time. 
+			
+
 			// Create a slice of pieces sorted by rarity
 			raritySlice := cont.createRaritySlice()
 
@@ -202,12 +210,11 @@ func (cont *Controller) Run() {
 			// peerInfo slices by the quantity of needed pieces. 
 			cont.updateQuantityNeededForAllPeers()
 
-			// Create a PeerId slice sorted by qtyPiecesNeeded
-			sortedPeers := sortedPeerIds(cont.peers)
+			// Create a PeerInfo slice sorted by qtyPiecesNeeded
+			sortedPeers := sortedPeersByQtyPiecesNeeded(cont.peers)
 
-			// Iterate through the peerIds sorted by qtyPiecesNeeded,
-			// for each Peer that isn't currently requesting the max amount 
-			// of pieces, send more piece requests. 
+			// Iterate through the sorted peerInfo slice. For each Peer that isn't 
+			// currently requesting the max amount of pieces, send more piece requests. 
 			cont.sendRequests(sortedPeers)
 
 
