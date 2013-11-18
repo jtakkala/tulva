@@ -73,6 +73,9 @@ func (t *Torrent) Run() {
 	defer log.Println("Torrent : Run : Completed")
 	t.Init()
 
+	sv := NewServer()
+	go sv.Run()
+
 	io := new(IO)
 	io.metaInfo = t.metaInfo
 	go io.Run()
