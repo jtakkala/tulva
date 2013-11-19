@@ -148,7 +148,7 @@ func (cont *Controller) sendHaveToPeersWhoNeedPiece(pieceNum int) {
 				innerChan <- *haveMessage
 
 				// Close the inner channel indicating to the other side that there are no more pieces 
-				Close(innerChan) 
+				close(innerChan) 
 			}()
 
 		}
@@ -345,7 +345,7 @@ func (cont *Controller) sendOurBitfieldToPeer(peerInfo PeerInfo) {
 
 	// Create a copy of finishedPieces, as it will be used in a separate goroutine while 
 	// the original finishedPieces slice could be changing.
-	finishedPiecesCopy := make([]int, len(finishedPieces))
+	finishedPiecesCopy := make([]bool, len(cont.finishedPieces))
 	copy(finishedPiecesCopy, cont.finishedPieces) 
 	
 	// Send all pieces to the peer (one at a time) using individual HAVE messages over an
@@ -361,14 +361,14 @@ func (cont *Controller) sendOurBitfieldToPeer(peerInfo PeerInfo) {
 			if havePiece {
 				// We finished this piece. Send it as a HAVE message to the peer. 
 				haveMessage := new(HavePiece)
-				havePiece.pieceNum = pieceNum
-				
-				innerChan <- haveMessage
+				haveMessage.pieceNum = pieceNum
+
+				innerChan <- *haveMessage
 			}
 		}
 
 		// Indicate to the other side that we're finished sending by closing the channel. 
-		Close(innerChan)
+		close(innerChan)
 	}()
 }
 
@@ -447,7 +447,7 @@ func (cont *Controller) Run() {
 			// its entire bitfield. (Would it be the PeerManager's job to tell it that, or controller's job?)
 
 		case piece := <- cont.rxChannels.havePieceCh:
-			log.Printf("Controller : Run : Received a HavePiece from %s for pieceNum %d with haveBool of %t", piece.peerId, piece.pieceNum, piece.haveMore)
+			log.Printf("Controller : Run : Received a HavePiece from %s for pieceNum %d", piece.peerId, piece.pieceNum)
 			
 			// Update the peers availability slice. 
 			peerInfo, exists := cont.peers[piece.peerId]; 
@@ -462,7 +462,7 @@ func (cont *Controller) Run() {
 			// Mark this peer as having this piece
 			peerInfo.availablePieces[piece.pieceNum] = true
 
-			if !peerInfo.isChoked && !piece.haveMore {
+			if !peerInfo.isChoked {
 
 				// Create a slice of pieces sorted by rarity
 				raritySlice := cont.createRaritySlice()
