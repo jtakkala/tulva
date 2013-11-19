@@ -130,7 +130,7 @@ func (tr *Tracker) Announce(event int) {
 			peerPort := uint16(tr.response.Peers[i+4]) << 8
 			peerPort = peerPort | uint16(tr.response.Peers[i+5])
 			// Send the peer IP+port to the Torrent Manager
-			tr.peersCh <- PeerTuple{peerIP, peerPort}
+			go func() { tr.peersCh <- PeerTuple{peerIP, peerPort} }()
 		}
 	}
 }
