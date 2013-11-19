@@ -36,6 +36,7 @@ type PeerInfo struct {
 	qtyPiecesNeeded int                 // The quantity of pieces that this peer has that we haven't yet downloaded.
 	requestPieceCh  chan<- RequestPiece // Other end is Peer. Used to tell the peer to request a particular piece.
 	cancelPieceCh   chan<- CancelPiece  // Other end is Peer. Used to tell the peer to cancel a particular piece.
+	havePieceCh		chan<- HavePiece 	// Other end is Peer. Used to tell the peer that we have a new piece. 
 }
 
 type SortedPeers []PeerInfo

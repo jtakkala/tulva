@@ -60,7 +60,6 @@ type Controller struct {
 	finishedPieces []bool
 	pieceHashes []string
 	activeRequestsTotals []int 
-	peerPieceTotals []int
 	peers map[string]PeerInfo
 	rxChannels *ControllerRxChannels 
 	t tomb.Tomb
@@ -126,6 +125,27 @@ func (cont *Controller) Stop() error {
 	return cont.t.Wait()
 }
 
+func (cont *Controller) sendHaveToPeersWhoNeedPiece(pieceNum int) {
+	for _, peerInfo := range cont.peers {
+		if !peerInfo.availablePieces[pieceNum] {
+
+			// This peer doesn't have the piece that we just finished. Send them a HAVE message. 
+			log.Printf("Controller : sendHaveToPeersWhoNeedPiece : Sending HAVE to %s for piece %d", peerInfo.peerId, pieceNum)
+
+			haveMessage := new(HavePiece)
+
+			// When sent from the controller to the peer, the only relevant fields are the piece number
+			// and haveMore fields. The peerId field doesn't need to be set, because it's being sent
+			// directly to the peer 
+			haveMessage.pieceNum = pieceNum
+			haveMessage.haveMore = false // set to false because we're not sending a full bitfield. 
+
+			go func() { peerInfo.havePieceCh <- *haveMessage }()
+
+		}
+	}
+}
+
 func (cont *Controller) removePieceFromActiveRequests(piece ReceivedPiece) {
 	finishingPeer := cont.peers[piece.peerId]
 	if _, exists := finishingPeer.activeRequests[piece.pieceNum]; exists {
@@ -139,7 +159,7 @@ func (cont *Controller) removePieceFromActiveRequests(piece ReceivedPiece) {
 		for peerId, peerInfo := range cont.peers {
 			if _, exists := peerInfo.activeRequests[piece.pieceNum]; exists {
 				// This peer was also working on the same piece
-				log.Printf("Controller: removePieceFromActiveRequests : %s was also working on piece %d which is finished. Sending a CANCEL", peerId, piece.pieceNum)
+				log.Printf("Controller : removePieceFromActiveRequests : %s was also working on piece %d which is finished. Sending a CANCEL", peerId, piece.pieceNum)
 				
 				// Remove this piece from the peer's activeRequests set
 				delete(peerInfo.activeRequests, piece.pieceNum)
@@ -168,12 +188,29 @@ func (cont *Controller) removePieceFromActiveRequests(piece ReceivedPiece) {
 	}
 }
 
+func (cont *Controller) createPeerPieceTotals() []int {
+	peerPieceTotals := make([]int, len(cont.finishedPieces))
+
+	for _, peerInfo := range cont.peers {
+		for pieceNum, hasPiece := range peerInfo.availablePieces {
+			if hasPiece {
+				// The peer has this piece. Increment the peer count for this piece. 
+				peerPieceTotals[pieceNum]++
+			}
+		}
+	}
+
+	return peerPieceTotals
+}
+
 // Is re-created every time a piece is finished or when a new peer comes online. Could be
 // optimized by storing the RarityMap and making changes instead of re-creating it every time. 
 func (cont *Controller) createRaritySlice() []int {
 	rarityMap := NewRarityMap()
 
-	for pieceNum, total := range cont.peerPieceTotals {
+	peerPieceTotals := cont.createPeerPieceTotals()
+
+	for pieceNum, total := range peerPieceTotals {
 		if cont.finishedPieces[pieceNum] {
 			continue
 		} 
@@ -243,7 +280,7 @@ func (cont *Controller) createDownloadPriorityForPeer(peerInfo PeerInfo, rarityS
 	piecePrioritySlice := make(PiecePrioritySlice, 0)
 
 	for rarityIndex, pieceNum := range raritySlice {
-		if peerInfo.availablePieces[pieceNum] == true {
+		if peerInfo.availablePieces[pieceNum] {
 			if _, exists := peerInfo.activeRequests[pieceNum]; !exists {				
 				// 1) The peer has this piece available
 				// 2) We need this piece, because it's in the raritySlice
@@ -294,6 +331,20 @@ func (cont *Controller) sendRequestsToPeer(peerInfo PeerInfo, raritySlice []int)
 	}
 }
 
+func (cont *Controller) sendOurBitfieldToPeer(peerInfo PeerInfo) {
+	// CONSIDER: What if we don't have any pieces? If the peer is expecting at least one HAVE, 
+	// this could be a problem. 
+
+	/*
+	for pieceNum, havePiece := range cont.finishedPieces {
+		if havePiece {
+			// We finished this piece. Send it as a HAVE message to the peer. 
+
+		}
+	}*/
+}
+
+
 func (cont *Controller) Run() {
 	log.Println("Controller : Run : Started")
 	defer cont.t.Done()
@@ -306,6 +357,9 @@ func (cont *Controller) Run() {
 
 			// Update our bitfield to show that we now have that piece
 			cont.finishedPieces[piece.pieceNum] = true
+
+			// For every peer that doesn't already have this piece, send them a HAVE message
+			cont.sendHaveToPeersWhoNeedPiece(piece.pieceNum)
 
 			// Remove this piece from the active request list for the peer that 
 			// finished the download, along with all other peers who were downloading
@@ -336,6 +390,7 @@ func (cont *Controller) Run() {
 			}
 
 
+
 		case piece := <- cont.rxChannels.cancelPieceCh:
 			// The peer is tell us that it can no longer work on a particular piece. 
 			log.Printf("Controller : Run : Received a CancelPiece from %s for pieceNum %d", piece.peerId, piece.pieceNum)
@@ -355,6 +410,8 @@ func (cont *Controller) Run() {
 			// Add PeerInfo to the peers map using IP:Port as the key
 			cont.peers[peerInfo.peerId] = peerInfo
 
+			cont.sendOurBitfieldToPeer(peerInfo)
+
 			// We're not going to send requests to this peer yet. Once we receive a full bitfield from the peer
 			// through HAVE messages, we'll then send requests. 
 
@@ -370,19 +427,16 @@ func (cont *Controller) Run() {
 				log.Fatalf("Controller : Run : Unable to process HavePiece for %s because it doesn't exist in the peers mapping", piece.peerId)
 			} 
 
-			if peerInfo.availablePieces[piece.pieceNum] != false {
+			if peerInfo.availablePieces[piece.pieceNum] {
 				log.Fatalf("Controller : Run : Received duplicate HavePiece from %s for piece number %d", peerInfo.peerId, piece.pieceNum)
 			} 
 
 			// Mark this peer as having this piece
 			peerInfo.availablePieces[piece.pieceNum] = true
 
-			// Update peer piece totals indicating that one more peer has this piece. 
-			cont.peerPieceTotals[piece.pieceNum]++
-
 			// FIXME: Consider removing the isActive check and just removing/adding a peer
 			// when it's deactivated/reactived
-			if peerInfo.isActive && piece.haveMore == false {
+			if peerInfo.isActive && !piece.haveMore {
 
 				// Create a slice of pieces sorted by rarity
 				raritySlice := cont.createRaritySlice()
