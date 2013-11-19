@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"sort"
+//	"syscall"
 )
 
 // PeerTuple represents a single IP+port pair of a peer
@@ -20,13 +21,14 @@ type PeerTuple struct {
 
 type Peer struct {
 	peer PeerTuple
+	conn net.Conn
 }
 
 type PeerManager struct {
 	peersCh <-chan PeerTuple
 	statsCh chan Stats
 	connsCh <-chan net.Conn
-	peers	map[string]PeerInfo
+	peers	map[string]*Peer
 	t       tomb.Tomb
 }
 
@@ -73,6 +75,7 @@ func NewPeerManager(peersCh chan PeerTuple, statsCh chan Stats, connsCh chan net
 	pm.peersCh = peersCh
 	pm.statsCh = statsCh
 	pm.connsCh = connsCh
+	pm.peers = make(map[string]*Peer)
 	return pm
 }
 
@@ -87,10 +90,30 @@ func NewPeerInfo(quantityOfPieces int) *PeerInfo {
 	return pi
 }
 
-/*
-func NewPeer() {
+func NewPeer(peerTuple PeerTuple) *Peer {
+	peer := new(Peer)
+	raddr := net.TCPAddr { peerTuple.IP, int(peerTuple.Port), "" }
+	/*
+	go func() {
+	conn, err := net.DialTCP("tcp4", nil, &raddr)
+	if err != nil {
+		if e, ok := err.(*net.OpError); ok {
+			if e.Err == syscall.ECONNREFUSED {
+				fmt.Printf("%#q\n", e)
+				return
+			}
+		}
+		log.Fatal(err)
+	}
+	fmt.Println(conn)
+	}()
+	*/
+	fmt.Println(raddr)
+
+	return peer
 }
 
+/*
 func NewPeerConn(net.Conn) {
 }
 
@@ -112,14 +135,14 @@ func (pm *PeerManager) Run() {
 	for {
 		select {
 		case peer := <-pm.peersCh:
-			_, ok := peers[peer]
+			peerID := fmt.Sprintf("%s:%d", peer.IP.String(), peer.Port)
+			_, ok := pm.peers[peerID]
 			if ok {
-				// peer already exists
-				log.Printf("Peer %s:%d already in map\n", peer.IP.String, peer.Port)
+				// Peer already exists
+				log.Printf("Peer %s already in map\n", peerID)
 			} else {
-				peers[peer] = "foo"
+				pm.peers[peerID] = NewPeer(peer)
 			}
-			fmt.Println(peer)
 		case conn := <-pm.connsCh:
 			fmt.Println(conn)
 		case <-pm.t.Dying():
