@@ -5,7 +5,6 @@
 package main
 
 import (
-	//natpmp "code.google.com/p/go-nat-pmp"
 	"fmt"
 	"launchpad.net/tomb"
 	"log"
@@ -16,15 +15,18 @@ import (
 )
 
 type Server struct {
-	peersCh <-chan PeerTuple
-	statsCh chan Stats
-	Port    uint16
+	connsCh  chan net.Conn
+	statsCh  chan Stats
+	Port     uint16
 	Listener net.Listener
-	t       tomb.Tomb
+	t        tomb.Tomb
 }
 
 func NewServer() *Server {
 	sv := new(Server)
+
+	sv.connsCh = make(chan net.Conn)
+
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	var err error
 
@@ -33,11 +35,14 @@ func NewServer() *Server {
 	for i := 0; ; i++ {
 		sv.Port = uint16(r.Intn(49151)) + uint16(16384)
 		portString := fmt.Sprintf(":%d", sv.Port)
+		// TODO: Undo override of default port
+		sv.Port = uint16(6881)
+		portString = ":6881"
 		sv.Listener, err = net.Listen("tcp4", portString)
 		if err != nil {
 			if e, ok := err.(*net.OpError); ok {
 				// If reason is EADDRINUSE, then try up to 10 times
-				if (e.Err == syscall.EADDRINUSE) {
+				if e.Err == syscall.EADDRINUSE {
 					if i < 10 {
 						log.Printf("Failed to bind to port %d. Trying again...\n", sv.Port)
 						continue
@@ -50,10 +55,28 @@ func NewServer() *Server {
 			// Bail here on any other errors
 			log.Fatal(err)
 		}
+		// Success
 		break
 	}
+	log.Println("Server : Listening on port", sv.Port)
 
 	return sv
+}
+
+func (sv *Server) Listen() {
+	log.Println("Server : Listen : Started")
+	defer sv.Listener.Close()
+	defer log.Println("Server : Listen : Completed")
+
+	for {
+		conn, err := sv.Listener.Accept()
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		log.Println("Received new connection from:", conn.RemoteAddr())
+		sv.connsCh <- conn
+	}
 }
 
 func (sv *Server) Stop() error {
@@ -67,21 +90,11 @@ func (sv *Server) Run() {
 	defer sv.t.Done()
 	defer log.Println("Server : Run : Completed")
 
-	log.Println("Server : Listening on port", sv.Port)
+	go sv.Listen()
 	for {
 		select {
-		case peer := <-sv.peersCh:
-			/*
-				_, ok := peers[peer]
-				if ok {
-					// peer already exists
-					fmt.Println("Server already in map")
-				} else {
-					peers[peer] = "foo"
-				}
-			*/
-			fmt.Println(peer)
 		case <-sv.t.Dying():
+			sv.Listener.Close()
 			return
 		}
 	}

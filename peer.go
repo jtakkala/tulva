@@ -25,6 +25,8 @@ type Peer struct {
 type PeerManager struct {
 	peersCh <-chan PeerTuple
 	statsCh chan Stats
+	connsCh <-chan net.Conn
+	peers	map[string]PeerInfo
 	t       tomb.Tomb
 }
 
@@ -56,7 +58,7 @@ func (sp SortedPeers) Len() int {
 
 func sortedPeersByQtyPiecesNeeded(peers map[string]PeerInfo) SortedPeers {
 	peerInfoSlice := make(SortedPeers, 0)
-	
+
 	for _, peerInfo := range peers {
 		peerInfoSlice = append(peerInfoSlice, peerInfo)
 	}
@@ -65,10 +67,11 @@ func sortedPeersByQtyPiecesNeeded(peers map[string]PeerInfo) SortedPeers {
 	return peerInfoSlice
 }
 
-func NewPeerManager(peersCh chan PeerTuple, statsCh chan Stats) *PeerManager {
+func NewPeerManager(peersCh chan PeerTuple, statsCh chan Stats, connsCh chan net.Conn) *PeerManager {
 	pm := new(PeerManager)
 	pm.peersCh = peersCh
 	pm.statsCh = statsCh
+	pm.connsCh = connsCh
 	return pm
 }
 
@@ -82,6 +85,17 @@ func NewPeerInfo(quantityOfPieces int) *PeerInfo {
 	pi.cancelPieceCh = make(chan<- CancelPiece)
 	return pi
 }
+
+/*
+func NewPeer() {
+}
+
+func NewPeerConn(net.Conn) {
+}
+
+func NewPeerTuple() {
+}
+*/
 
 func (pm *PeerManager) Stop() error {
 	log.Println("PeerManager : Stop : Stopping")
@@ -97,16 +111,16 @@ func (pm *PeerManager) Run() {
 	for {
 		select {
 		case peer := <-pm.peersCh:
-			/*
-				_, ok := peers[peer]
-				if ok {
-					// peer already exists
-					fmt.Println("Peer already in map")
-				} else {
-					peers[peer] = "foo"
-				}
-			*/
+			_, ok := peers[peer]
+			if ok {
+				// peer already exists
+				log.Printf("Peer %s:%d already in map\n", peer.IP.String, peer.Port)
+			} else {
+				peers[peer] = "foo"
+			}
 			fmt.Println(peer)
+		case conn := <-pm.connsCh:
+			fmt.Println(conn)
 		case <-pm.t.Dying():
 			return
 		}

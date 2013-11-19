@@ -73,23 +73,25 @@ func (t *Torrent) Run() {
 	defer log.Println("Torrent : Run : Completed")
 	t.Init()
 
-	sv := NewServer()
-	go sv.Run()
-
 	io := new(IO)
 	io.metaInfo = t.metaInfo
-	go io.Run()
+	//go io.Run()
 
-	trackerManager := NewTrackerManager(sv.Port)
-	go trackerManager.Run(t.metaInfo, t.infoHash)
+	server := NewServer()
+	go server.Run()
 
-	peerManager := NewPeerManager(trackerManager.peersCh, trackerManager.statsCh)
+	trackerManager := NewTrackerManager(server.Port)
+	//go trackerManager.Run(t.metaInfo, t.infoHash)
+
+	peerManager := NewPeerManager(trackerManager.peersCh, trackerManager.statsCh, server.connsCh)
 	go peerManager.Run()
 
 	for {
 		select {
 		case <-t.t.Dying():
+			server.Stop()
 			trackerManager.Stop()
+			peerManager.Stop()
 			return
 		}
 	}
