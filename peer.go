@@ -32,7 +32,7 @@ type PeerManager struct {
 }
 
 type PeerInfo struct {
-	peerId          string
+	peerID          string
 	isChoked        bool // The peer is connected but choked. Defaults to TRUE (choked)
 	availablePieces []bool
 	activeRequests  map[int]struct{}
@@ -40,6 +40,13 @@ type PeerInfo struct {
 	requestPieceCh  chan<- RequestPiece // Other end is Peer. Used to tell the peer to request a particular piece.
 	cancelPieceCh   chan<- CancelPiece  // Other end is Peer. Used to tell the peer to cancel a particular piece.
 	havePieceCh	chan<- chan<- HavePiece 	// Other end is Peer. Used to give the peer the initial bitfield and new pieces. 
+}
+
+// Sent by the peer to controller indicating a 'choke' state change. It either went from unchoked to choked,
+// or from choked to unchoked. 
+type PeerChokeStatus struct {
+	peerID string
+	isChoked bool	
 }
 
 type SortedPeers []PeerInfo
