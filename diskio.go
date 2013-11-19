@@ -8,14 +8,14 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"fmt"
-	sysio "io"
+	"io"
 	"launchpad.net/tomb"
 	"log"
 	"os"
 	"path/filepath"
 )
 
-type IO struct {
+type DiskIO struct {
 	metaInfo MetaInfo
 	files    []*os.File
 	t        tomb.Tomb
@@ -23,10 +23,10 @@ type IO struct {
 
 // checkHash accepts a byte buffer and pieceIndex, computes the SHA-1 hash of
 // the buffer and returns true or false if it's correct.
-func (io *IO) checkHash(buf []byte, pieceIndex int) bool {
+func (diskio *DiskIO) checkHash(buf []byte, pieceIndex int) bool {
 	h := sha1.New()
 	h.Write(buf)
-	if bytes.Equal(h.Sum(nil), []byte(io.metaInfo.Info.Pieces[pieceIndex:pieceIndex+h.Size()])) {
+	if bytes.Equal(h.Sum(nil), []byte(diskio.metaInfo.Info.Pieces[pieceIndex:pieceIndex+h.Size()])) {
 		return true
 	}
 	return false
@@ -34,27 +34,27 @@ func (io *IO) checkHash(buf []byte, pieceIndex int) bool {
 
 // Verify reads in each file and verifies the SHA-1 checksum of each piece.
 // Return the boolean list pieces that are correct.
-func (io *IO) Verify() (finishedPieces []bool) {
+func (diskio *DiskIO) Verify() (finishedPieces []bool) {
 	log.Println("IO : Verify : Started")
 	defer log.Println("IO : Verify : Completed")
 
-	buf := make([]byte, io.metaInfo.Info.PieceLength)
+	buf := make([]byte, diskio.metaInfo.Info.PieceLength)
 	var pieceIndex, n int
 	var err error
 
 	fmt.Printf("Verifying downloaded files")
-	if len(io.metaInfo.Info.Files) > 0 {
+	if len(diskio.metaInfo.Info.Files) > 0 {
 		// Multiple File Mode
 		var m int
 		// Iterate over each file
-		for i, _ := range io.metaInfo.Info.Files {
+		for i, _ := range diskio.metaInfo.Info.Files {
 			for offset := int64(0); ; offset += int64(n) {
 				// Read from file at offset, up to buf size or
 				// less if last read was incomplete due to EOF
 				fmt.Printf(".")
-				n, err = io.files[i].ReadAt(buf[m:], offset)
+				n, err = diskio.files[i].ReadAt(buf[m:], offset)
 				if err != nil {
-					if err == sysio.EOF {
+					if err == io.EOF {
 						// Reached EOF. Increment partial read counter by bytes read
 						m += n
 						break
@@ -63,7 +63,7 @@ func (io *IO) Verify() (finishedPieces []bool) {
 				}
 				// We have a full buf, check the hash of buf and
 				// append the result to the finished pieces
-				finishedPieces = append(finishedPieces, io.checkHash(buf, pieceIndex))
+				finishedPieces = append(finishedPieces, diskio.checkHash(buf, pieceIndex))
 				// Reset partial read counter
 				m = 0
 				// Increment piece by the length of a SHA-1 hash (20 bytes)
@@ -73,7 +73,7 @@ func (io *IO) Verify() (finishedPieces []bool) {
 		// If the final iteration resulted in a partial read, then
 		// check the hash of it and append the result
 		if m > 0 {
-			finishedPieces = append(finishedPieces, io.checkHash(buf[:m], pieceIndex))
+			finishedPieces = append(finishedPieces, diskio.checkHash(buf[:m], pieceIndex))
 		}
 	} else {
 		// Single File Mode
@@ -81,9 +81,9 @@ func (io *IO) Verify() (finishedPieces []bool) {
 			// Read from file at offset, up to buf size or
 			// less if last read was incomplete due to EOF
 			fmt.Printf(".")
-			n, err = io.files[0].ReadAt(buf, offset)
+			n, err = diskio.files[0].ReadAt(buf, offset)
 			if err != nil {
-				if err == sysio.EOF {
+				if err == io.EOF {
 					// Reached EOF
 					break
 				}
@@ -91,13 +91,13 @@ func (io *IO) Verify() (finishedPieces []bool) {
 			}
 			// We have a full buf, check the hash of buf and
 			// append the result to the finished pieces
-			finishedPieces = append(finishedPieces, io.checkHash(buf, pieceIndex))
+			finishedPieces = append(finishedPieces, diskio.checkHash(buf, pieceIndex))
 			// Increment piece by the length of a SHA-1 hash (20 bytes)
 			pieceIndex += 20
 		}
 		// If the final iteration resulted in a partial read, then compute a hash
 		if n > 0 {
-			finishedPieces = append(finishedPieces, io.checkHash(buf[:n], pieceIndex))
+			finishedPieces = append(finishedPieces, diskio.checkHash(buf[:n], pieceIndex))
 		}
 	}
 	fmt.Println()
@@ -127,10 +127,10 @@ func openOrCreateFile(name string) (file *os.File) {
 	return
 }
 
-func (io *IO) Init() {
-	if len(io.metaInfo.Info.Files) > 0 {
+func (diskio *DiskIO) Init() {
+	if len(diskio.metaInfo.Info.Files) > 0 {
 		// Multiple File Mode
-		directory := io.metaInfo.Info.Name
+		directory := diskio.metaInfo.Info.Name
 		// Create the directory if it doesn't exist
 		if _, err := os.Stat(directory); os.IsNotExist(err) {
 			err = os.Mkdir(directory, os.ModeDir|os.ModePerm)
@@ -138,7 +138,7 @@ func (io *IO) Init() {
 		}
 		err := os.Chdir(directory)
 		checkError(err)
-		for _, file := range io.metaInfo.Info.Files {
+		for _, file := range diskio.metaInfo.Info.Files {
 			// Create any sub-directories if required
 			if len(file.Path) > 1 {
 				directory = filepath.Join(file.Path[1:]...)
@@ -149,32 +149,32 @@ func (io *IO) Init() {
 			}
 			// Create the file if it doesn't exist
 			name := filepath.Join(file.Path...)
-			io.files = append(io.files, openOrCreateFile(name))
+			diskio.files = append(diskio.files, openOrCreateFile(name))
 		}
 	} else {
 		// Single File Mode
-		io.files = append(io.files, openOrCreateFile(io.metaInfo.Info.Name))
+		diskio.files = append(diskio.files, openOrCreateFile(diskio.metaInfo.Info.Name))
 	}
 }
 
-func (io *IO) Stop() error {
+func (diskio *DiskIO) Stop() error {
 	log.Println("IO : Stop : Stopping")
-	io.t.Kill(nil)
-	return io.t.Wait()
+	diskio.t.Kill(nil)
+	return diskio.t.Wait()
 }
 
-func (io *IO) Run() {
+func (diskio *DiskIO) Run() {
 	log.Println("IO : Run : Started")
-	defer io.t.Done()
+	defer diskio.t.Done()
 	defer log.Println("IO : Run : Completed")
 
-	io.Init()
-	finishedPieces := io.Verify()
+	diskio.Init()
+	finishedPieces := diskio.Verify()
 	fmt.Println(finishedPieces)
 
 	for {
 		select {
-		case <-io.t.Dying():
+		case <-diskio.t.Dying():
 			return
 		}
 	}
