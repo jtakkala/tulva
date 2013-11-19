@@ -101,13 +101,7 @@ type ControllerRxChannels struct {
 
 func NewController(finishedPieces []bool, 
 					pieceHashes []string, 
-					receivedPieceCh chan ReceivedPiece) *Controller {
-
-	rxChannels := new(ControllerRxChannels)
-	rxChannels.receivedPieceCh = receivedPieceCh
-	rxChannels.cancelPieceCh = make(chan CancelPiece)
-	rxChannels.newPeerCh = make(chan PeerInfo)
-	rxChannels.havePieceCh = make(chan HavePiece)
+					rxChannels *ControllerRxChannels) *Controller {
 
 	cont := new(Controller)
 	cont.finishedPieces = finishedPieces
@@ -418,13 +412,13 @@ func (cont *Controller) Run() {
 			}
 
 
-
 		case piece := <- cont.rxChannels.cancelPieceCh:
 			// The peer is tell us that it can no longer work on a particular piece. 
 			log.Printf("Controller : Run : Received a CancelPiece from %s for pieceNum %d", piece.peerId, piece.pieceNum)
 
 			//FIXME Think about whether the peer should even be sending a CancelPiece at all. Instead, should it just
 			// indicate that it's dead?
+
 
 		case peerInfo := <- cont.rxChannels.newPeerCh:
 
@@ -445,6 +439,7 @@ func (cont *Controller) Run() {
 
 			// FIXME: HOWEVER, if this peer isn't new but was reactivated, we need to make sure that the peer re-sends us
 			// its entire bitfield. (Would it be the PeerManager's job to tell it that, or controller's job?)
+
 
 		case piece := <- cont.rxChannels.havePieceCh:
 			log.Printf("Controller : Run : Received a HavePiece from %s for pieceNum %d", piece.peerId, piece.pieceNum)
@@ -471,6 +466,7 @@ func (cont *Controller) Run() {
 				cont.sendRequestsToPeer(peerInfo, raritySlice)
 
 			}
+
 
 		case <- cont.t.Dying():
 			return
