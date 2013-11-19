@@ -77,7 +77,7 @@ func (sv *Server) Listen() {
 			log.Println(err)
 			return
 		}
-		log.Println("Received new connection from:", conn.RemoteAddr())
+		log.Println("Server: New connection from:", conn.RemoteAddr())
 		sv.connsCh <- conn
 	}
 }

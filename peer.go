@@ -10,7 +10,7 @@ import (
 	"log"
 	"net"
 	"sort"
-//	"syscall"
+	"syscall"
 )
 
 // PeerTuple represents a single IP+port pair of a peer
@@ -20,15 +20,14 @@ type PeerTuple struct {
 }
 
 type Peer struct {
-	peer PeerTuple
-	conn net.Conn
+	conn *net.TCPConn
 }
 
 type PeerManager struct {
 	peersCh <-chan PeerTuple
 	statsCh chan Stats
-	connsCh <-chan *net.TCPConn
-	peers	map[string]*Peer
+	connsCh chan *net.TCPConn
+	peers	map[string]Peer
 	t       tomb.Tomb
 }
 
@@ -40,7 +39,7 @@ type PeerInfo struct {
 	qtyPiecesNeeded int                 // The quantity of pieces that this peer has that we haven't yet downloaded.
 	requestPieceCh  chan<- RequestPiece // Other end is Peer. Used to tell the peer to request a particular piece.
 	cancelPieceCh   chan<- CancelPiece  // Other end is Peer. Used to tell the peer to cancel a particular piece.
-	havePieceCh		chan<- chan<- HavePiece 	// Other end is Peer. Used to give the peer the initial bitfield and new pieces. 
+	havePieceCh	chan<- chan<- HavePiece 	// Other end is Peer. Used to give the peer the initial bitfield and new pieces. 
 }
 
 type SortedPeers []PeerInfo
@@ -75,7 +74,7 @@ func NewPeerManager(peersCh chan PeerTuple, statsCh chan Stats, connsCh chan *ne
 	pm.peersCh = peersCh
 	pm.statsCh = statsCh
 	pm.connsCh = connsCh
-	pm.peers = make(map[string]*Peer)
+	pm.peers = make(map[string]Peer)
 	return pm
 }
 
@@ -90,36 +89,27 @@ func NewPeerInfo(quantityOfPieces int) *PeerInfo {
 	return pi
 }
 
-func NewPeer(peerTuple PeerTuple) *Peer {
-	peer := new(Peer)
+func ConnectToPeer(peerTuple PeerTuple, connCh chan *net.TCPConn) {
 	raddr := net.TCPAddr { peerTuple.IP, int(peerTuple.Port), "" }
-	/*
-	go func() {
 	conn, err := net.DialTCP("tcp4", nil, &raddr)
 	if err != nil {
 		if e, ok := err.(*net.OpError); ok {
 			if e.Err == syscall.ECONNREFUSED {
-				fmt.Printf("%#q\n", e)
+				log.Println("ConnectToPeer : Connection Refused:", raddr)
 				return
 			}
 		}
 		log.Fatal(err)
 	}
-	fmt.Println(conn)
-	}()
-	*/
-	fmt.Println(raddr)
-
-	return peer
+	log.Println("ConnectToPeer : Connected:", raddr)
+	connCh <- conn
 }
 
-/*
-func NewPeerConn(net.Conn) {
-}
 
-func NewPeerTuple() {
+func NewPeer(conn *net.TCPConn) (peer Peer) {
+	peer.conn = conn
+	return
 }
-*/
 
 func (pm *PeerManager) Stop() error {
 	log.Println("PeerManager : Stop : Stopping")
@@ -139,12 +129,12 @@ func (pm *PeerManager) Run() {
 			_, ok := pm.peers[peerID]
 			if ok {
 				// Peer already exists
-				log.Printf("Peer %s already in map\n", peerID)
+				log.Printf("PeerManager : Peer %s already in map\n", peerID)
 			} else {
-				pm.peers[peerID] = NewPeer(peer)
+				go ConnectToPeer(peer, pm.connsCh)
 			}
 		case conn := <-pm.connsCh:
-			fmt.Println(conn)
+			pm.peers[conn.RemoteAddr().String()] = NewPeer(conn)
 		case <-pm.t.Dying():
 			return
 		}
