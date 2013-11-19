@@ -10,6 +10,10 @@ import (
 	"sort"
 )
 
+const (
+	maxSimultaneousDownloadsPerPeer = 5
+)
+
 type RarityMap struct {
 	data map[int][]int
 }
@@ -22,7 +26,7 @@ func NewRarityMap() *RarityMap {
 
 // Add a new rarity -> pieceNum mapping. 
 func (r *RarityMap) put(rarity int, pieceNum int) {
-	if _, ok := r.data[rarity]; !ok {
+	if _, exists := r.data[rarity]; !exists {
 		r.data[rarity] = make([]int, 0)
 	}
 
@@ -56,7 +60,6 @@ type Controller struct {
 	finishedPieces []bool
 	pieceHashes []string
 	activeRequestsTotals []int 
-	peerPieceTotals []int
 	peers map[string]PeerInfo
 	rxChannels *ControllerRxChannels 
 	t tomb.Tomb
@@ -122,9 +125,30 @@ func (cont *Controller) Stop() error {
 	return cont.t.Wait()
 }
 
+func (cont *Controller) sendHaveToPeersWhoNeedPiece(pieceNum int) {
+	for _, peerInfo := range cont.peers {
+		if !peerInfo.availablePieces[pieceNum] {
+
+			// This peer doesn't have the piece that we just finished. Send them a HAVE message. 
+			log.Printf("Controller : sendHaveToPeersWhoNeedPiece : Sending HAVE to %s for piece %d", peerInfo.peerId, pieceNum)
+
+			haveMessage := new(HavePiece)
+
+			// When sent from the controller to the peer, the only relevant fields are the piece number
+			// and haveMore fields. The peerId field doesn't need to be set, because it's being sent
+			// directly to the peer 
+			haveMessage.pieceNum = pieceNum
+			haveMessage.haveMore = false // set to false because we're not sending a full bitfield. 
+
+			go func() { peerInfo.havePieceCh <- *haveMessage }()
+
+		}
+	}
+}
+
 func (cont *Controller) removePieceFromActiveRequests(piece ReceivedPiece) {
 	finishingPeer := cont.peers[piece.peerId]
-	if _, ok := finishingPeer.activeRequests[piece.pieceNum]; ok {
+	if _, exists := finishingPeer.activeRequests[piece.pieceNum]; exists {
 		// Remove this piece from the peer's activeRequests set
 		delete(finishingPeer.activeRequests, piece.pieceNum)
 
@@ -133,9 +157,9 @@ func (cont *Controller) removePieceFromActiveRequests(piece ReceivedPiece) {
 
 		// Check every peer to see if they're also downloading this piece.  
 		for peerId, peerInfo := range cont.peers {
-			if _, ok := peerInfo.activeRequests[piece.pieceNum]; ok {
+			if _, exists := peerInfo.activeRequests[piece.pieceNum]; exists {
 				// This peer was also working on the same piece
-				log.Printf("Controller: removePieceFromActiveRequests : %s was also working on piece %d which is finished. Sending a CANCEL", peerId, piece.pieceNum)
+				log.Printf("Controller : removePieceFromActiveRequests : %s was also working on piece %d which is finished. Sending a CANCEL", peerId, piece.pieceNum)
 				
 				// Remove this piece from the peer's activeRequests set
 				delete(peerInfo.activeRequests, piece.pieceNum)
@@ -155,7 +179,7 @@ func (cont *Controller) removePieceFromActiveRequests(piece ReceivedPiece) {
 
 		stuckRequests := cont.activeRequestsTotals[piece.pieceNum]
 		if stuckRequests != 0 {
-			log.Fatalf("Controller: removePieceFromActiveRequests : Somehow there are %d stuck requests for piece number %d", stuckRequests, piece.pieceNum)
+			log.Fatalf("Controller : removePieceFromActiveRequests : Somehow there are %d stuck requests for piece number %d", stuckRequests, piece.pieceNum)
 		}
 
 	} else {
@@ -164,10 +188,29 @@ func (cont *Controller) removePieceFromActiveRequests(piece ReceivedPiece) {
 	}
 }
 
+func (cont *Controller) createPeerPieceTotals() []int {
+	peerPieceTotals := make([]int, len(cont.finishedPieces))
+
+	for _, peerInfo := range cont.peers {
+		for pieceNum, hasPiece := range peerInfo.availablePieces {
+			if hasPiece {
+				// The peer has this piece. Increment the peer count for this piece. 
+				peerPieceTotals[pieceNum]++
+			}
+		}
+	}
+
+	return peerPieceTotals
+}
+
+// Is re-created every time a piece is finished or when a new peer comes online. Could be
+// optimized by storing the RarityMap and making changes instead of re-creating it every time. 
 func (cont *Controller) createRaritySlice() []int {
 	rarityMap := NewRarityMap()
 
-	for pieceNum, total := range cont.peerPieceTotals {
+	peerPieceTotals := cont.createPeerPieceTotals()
+
+	for pieceNum, total := range peerPieceTotals {
 		if cont.finishedPieces[pieceNum] {
 			continue
 		} 
@@ -177,17 +220,15 @@ func (cont *Controller) createRaritySlice() []int {
 	return rarityMap.getPiecesByRarity()
 }
 
-func (cont *Controller) updateQuantityNeededForAllPeers() {
-	for _, peerInfo := range cont.peers {
-		qtyPiecesNeeded := 0
-		for pieceNum, pieceFinished := range cont.finishedPieces {
-			if !pieceFinished && peerInfo.availablePieces[pieceNum] == 1 {
-				qtyPiecesNeeded++
-			}
+func (cont *Controller) updateQuantityNeededForPeer(peerInfo PeerInfo) {
+	qtyPiecesNeeded := 0
+	for pieceNum, pieceFinished := range cont.finishedPieces {
+		if !pieceFinished && peerInfo.availablePieces[pieceNum] {
+			qtyPiecesNeeded++
 		}
-		// Overwrite the old value with the new value just computed
-		peerInfo.qtyPiecesNeeded = qtyPiecesNeeded
 	}
+	// Overwrite the old value with the new value just computed
+	peerInfo.qtyPiecesNeeded = qtyPiecesNeeded
 }
 
 type PiecePriority struct {
@@ -239,8 +280,8 @@ func (cont *Controller) createDownloadPriorityForPeer(peerInfo PeerInfo, rarityS
 	piecePrioritySlice := make(PiecePrioritySlice, 0)
 
 	for rarityIndex, pieceNum := range raritySlice {
-		if peerInfo.availablePieces[pieceNum] == 1 {
-			if _, ok := peerInfo.activeRequests[pieceNum]; !ok {				
+		if peerInfo.availablePieces[pieceNum] {
+			if _, exists := peerInfo.activeRequests[pieceNum]; !exists {				
 				// 1) The peer has this piece available
 				// 2) We need this piece, because it's in the raritySlice
 				// 3) The peer is not already working on this piece (not in activeRequests)
@@ -261,45 +302,48 @@ func (cont *Controller) createDownloadPriorityForPeer(peerInfo PeerInfo, rarityS
 
 
 
-func (cont *Controller) sendRequests(peersSortedByDownloadLen SortedPeers, raritySlice []int) {
+func (cont *Controller) sendRequestsToPeer(peerInfo PeerInfo, raritySlice []int) {
 
-	for _, peerInfo := range peersSortedByDownloadLen {
+	// Create the slice of pieces that this peer should work on next. It will not 
+	// include pieces that have already been written to disk, or pieces that the 
+	// peer is already working on. 
+	downloadPriority := cont.createDownloadPriorityForPeer(peerInfo, raritySlice)
 
-		// Confirm that this peer is still connected and is available to take requests
-		// and also that the peer needs more requests
-		if peerInfo.isActive && len(peerInfo.activeRequests) < maxSimultaneousDownloadsPerPeer {
-
-			// Create the slice of pieces that this peer should work on next. It will not 
-			// include pieces that have already been written to disk, or pieces that the 
-			// peer is already working on. 
-			downloadPriority := cont.createDownloadPriorityForPeer(peerInfo, raritySlice)
-
-			for _, pieceNum := range downloadPriority {
-				if len(peerInfo.activeRequests) < maxSimultaneousDownloadsPerPeer {
-					// We've sent enough requests
-					break
-				}
-
-				// Create a new RequestPiece message and send it to the peer
-				requestMessage := new(RequestPiece)
-				requestMessage.pieceNum = pieceNum
-				requestMessage.expectedHash = cont.pieceHashes[pieceNum]
-				go func() { peerInfo.requestPieceCh <- *requestMessage }()
-
-				// Add this pieceNum to the set of pieces that this peer is working on
-				peerInfo.activeRequests[pieceNum] = struct{}{}
-
-				// Increment the number of peers that are working on this piece. 
-				cont.activeRequestsTotals[pieceNum]++
-
-			}
+	for _, pieceNum := range downloadPriority {
+		if len(peerInfo.activeRequests) < maxSimultaneousDownloadsPerPeer {
+			// We've sent enough requests
+			break
 		}
+
+		// Create a new RequestPiece message and send it to the peer
+		requestMessage := new(RequestPiece)
+		requestMessage.pieceNum = pieceNum
+		requestMessage.expectedHash = cont.pieceHashes[pieceNum]
+		log.Printf("Controller : sendRequestsToPeer : Requesting %s to get piece number %d", peerInfo.peerId, pieceNum)
+		go func() { peerInfo.requestPieceCh <- *requestMessage }()
+
+		// Add this pieceNum to the set of pieces that this peer is working on
+		peerInfo.activeRequests[pieceNum] = struct{}{}
+
+		// Increment the number of peers that are working on this piece. 
+		cont.activeRequestsTotals[pieceNum]++
+
 	}
 }
 
-const (
-	maxSimultaneousDownloadsPerPeer = 3
-)
+func (cont *Controller) sendOurBitfieldToPeer(peerInfo PeerInfo) {
+	// CONSIDER: What if we don't have any pieces? If the peer is expecting at least one HAVE, 
+	// this could be a problem. 
+
+	/*
+	for pieceNum, havePiece := range cont.finishedPieces {
+		if havePiece {
+			// We finished this piece. Send it as a HAVE message to the peer. 
+
+		}
+	}*/
+}
+
 
 func (cont *Controller) Run() {
 	log.Println("Controller : Run : Started")
@@ -309,10 +353,13 @@ func (cont *Controller) Run() {
 	for {
 		select {
 		case piece := <- cont.rxChannels.receivedPieceCh:
-			log.Printf("Controller: Run : %s finished downloading piece number %d", piece.peerId, piece.pieceNum)
+			log.Printf("Controller : Run : %s finished downloading piece number %d", piece.peerId, piece.pieceNum)
 
 			// Update our bitfield to show that we now have that piece
 			cont.finishedPieces[piece.pieceNum] = true
+
+			// For every peer that doesn't already have this piece, send them a HAVE message
+			cont.sendHaveToPeersWhoNeedPiece(piece.pieceNum)
 
 			// Remove this piece from the active request list for the peer that 
 			// finished the download, along with all other peers who were downloading
@@ -325,34 +372,79 @@ func (cont *Controller) Run() {
 			// Given the updated finishedPieces slice, update the quantity of pieces
 			// that are needed from each peer. This step is required to later sort 
 			// peerInfo slices by the quantity of needed pieces. 
-			cont.updateQuantityNeededForAllPeers()
-
+			for _, peerInfo := range cont.peers {
+				cont.updateQuantityNeededForPeer(peerInfo)
+			}
+			
 			// Create a PeerInfo slice sorted by qtyPiecesNeeded
 			sortedPeers := sortedPeersByQtyPiecesNeeded(cont.peers)
 
 			// Iterate through the sorted peerInfo slice. For each Peer that isn't 
 			// currently requesting the max amount of pieces, send more piece requests. 
-			cont.sendRequests(sortedPeers, raritySlice)
+			for _, peerInfo := range sortedPeers {
+				// Confirm that this peer is still connected and is available to take requests
+				// and also that the peer needs more requests
+				if peerInfo.isActive && len(peerInfo.activeRequests) < maxSimultaneousDownloadsPerPeer {
+					cont.sendRequestsToPeer(peerInfo, raritySlice)
+				}
+			}
+
 
 
 		case piece := <- cont.rxChannels.cancelPieceCh:
+			// The peer is tell us that it can no longer work on a particular piece. 
 			log.Printf("Controller : Run : Received a CancelPiece from %s for pieceNum %d", piece.peerId, piece.pieceNum)
 
-		case peerInfo := <- cont.rxChannels.newPeerCh:
-			log.Printf("Controller : Run : Received a new PeerInfo with peerId of %s", peerInfo.peerId)
+			//FIXME Think about whether the peer should even be sending a CancelPiece at all. Instead, should it just
+			// indicate that it's dead?
 
+		case peerInfo := <- cont.rxChannels.newPeerCh:
 
 			// Throw an error if the peer is duplicate (same IP/Port. should never happen)
-
-			// Create a new PeerInfo struct 
+			if _, exists := cont.peers[peerInfo.peerId]; exists {
+				log.Fatalf("Controller : Run : Received pre-existing peer with ID of %s over newPeer channel", peerInfo.peerId)
+			} else {
+				log.Printf("Controller : Run : Received a new PeerInfo with peerId of %s", peerInfo.peerId)
+			}
 
 			// Add PeerInfo to the peers map using IP:Port as the key
+			cont.peers[peerInfo.peerId] = peerInfo
 
-			// 
+			cont.sendOurBitfieldToPeer(peerInfo)
+
+			// We're not going to send requests to this peer yet. Once we receive a full bitfield from the peer
+			// through HAVE messages, we'll then send requests. 
+
+			// FIXME: HOWEVER, if this peer isn't new but was reactivated, we need to make sure that the peer re-sends us
+			// its entire bitfield. (Would it be the PeerManager's job to tell it that, or controller's job?)
 
 		case piece := <- cont.rxChannels.havePieceCh:
 			log.Printf("Controller : Run : Received a HavePiece from %s for pieceNum %d with haveBool of %t", piece.peerId, piece.pieceNum, piece.haveMore)
+			
+			// Update the peers availability slice. 
+			peerInfo, exists := cont.peers[piece.peerId]; 
+			if !exists {
+				log.Fatalf("Controller : Run : Unable to process HavePiece for %s because it doesn't exist in the peers mapping", piece.peerId)
+			} 
 
+			if peerInfo.availablePieces[piece.pieceNum] {
+				log.Fatalf("Controller : Run : Received duplicate HavePiece from %s for piece number %d", peerInfo.peerId, piece.pieceNum)
+			} 
+
+			// Mark this peer as having this piece
+			peerInfo.availablePieces[piece.pieceNum] = true
+
+			// FIXME: Consider removing the isActive check and just removing/adding a peer
+			// when it's deactivated/reactived
+			if peerInfo.isActive && !piece.haveMore {
+
+				// Create a slice of pieces sorted by rarity
+				raritySlice := cont.createRaritySlice()
+
+				// Send requests to the peer
+				cont.sendRequestsToPeer(peerInfo, raritySlice)
+
+			}
 
 		case <- cont.t.Dying():
 			return
