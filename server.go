@@ -15,17 +15,17 @@ import (
 )
 
 type Server struct {
-	connsCh  chan net.Conn
+	connsCh  chan *net.TCPConn
 	statsCh  chan Stats
 	Port     uint16
-	Listener net.Listener
+	Listener *net.TCPListener
 	t        tomb.Tomb
 }
 
 func NewServer() *Server {
 	sv := new(Server)
 
-	sv.connsCh = make(chan net.Conn)
+	sv.connsCh = make(chan *net.TCPConn)
 
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	var err error
@@ -38,7 +38,9 @@ func NewServer() *Server {
 		// TODO: Undo override of default port
 		sv.Port = uint16(6881)
 		portString = ":6881"
-		sv.Listener, err = net.Listen("tcp4", portString)
+		fmt.Println(portString)
+		laddr := net.TCPAddr { net.ParseIP("0.0.0.0"), 6881, ""}
+		sv.Listener, err = net.ListenTCP("tcp4", &laddr)
 		if err != nil {
 			if e, ok := err.(*net.OpError); ok {
 				// If reason is EADDRINUSE, then try up to 10 times
@@ -69,8 +71,9 @@ func (sv *Server) Listen() {
 	defer log.Println("Server : Listen : Completed")
 
 	for {
-		conn, err := sv.Listener.Accept()
+		conn, err := sv.Listener.AcceptTCP()
 		if err != nil {
+			// FIXME: Handle other error types
 			log.Println(err)
 			return
 		}

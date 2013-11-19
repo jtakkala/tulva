@@ -27,7 +27,7 @@ type Peer struct {
 type PeerManager struct {
 	peersCh <-chan PeerTuple
 	statsCh chan Stats
-	connsCh <-chan net.Conn
+	connsCh <-chan *net.TCPConn
 	peers	map[string]*Peer
 	t       tomb.Tomb
 }
@@ -70,7 +70,7 @@ func sortedPeersByQtyPiecesNeeded(peers map[string]PeerInfo) SortedPeers {
 	return peerInfoSlice
 }
 
-func NewPeerManager(peersCh chan PeerTuple, statsCh chan Stats, connsCh chan net.Conn) *PeerManager {
+func NewPeerManager(peersCh chan PeerTuple, statsCh chan Stats, connsCh chan *net.TCPConn) *PeerManager {
 	pm := new(PeerManager)
 	pm.peersCh = peersCh
 	pm.statsCh = statsCh
