@@ -31,7 +31,7 @@ type PeerManager struct {
 type PeerInfo struct {
 	peerId          string
 	isActive        bool // The peer is connected and unchoked
-	availablePieces []int
+	availablePieces []bool
 	activeRequests  map[int]struct{}
 	qtyPiecesNeeded int                 // The quantity of pieces that this peer has that we haven't yet downloaded.
 	requestPieceCh  chan<- RequestPiece // Other end is Peer. Used to tell the peer to request a particular piece.
@@ -74,7 +74,7 @@ func NewPeerManager(peersCh chan PeerTuple, statsCh chan Stats) *PeerManager {
 
 func NewPeerInfo(quantityOfPieces int) *PeerInfo {
 	pi := new(PeerInfo)
-	pi.availablePieces = make([]int, quantityOfPieces)
+	pi.availablePieces = make([]bool, quantityOfPieces)
 	pi.activeRequests = make(map[int]struct{})
 
 	// FIXME Not finished. Need to hook these channels into the Peer struct

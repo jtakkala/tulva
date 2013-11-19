@@ -186,7 +186,7 @@ func (cont *Controller) createRaritySlice() []int {
 func (cont *Controller) updateQuantityNeededForPeer(peerInfo PeerInfo) {
 	qtyPiecesNeeded := 0
 	for pieceNum, pieceFinished := range cont.finishedPieces {
-		if !pieceFinished && peerInfo.availablePieces[pieceNum] == true {
+		if !pieceFinished && peerInfo.availablePieces[pieceNum] {
 			qtyPiecesNeeded++
 		}
 	}
