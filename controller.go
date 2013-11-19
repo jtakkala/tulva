@@ -75,7 +75,6 @@ type RequestPiece struct {
 type HavePiece struct {
 	pieceNum int
 	peerId string  
-	haveMore bool  // set to 1 when the peer is initially breaking a bitfield into individual HAVE messages
 }
 
 // Sent from the controller to the peer to cancel an outstanding request
@@ -134,13 +133,23 @@ func (cont *Controller) sendHaveToPeersWhoNeedPiece(pieceNum int) {
 
 			haveMessage := new(HavePiece)
 
-			// When sent from the controller to the peer, the only relevant fields are the piece number
-			// and haveMore fields. The peerId field doesn't need to be set, because it's being sent
+			// When sent from the controller to the peer, the only relevant field is the piece number
+			// field. The peerId field doesn't need to be set, because the message is being sent
 			// directly to the peer 
 			haveMessage.pieceNum = pieceNum
-			haveMessage.haveMore = false // set to false because we're not sending a full bitfield. 
 
-			go func() { peerInfo.havePieceCh <- *haveMessage }()
+			go func() { 
+				// Create a temporary channel that's sent through the main HavePiece channel
+				innerChan := make(chan<- HavePiece)
+				peerInfo.havePieceCh <- innerChan
+
+				// Now that the other side has the innerChan (and is blocking on it), send the
+				// HAVE message.
+				innerChan <- *haveMessage
+
+				// Close the inner channel indicating to the other side that there are no more pieces 
+				Close(innerChan) 
+			}()
 
 		}
 	}
@@ -192,10 +201,13 @@ func (cont *Controller) createPeerPieceTotals() []int {
 	peerPieceTotals := make([]int, len(cont.finishedPieces))
 
 	for _, peerInfo := range cont.peers {
-		for pieceNum, hasPiece := range peerInfo.availablePieces {
-			if hasPiece {
-				// The peer has this piece. Increment the peer count for this piece. 
-				peerPieceTotals[pieceNum]++
+		// Only factor the peer into the 'rarity' equation if it's active. 
+		if !peerInfo.isChoked {
+			for pieceNum, hasPiece := range peerInfo.availablePieces {
+				if hasPiece {
+					// The peer has this piece. Increment the peer count for this piece. 
+					peerPieceTotals[pieceNum]++
+				}
 			}
 		}
 	}
@@ -203,8 +215,6 @@ func (cont *Controller) createPeerPieceTotals() []int {
 	return peerPieceTotals
 }
 
-// Is re-created every time a piece is finished or when a new peer comes online. Could be
-// optimized by storing the RarityMap and making changes instead of re-creating it every time. 
 func (cont *Controller) createRaritySlice() []int {
 	rarityMap := NewRarityMap()
 
@@ -332,16 +342,34 @@ func (cont *Controller) sendRequestsToPeer(peerInfo PeerInfo, raritySlice []int)
 }
 
 func (cont *Controller) sendOurBitfieldToPeer(peerInfo PeerInfo) {
-	// CONSIDER: What if we don't have any pieces? If the peer is expecting at least one HAVE, 
-	// this could be a problem. 
 
-	/*
-	for pieceNum, havePiece := range cont.finishedPieces {
-		if havePiece {
-			// We finished this piece. Send it as a HAVE message to the peer. 
+	// Create a copy of finishedPieces, as it will be used in a separate goroutine while 
+	// the original finishedPieces slice could be changing.
+	finishedPiecesCopy := make([]int, len(finishedPieces))
+	copy(finishedPiecesCopy, cont.finishedPieces) 
+	
+	// Send all pieces to the peer (one at a time) using individual HAVE messages over an
+	// inner channel. 
+	go func() {
+		innerChan := make(chan<- HavePiece)
 
+		// Send the inner channel to the other side before sending any pieces so that 
+		// the other side is blocking before we starting sending. 
+		peerInfo.havePieceCh <- innerChan
+
+		for pieceNum, havePiece := range finishedPiecesCopy {
+			if havePiece {
+				// We finished this piece. Send it as a HAVE message to the peer. 
+				haveMessage := new(HavePiece)
+				havePiece.pieceNum = pieceNum
+				
+				innerChan <- haveMessage
+			}
 		}
-	}*/
+
+		// Indicate to the other side that we're finished sending by closing the channel. 
+		Close(innerChan)
+	}()
 }
 
 
@@ -384,7 +412,7 @@ func (cont *Controller) Run() {
 			for _, peerInfo := range sortedPeers {
 				// Confirm that this peer is still connected and is available to take requests
 				// and also that the peer needs more requests
-				if peerInfo.isActive && len(peerInfo.activeRequests) < maxSimultaneousDownloadsPerPeer {
+				if !peerInfo.isChoked && len(peerInfo.activeRequests) < maxSimultaneousDownloadsPerPeer {
 					cont.sendRequestsToPeer(peerInfo, raritySlice)
 				}
 			}
@@ -434,9 +462,7 @@ func (cont *Controller) Run() {
 			// Mark this peer as having this piece
 			peerInfo.availablePieces[piece.pieceNum] = true
 
-			// FIXME: Consider removing the isActive check and just removing/adding a peer
-			// when it's deactivated/reactived
-			if peerInfo.isActive && !piece.haveMore {
+			if !peerInfo.isChoked && !piece.haveMore {
 
 				// Create a slice of pieces sorted by rarity
 				raritySlice := cont.createRaritySlice()
