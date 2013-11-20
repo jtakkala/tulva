@@ -115,7 +115,7 @@ func (cont *Controller) sendHaveToPeersWhoNeedPiece(pieceNum int) {
 
 			go func() { 
 				// Create a temporary channel that's sent through the main HavePiece channel
-				innerChan := make(chan<- HavePiece)
+				innerChan := make(chan HavePiece)
 				peerInfo.havePieceCh <- innerChan
 
 				// Now that the other side has the innerChan (and is blocking on it), send the
@@ -326,7 +326,7 @@ func (cont *Controller) sendOurBitfieldToPeer(peerInfo PeerInfo) {
 	// Send all pieces to the peer (one at a time) using individual HAVE messages over an
 	// inner channel. 
 	go func() {
-		innerChan := make(chan<- HavePiece)
+		innerChan := make(chan HavePiece)
 
 		// Send the inner channel to the other side before sending any pieces so that 
 		// the other side is blocking before we starting sending. 
