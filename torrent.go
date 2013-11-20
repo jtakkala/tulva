@@ -73,8 +73,7 @@ func (t *Torrent) Run() {
 	defer log.Println("Torrent : Run : Completed")
 	t.Init()
 
-	diskio := new(DiskIO)
-	diskio.metaInfo = t.metaInfo
+	diskio := NewDiskIO(t.metaInfo)
 	go diskio.Run()
 
 	server := NewServer()
