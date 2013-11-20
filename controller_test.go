@@ -91,5 +91,96 @@ func TestPiecePrioritySliceSortingThree(t *testing.T) {
 
 }
 
+func AssertRaritySliceValue(t *testing.T, raritySlice []int, index int, expectedValue int) {
+	if raritySlice[index] != expectedValue {
+		t.Errorf("Expected rs[%d] to be %d but it was %d", index, expectedValue, raritySlice[index])
+	}
+}
+
+// Add a single pair and convert it to a rarity slice
+func TestRarityMapOneValue(t *testing.T) {
+
+	rm := NewRarityMap()
+	rm.put(5, 3)
+	rs := rm.getPiecesByRarity()
+
+	if len(rs) != 1 {
+		t.Errorf("Expected slice len to be %d but it was %d",1, len(rs))
+	}
+	if rs[0] != 3 {
+		t.Errorf("Expected rs[%d] to be %d but it was %d", 0, 3, rs[0])
+	}
+}
+
+// Put two pairs with the same rarity and convert it to a rarity slice
+func TestRarityMapTwoValuesSameRarity(t *testing.T) {
+	
+	rm := NewRarityMap()
+	rm.put(5, 3)
+	rm.put(5, 2)
+	rs := rm.getPiecesByRarity()
+
+	if len(rs) != 2 {
+		t.Errorf("Expected slice len to be %d but it was %d", 2, len(rs))
+	}
+
+	AssertRaritySliceValue(t, rs, 0, 3)
+	AssertRaritySliceValue(t, rs, 1, 2)
+
+}
+
+// Put two pairs with different rarity and convert it to a rarity slice
+func TestRarityMapTwoValuesDiffRarity(t *testing.T) {
+
+	rm := NewRarityMap()
+	rm.put(5, 3)
+	rm.put(4, 2)
+	rs := rm.getPiecesByRarity()
+
+	if len(rs) != 2 {
+		t.Errorf("Expected slice len to be %d but it was %d", 2, len(rs))
+	}
+
+	AssertRaritySliceValue(t, rs, 0, 2)
+	AssertRaritySliceValue(t, rs, 1, 3)
+
+}
+
+// Put several values with some overlapping rarity and convert it to a rarity slice
+func TestRaritySeveralValues(t *testing.T) {
+
+	rm := NewRarityMap()
+	rm.put(4, 1)
+	rm.put(3, 2)
+	rm.put(2, 3)
+	rm.put(3, 4)
+	rm.put(4, 5)
+	rm.put(1, 6)
+	rm.put(2, 7)
+	rm.put(1, 8)
+	rm.put(2, 9)
+	rm.put(1, 10)
+
+	rs := rm.getPiecesByRarity()
+
+	if len(rs) != 10 {
+		t.Errorf("Expected slice len to be %d but it was %d", 10, len(rs))
+	}
+
+	AssertRaritySliceValue(t, rs, 0, 6)
+	AssertRaritySliceValue(t, rs, 1, 8)
+	AssertRaritySliceValue(t, rs, 2, 10)
+	AssertRaritySliceValue(t, rs, 3, 3)
+	AssertRaritySliceValue(t, rs, 4, 7)
+	AssertRaritySliceValue(t, rs, 5, 9)
+	AssertRaritySliceValue(t, rs, 6, 2)
+	AssertRaritySliceValue(t, rs, 7, 4)
+	AssertRaritySliceValue(t, rs, 8, 1)
+	AssertRaritySliceValue(t, rs, 9, 5)
+		
+}
+
+
+
 
 

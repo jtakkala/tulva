@@ -95,7 +95,7 @@ type ReceivedPiece struct {
 type ControllerRxChannels struct {
 	receivedPieceCh <-chan ReceivedPiece // Other end is IO 
 	newPeerCh <-chan PeerInfo  // Other end is the PeerManager
-	cancelPieceCh <-chan CancelPiece  // Other end is Peer. Used when the peer is unable to retrieve a piece
+	peerChokeStatusCh <-chan PeerChokeStatus  // Other end is Peer. Used when the peer is becomes choked or unchoked
 	havePieceCh <-chan HavePiece  // Other end is Peer. used When the peer receives a HAVE message
 }
 
@@ -366,6 +366,16 @@ func (cont *Controller) sendOurBitfieldToPeer(peerInfo PeerInfo) {
 	}()
 }
 
+func (cont *Controller) removeUnfinishedWorkForPeer(peerInfo PeerInfo) {
+	// First decrement activeRequestsTotals for each piece that this peer was working on
+	for pieceNum, _ := range peerInfo.activeRequests {
+		cont.activeRequestsTotals[pieceNum]--
+	}
+
+	// Next empty out the set
+	peerInfo.activeRequests = make(map[int]struct{})
+}
+
 
 func (cont *Controller) Run() {
 	log.Println("Controller : Run : Started")
@@ -412,12 +422,36 @@ func (cont *Controller) Run() {
 			}
 
 
-		case piece := <- cont.rxChannels.cancelPieceCh:
+		case chokeStatus := <- cont.rxChannels.peerChokeStatusCh:
 			// The peer is tell us that it can no longer work on a particular piece. 
-			log.Printf("Controller : Run : Received a CancelPiece from %s for pieceNum %d", piece.peerID, piece.pieceNum)
+			log.Printf("Controller : Run : Received a PeerChokeStatus from %s", chokeStatus.peerID)
 
-			//FIXME Think about whether the peer should even be sending a CancelPiece at all. Instead, should it just
-			// indicate that it's dead?
+			peerInfo, exists := cont.peers[chokeStatus.peerID]
+
+			if !exists {
+				log.Fatalf("Controller : Run : Unable to process PeerChokeStatus from %s because it doesn't exist in the peers mapping")
+			}
+
+			peerInfo.isChoked = chokeStatus.isChoked
+
+			if chokeStatus.isChoked {
+				// The peer (presumably) transitioned from unchoked to choked
+
+				// If the peer was working on any pieces, remove them from its activeRequests set
+				// Also decrement activeRequestsTotals for any pieces that the peer was told to download
+				// but didn't finished. 
+				cont.removeUnfinishedWorkForPeer(peerInfo)
+
+			} else {
+				// The peer (presumably) transitioned from choked to unchoked
+
+				// Create a slice of pieces sorted by rarity
+				raritySlice := cont.createRaritySlice()
+
+				// Send requests to the peer
+				cont.sendRequestsToPeer(peerInfo, raritySlice)
+
+			}
 
 
 		case peerInfo := <- cont.rxChannels.newPeerCh:
