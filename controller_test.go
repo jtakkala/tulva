@@ -226,8 +226,11 @@ func TestControllerNewPeer(t *testing.T) {
 	go controller.Run()
 
 	//peer1Comms, peer1RequestPieceCh, peer1CancelPieceCh, peer1HavePieceCh := NewPeerComms("1.2.3.4:1234")
-	peer1Comms, _, _, _ := NewPeerComms("1.2.3.4:1234")
+	peer1Comms, _, _, peer1HavePieceCh := NewPeerComms("1.2.3.4:1234")
+	//peer1Comms, _, _, _ := NewPeerComms("1.2.3.4:1234")
 	newPeerCh <- *peer1Comms
+
+	innerChan := <- peer1HavePieceCh
 
 
 

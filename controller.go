@@ -100,12 +100,11 @@ type ControllerRxChannels struct {
 }
 
 func NewControllerRxChannels() *ControllerRxChannels {
-	crc := new(ControllerRxChannels)
-	crc.receivedPiece = make(chan ReceivedPiece)
-	crc.newPeer = make(chan PeerComms)
-	crc.peerChokeStatus = make(chan PeerChokeStatus)
-	crc.havePiece = make(chan HavePiece)
-	return crc
+	return &ControllerRxChannels{
+		receivedPiece: make(chan ReceivedPiece), 
+		newPeer: make(chan PeerComms),
+		peerChokeStatus: make(chan PeerChokeStatus),
+		havePiece: make(chan HavePiece)}
 }
 
 func NewController(finishedPieces []bool, 
