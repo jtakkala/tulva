@@ -183,8 +183,9 @@ func TestRaritySeveralValues(t *testing.T) {
 
 func TestControllerXYZ(t *testing.T) {
 
+	finishedPieces := []int{true, false, false, false, false, false, false, false, false, true}
 	controllerRxChannels := NewControllerRxChannels()
-	
+
 
 }
 
