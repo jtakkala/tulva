@@ -25,9 +25,8 @@ type Peer struct {
 }
 
 type PeerManager struct {
-	peersCh <-chan PeerTuple
-	statsCh chan Stats
-	connsCh chan *net.TCPConn
+	serverChans serverPeerChans
+	trackerChans trackerPeerChans
 	diskIOChans DiskIOPeerChans
 	peers	map[string]Peer
 	t       tomb.Tomb
@@ -112,12 +111,11 @@ func sortedPeersByQtyPiecesNeeded(peers map[string]PeerInfo) SortedPeers {
 	return peerInfoSlice
 }
 
-func NewPeerManager(peersCh chan PeerTuple, statsCh chan Stats, connsCh chan *net.TCPConn, diskIOChans DiskIOPeerChans) *PeerManager {
+func NewPeerManager(diskIOChans DiskIOPeerChans, serverChans serverPeerChans, trackerChans trackerPeerChans) *PeerManager {
 	pm := new(PeerManager)
-	pm.peersCh = peersCh
-	pm.statsCh = statsCh
-	pm.connsCh = connsCh
 	pm.diskIOChans = diskIOChans
+	pm.serverChans = serverChans
+	pm.trackerChans = trackerChans
 	pm.peers = make(map[string]Peer)
 	return pm
 }
@@ -158,16 +156,16 @@ func (pm *PeerManager) Run() {
 
 	for {
 		select {
-		case peer := <-pm.peersCh:
+		case peer := <-pm.trackerChans.peers:
 			peerID := fmt.Sprintf("%s:%d", peer.IP.String(), peer.Port)
 			_, ok := pm.peers[peerID]
 			if ok {
 				// Peer already exists
 				log.Printf("PeerManager : Peer %s already in map\n", peerID)
 			} else {
-				go ConnectToPeer(peer, pm.connsCh)
+				go ConnectToPeer(peer, pm.serverChans.conns)
 			}
-		case conn := <-pm.connsCh:
+		case conn := <-pm.serverChans.conns:
 			pm.peers[conn.RemoteAddr().String()] = NewPeer(conn, pm.diskIOChans)
 		case <-pm.t.Dying():
 			return

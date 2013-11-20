@@ -26,14 +26,13 @@ const (
 	Completed
 )
 
-type trackerChans struct {
-	completed chan bool
-	stats     chan Stats
-	peers     chan PeerTuple
+type trackerPeerChans struct {
+	stats chan Stats
+	peers chan PeerTuple
 }
 
 type trackerManager struct {
-	chans trackerChans
+	peerChans trackerPeerChans
 	port  uint16
 	t     tomb.Tomb
 }
@@ -54,7 +53,8 @@ type TrackerResponse struct {
 type tracker struct {
 	announceURL *url.URL
 	response    TrackerResponse
-	chans       trackerChans
+	peerChans   trackerPeerChans
+	completedCh chan bool
 	timer     <-chan time.Time
 	stats       Stats
 	key         string
@@ -132,7 +132,7 @@ func (tr *tracker) Announce(event int) {
 			peerPort := uint16(tr.response.Peers[i+4]) << 8
 			peerPort = peerPort | uint16(tr.response.Peers[i+5])
 			// Send the peer IP+port to the Torrent Manager
-			go func() { tr.chans.peers <- PeerTuple{peerIP, peerPort} }()
+			go func() { tr.peerChans.peers <- PeerTuple{peerIP, peerPort} }()
 		}
 	}
 }
@@ -156,18 +156,18 @@ func (tr *tracker) Run() {
 		select {
 		case <-tr.t.Dying():
 			return
-		case <-tr.chans.completed:
+		case <-tr.completedCh:
 			go tr.Announce(Completed)
 		case <-tr.timer:
 			log.Printf("Tracker : Run : Interval Timer Expired (%s)\n", tr.announceURL)
 			go tr.Announce(Interval)
-		case stats := <-tr.chans.stats:
+		case stats := <-tr.peerChans.stats:
 			log.Println("read from stats", stats)
 		}
 	}
 }
 
-func newTracker(key string, chans trackerChans, port uint16, infoHash []byte, announce string) *tracker {
+func newTracker(key string, chans trackerPeerChans, port uint16, infoHash []byte, announce string) *tracker {
 	announceURL, err := url.Parse(announce)
 	if err != nil {
 		log.Fatal(err)
@@ -175,18 +175,17 @@ func newTracker(key string, chans trackerChans, port uint16, infoHash []byte, an
 	if len(key) < 8 {
 		log.Fatalf("newTracker: key too short %d (expected at least 8 bytes)\n", len(key))
 	}
-	tracker := &tracker{key: key, chans: chans, port: port, infoHash: infoHash, announceURL: announceURL}
+	tracker := &tracker{key: key, peerChans: chans, port: port, infoHash: infoHash, announceURL: announceURL}
 	tracker.infoHash = make([]byte, len(infoHash))
 	copy(tracker.infoHash, infoHash)
 	return tracker
 }
 
 func NewTrackerManager(port uint16) *trackerManager {
-	chans := new(trackerChans)
-	chans.completed = make(chan bool)
+	chans := new(trackerPeerChans)
 	chans.peers = make(chan PeerTuple)
 	chans.stats = make(chan Stats)
-	return &trackerManager{chans: *chans, port: port}
+	return &trackerManager{peerChans: *chans, port: port}
 }
 
 func (tm *trackerManager) Stop() error {
@@ -211,7 +210,7 @@ func (tm *trackerManager) Run(m MetaInfo, infoHash []byte) {
 		}
 	*/
 
-	tr := newTracker(initKey(), tm.chans, tm.port, infoHash, m.Announce)
+	tr := newTracker(initKey(), tm.peerChans, tm.port, infoHash, m.Announce)
 	go tr.Run()
 
 	for {

@@ -14,18 +14,21 @@ import (
 	"time"
 )
 
+type serverPeerChans struct {
+	conns  chan *net.TCPConn
+}
+
 type Server struct {
-	connsCh  chan *net.TCPConn
-	statsCh  chan Stats
-	Port     uint16
-	Listener *net.TCPListener
-	t        tomb.Tomb
+	Port      uint16
+	Listener  *net.TCPListener
+	peerChans serverPeerChans
+	t         tomb.Tomb
 }
 
 func NewServer() *Server {
 	sv := new(Server)
 
-	sv.connsCh = make(chan *net.TCPConn)
+	sv.peerChans.conns = make(chan *net.TCPConn)
 
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	var err error
@@ -78,7 +81,7 @@ func (sv *Server) Listen() {
 			return
 		}
 		log.Println("Server: New connection from:", conn.RemoteAddr())
-		sv.connsCh <- conn
+		sv.peerChans.conns <- conn
 	}
 }
 
