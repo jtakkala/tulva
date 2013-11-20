@@ -181,6 +181,11 @@ func TestRaritySeveralValues(t *testing.T) {
 }
 
 
+func TestControllerXYZ(t *testing.T) {
 
+	controllerRxChannels := NewControllerRxChannels()
+	
+
+}
 
 

@@ -94,9 +94,18 @@ type ReceivedPiece struct {
 
 type ControllerRxChannels struct {
 	receivedPieceCh <-chan ReceivedPiece // Other end is IO 
-	newPeerCh <-chan PeerInfo  // Other end is the PeerManager
+	newPeerCh <-chan PeerComms  // Other end is the PeerManager
 	peerChokeStatusCh <-chan PeerChokeStatus  // Other end is Peer. Used when the peer is becomes choked or unchoked
 	havePieceCh <-chan HavePiece  // Other end is Peer. used When the peer receives a HAVE message
+}
+
+func NewControllerRxChannels() *ControllerRxChannels {
+	crc := new(ControllerRxChannels)
+	crc.receivedPieceCh = make(chan ReceivedPiece)
+	crc.newPeerCh = make(chan PeerComms)
+	crc.peerChokeStatusCh = make(chan PeerChokeStatus)
+	crc.havePieceCh = make(chan HavePiece)
+	return crc
 }
 
 func NewController(finishedPieces []bool, 
@@ -454,10 +463,9 @@ func (cont *Controller) Run() {
 			}
 
 
-		case peerInfo := <- cont.rxChannels.newPeerCh:
+		case peerComms := <- cont.rxChannels.newPeerCh:
 
-			// It's assumed that the PeerInfo struct received is brand new, and not reused after
-			// a peer disconnected/reconnected. 
+			peerInfo := *NewPeerInfo(len(cont.finishedPieces), peerComms)
 
 			// Throw an error if the peer is duplicate (same IP/Port. should never happen)
 			if _, exists := cont.peers[peerInfo.peerID]; exists {

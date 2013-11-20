@@ -1,4 +1,4 @@
-// Copyright 2013 Jari Takkala. All rights reserved.
+// Copyright 2013 Jari Takkala and Brian Dignan. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -31,6 +31,22 @@ type PeerManager struct {
 	t       tomb.Tomb
 }
 
+type PeerComms struct {
+	peerID string
+	requestPieceCh  chan<- RequestPiece // Other end is Peer. Used to tell the peer to request a particular piece.
+	cancelPieceCh   chan<- CancelPiece  // Other end is Peer. Used to tell the peer to cancel a particular piece.
+	havePieceCh	chan<- chan<- HavePiece 	// Other end is Peer. Used to give the peer the initial bitfield and new pieces. 
+}
+
+func NewPeerComms(peerID string) *PeerComms {
+	pc := new(PeerComms)
+	pc.peerID = peerID
+	pc.requestPieceCh = make(chan RequestPiece)
+	pc.cancelPieceCh = make(chan CancelPiece)
+	pc.havePieceCh = make(chan chan<- HavePiece)
+	return pc
+}
+
 type PeerInfo struct {
 	peerID          string
 	isChoked        bool // The peer is connected but choked. Defaults to TRUE (choked)
@@ -40,6 +56,21 @@ type PeerInfo struct {
 	requestPieceCh  chan<- RequestPiece // Other end is Peer. Used to tell the peer to request a particular piece.
 	cancelPieceCh   chan<- CancelPiece  // Other end is Peer. Used to tell the peer to cancel a particular piece.
 	havePieceCh	chan<- chan<- HavePiece 	// Other end is Peer. Used to give the peer the initial bitfield and new pieces. 
+}
+
+func NewPeerInfo(quantityOfPieces int, peerComms PeerComms) *PeerInfo {
+	pi := new(PeerInfo)
+
+	pi.peerID = peerComms.peerID
+	pi.requestPieceCh = peerComms.requestPieceCh
+	pi.cancelPieceCh = peerComms.cancelPieceCh
+	pi.havePieceCh = peerComms.havePieceCh
+
+	pi.isChoked = false // By default, a peer starts as being choked by the other side. 
+	pi.availablePieces = make([]bool, quantityOfPieces)
+	pi.activeRequests = make(map[int]struct{})
+
+	return pi
 }
 
 // Sent by the peer to controller indicating a 'choke' state change. It either went from unchoked to choked,
@@ -83,17 +114,6 @@ func NewPeerManager(peersCh chan PeerTuple, statsCh chan Stats, connsCh chan *ne
 	pm.connsCh = connsCh
 	pm.peers = make(map[string]Peer)
 	return pm
-}
-
-func NewPeerInfo(quantityOfPieces int) *PeerInfo {
-	pi := new(PeerInfo)
-	pi.availablePieces = make([]bool, quantityOfPieces)
-	pi.activeRequests = make(map[int]struct{})
-
-	// FIXME Not finished. Need to hook these channels into the Peer struct
-	pi.requestPieceCh = make(chan<- RequestPiece)
-	pi.cancelPieceCh = make(chan<- CancelPiece)
-	return pi
 }
 
 func ConnectToPeer(peerTuple PeerTuple, connCh chan *net.TCPConn) {
