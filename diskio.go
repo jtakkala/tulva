@@ -18,6 +18,9 @@ import (
 type DiskIO struct {
 	metaInfo MetaInfo
 	files    []*os.File
+	readPiece chan Piece
+	writePiece chan Piece
+	requestPiece chan int
 	t        tomb.Tomb
 }
 
