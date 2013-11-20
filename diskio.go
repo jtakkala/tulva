@@ -15,7 +15,7 @@ import (
 	"path/filepath"
 )
 
-type DiskIOPeerChans struct {
+type diskIOPeerChans struct {
 	// Channels to peers
 	writePiece   chan Piece
 	requestPiece chan RequestPieceDisk
@@ -24,7 +24,7 @@ type DiskIOPeerChans struct {
 type DiskIO struct {
 	metaInfo MetaInfo
 	files    []*os.File
-	peerChans DiskIOPeerChans
+	peerChans diskIOPeerChans
 	t        tomb.Tomb
 }
 
