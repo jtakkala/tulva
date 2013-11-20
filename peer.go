@@ -143,10 +143,8 @@ func ConnectToPeer(peerTuple PeerTuple, connCh chan *net.TCPConn) {
 	connCh <- conn
 }
 
-func NewPeer(conn *net.TCPConn, diskIOChans diskIOPeerChans) (peer Peer) {
-	peer.conn = conn
-	peer.diskIOChans = diskIOChans
-	return
+func NewPeer(conn *net.TCPConn, infoHash []byte, diskIOChans diskIOPeerChans) Peer {
+	return Peer{conn: conn, infoHash: infoHash, amChoking: true, amInterested: false, peerChoking: true, peerInterested: false, diskIOChans: diskIOChans}
 }
 
 func (pm *PeerManager) Stop() error {
@@ -173,7 +171,7 @@ func (pm *PeerManager) Run() {
 			}
 		case conn := <-pm.serverChans.conns:
 			// Received a new peer connection, instantiate a peer
-			pm.peers[conn.RemoteAddr().String()] = NewPeer(conn, pm.diskIOChans)
+			pm.peers[conn.RemoteAddr().String()] = NewPeer(conn, pm.infoHash, pm.diskIOChans)
 		case <-pm.t.Dying():
 			return
 		}
