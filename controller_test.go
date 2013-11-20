@@ -211,14 +211,11 @@ func TestControllerRunStop(t *testing.T) {
 
 func TestControllerNewPeerReceiveFinishedBitfield(t *testing.T) {
 
-	crc := new(ControllerRxChannels)
-
 	receivedPieceCh := make(chan ReceivedPiece)
 	newPeerCh := make(chan PeerComms)
 	peerChokeStatusCh := make(chan PeerChokeStatus)
 	havePieceCh := make(chan chan HavePiece)
 	crc := NewControllerRxChannels(receivedPieceCh, newPeerCh, peerChokeStatusCh, havePieceCh)
-
 
 	cont := createTestController(crc)
 	go cont.Run()
@@ -244,7 +241,18 @@ func TestControllerNewPeerReceiveFinishedBitfield(t *testing.T) {
 	cont.Stop()
 }
 
-func TestControllerNewPeerReceiveFinishedBitfield(t *testing.T) {
+func TestControllerNewPeerSendControllerPeerBitfield(t *testing.T) {
+
+	receivedPieceCh := make(chan ReceivedPiece)
+	newPeerCh := make(chan PeerComms)
+	peerChokeStatusCh := make(chan PeerChokeStatus)
+	havePieceCh := make(chan chan HavePiece)
+	crc := NewControllerRxChannels(receivedPieceCh, newPeerCh, peerChokeStatusCh, havePieceCh)
+
+	cont := createTestController(crc)
+	go cont.Run()
+
+	cont.Stop()
 
 }
 
