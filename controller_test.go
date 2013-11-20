@@ -202,25 +202,23 @@ func TestControllerRunStop(t *testing.T) {
 	crc.receivedPiece = make(chan ReceivedPiece)
 	crc.newPeer = make(chan PeerComms)
 	crc.peerChokeStatus = make(chan PeerChokeStatus)
-	crc.havePiece = make(chan HavePiece)
+	crc.havePiece = make(chan chan HavePiece)
 
 	cont := createTestController(crc)
 	go cont.Run()
 	cont.Stop()
 }
 
-func TestControllerNewPeer(t *testing.T) {
+func TestControllerNewPeerReceiveFinishedBitfield(t *testing.T) {
 
 	crc := new(ControllerRxChannels)
 
 	receivedPieceCh := make(chan ReceivedPiece)
 	newPeerCh := make(chan PeerComms)
 	peerChokeStatusCh := make(chan PeerChokeStatus)
-	havePieceCh := make(chan HavePiece)
-	crc.receivedPiece = receivedPieceCh
-	crc.newPeer = newPeerCh
-	crc.peerChokeStatus = peerChokeStatusCh
-	crc.havePiece = havePieceCh
+	havePieceCh := make(chan chan HavePiece)
+	crc := NewControllerRxChannels(receivedPieceCh, newPeerCh, peerChokeStatusCh, havePieceCh)
+
 
 	cont := createTestController(crc)
 	go cont.Run()
@@ -232,7 +230,7 @@ func TestControllerNewPeer(t *testing.T) {
 
 	innerChan := <- peer1HavePieceCh
 
-	receivedBitField := make([]int, len(cont.finishedPieces))
+	receivedBitField := make([]bool, len(cont.finishedPieces))
 	for havePiece := range innerChan {
 		receivedBitField[havePiece.pieceNum] = true
 	}
@@ -243,7 +241,11 @@ func TestControllerNewPeer(t *testing.T) {
 		}
 	}
 
-	controller.Stop()
+	cont.Stop()
+}
+
+func TestControllerNewPeerReceiveFinishedBitfield(t *testing.T) {
+
 }
 
 
