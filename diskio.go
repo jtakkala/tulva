@@ -35,8 +35,8 @@ func (diskio *DiskIO) checkHash(buf []byte, pieceIndex int) bool {
 // Verify reads in each file and verifies the SHA-1 checksum of each piece.
 // Return the boolean list pieces that are correct.
 func (diskio *DiskIO) Verify() (finishedPieces []bool) {
-	log.Println("IO : Verify : Started")
-	defer log.Println("IO : Verify : Completed")
+	log.Println("DiskIO : Verify : Started")
+	defer log.Println("DiskIO : Verify : Completed")
 
 	buf := make([]byte, diskio.metaInfo.Info.PieceLength)
 	var pieceIndex, n int
@@ -158,15 +158,15 @@ func (diskio *DiskIO) Init() {
 }
 
 func (diskio *DiskIO) Stop() error {
-	log.Println("IO : Stop : Stopping")
+	log.Println("DiskIO : Stop : Stopping")
 	diskio.t.Kill(nil)
 	return diskio.t.Wait()
 }
 
 func (diskio *DiskIO) Run() {
-	log.Println("IO : Run : Started")
+	log.Println("DiskIO : Run : Started")
 	defer diskio.t.Done()
-	defer log.Println("IO : Run : Completed")
+	defer log.Println("DiskIO : Run : Completed")
 
 	diskio.Init()
 	finishedPieces := diskio.Verify()
