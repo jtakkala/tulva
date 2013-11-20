@@ -189,6 +189,10 @@ func (diskio *DiskIO) Run() {
 
 	for {
 		select {
+		case piece := <-diskio.peerChans.writePiece:
+			fmt.Println(piece)
+		case request := <-diskio.peerChans.requestPiece:
+			fmt.Println(request)
 		case <-diskio.t.Dying():
 			return
 		}
