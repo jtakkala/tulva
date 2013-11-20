@@ -2,6 +2,7 @@ package main
 
 import (
 	"testing"
+	"strconv"
 )
 
 func assertOrder(t *testing.T, sortedPieceSlice []int, index int, expectedPieceNum int) {
@@ -180,13 +181,57 @@ func TestRaritySeveralValues(t *testing.T) {
 		
 }
 
+func createDummyPieceHashSlice(sliceLength int) []string {
+	pieceHashes := make([]string, sliceLength)
+	for index := 0; index < sliceLength; index++ {
+		pieceHashes[index] = strconv.FormatInt(int64(index), 10)
+	} 
+	return pieceHashes
+}
 
-func TestControllerXYZ(t *testing.T) {
+func createTestController(controllerRxChannels *ControllerRxChannels) *Controller {
+	finishedPieces := []bool{true, false, false, false, false, false, false, false, false, true}
+	pieceHashes := createDummyPieceHashSlice(len(finishedPieces))
+	//controllerRxChannels := NewControllerRxChannels()
+	return NewController(finishedPieces, pieceHashes, controllerRxChannels)
+}
 
-	finishedPieces := []int{true, false, false, false, false, false, false, false, false, true}
-	controllerRxChannels := NewControllerRxChannels()
+func TestControllerRunStop(t *testing.T) {
+
+	crc := new(ControllerRxChannels)
+	crc.receivedPiece = make(chan ReceivedPiece)
+	crc.newPeer = make(chan PeerComms)
+	crc.peerChokeStatus = make(chan PeerChokeStatus)
+	crc.havePiece = make(chan HavePiece)
+
+	controller := createTestController(crc)
+	go controller.Run()
+	controller.Stop()
+}
+
+func TestControllerNewPeer(t *testing.T) {
+
+	crc := new(ControllerRxChannels)
+
+	receivedPieceCh := make(chan ReceivedPiece)
+	newPeerCh := make(chan PeerComms)
+	peerChokeStatusCh := make(chan PeerChokeStatus)
+	havePieceCh := make(chan HavePiece)
+	crc.receivedPiece = receivedPieceCh
+	crc.newPeer = newPeerCh
+	crc.peerChokeStatus = peerChokeStatusCh
+	crc.havePiece = havePieceCh
+
+	controller := createTestController(crc)
+	go controller.Run()
+
+	//peer1Comms, peer1RequestPieceCh, peer1CancelPieceCh, peer1HavePieceCh := NewPeerComms("1.2.3.4:1234")
+	peer1Comms, _, _, _ := NewPeerComms("1.2.3.4:1234")
+	newPeerCh <- *peer1Comms
 
 
+
+	controller.Stop()
 }
 
 
