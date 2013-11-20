@@ -21,12 +21,14 @@ type PeerTuple struct {
 
 type Peer struct {
 	conn *net.TCPConn
+	diskIOChans DiskIOPeerChans
 }
 
 type PeerManager struct {
 	peersCh <-chan PeerTuple
 	statsCh chan Stats
 	connsCh chan *net.TCPConn
+	diskIOChans DiskIOPeerChans
 	peers	map[string]Peer
 	t       tomb.Tomb
 }
@@ -110,11 +112,12 @@ func sortedPeersByQtyPiecesNeeded(peers map[string]PeerInfo) SortedPeers {
 	return peerInfoSlice
 }
 
-func NewPeerManager(peersCh chan PeerTuple, statsCh chan Stats, connsCh chan *net.TCPConn) *PeerManager {
+func NewPeerManager(peersCh chan PeerTuple, statsCh chan Stats, connsCh chan *net.TCPConn, diskIOChans DiskIOPeerChans) *PeerManager {
 	pm := new(PeerManager)
 	pm.peersCh = peersCh
 	pm.statsCh = statsCh
 	pm.connsCh = connsCh
+	pm.diskIOChans = diskIOChans
 	pm.peers = make(map[string]Peer)
 	return pm
 }
@@ -136,8 +139,9 @@ func ConnectToPeer(peerTuple PeerTuple, connCh chan *net.TCPConn) {
 }
 
 
-func NewPeer(conn *net.TCPConn) (peer Peer) {
+func NewPeer(conn *net.TCPConn, diskIOChans DiskIOPeerChans) (peer Peer) {
 	peer.conn = conn
+	peer.diskIOChans = diskIOChans
 	return
 }
 
@@ -164,7 +168,7 @@ func (pm *PeerManager) Run() {
 				go ConnectToPeer(peer, pm.connsCh)
 			}
 		case conn := <-pm.connsCh:
-			pm.peers[conn.RemoteAddr().String()] = NewPeer(conn)
+			pm.peers[conn.RemoteAddr().String()] = NewPeer(conn, pm.diskIOChans)
 		case <-pm.t.Dying():
 			return
 		}

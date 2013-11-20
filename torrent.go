@@ -73,8 +73,8 @@ func (t *Torrent) Run() {
 	defer log.Println("Torrent : Run : Completed")
 	t.Init()
 
-	diskio := NewDiskIO(t.metaInfo)
-	go diskio.Run()
+	diskIO := NewDiskIO(t.metaInfo)
+	go diskIO.Run()
 
 	server := NewServer()
 	go server.Run()
@@ -82,7 +82,7 @@ func (t *Torrent) Run() {
 	trackerManager := NewTrackerManager(server.Port)
 	go trackerManager.Run(t.metaInfo, t.infoHash)
 
-	peerManager := NewPeerManager(trackerManager.chans.peers, trackerManager.chans.stats, server.connsCh)
+	peerManager := NewPeerManager(trackerManager.chans.peers, trackerManager.chans.stats, server.connsCh, diskIO.peerChans)
 	go peerManager.Run()
 
 	for {
