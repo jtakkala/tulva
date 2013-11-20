@@ -189,43 +189,37 @@ func createDummyPieceHashSlice(sliceLength int) []string {
 	return pieceHashes
 }
 
-func createTestController(controllerRxChannels *ControllerRxChannels) *Controller {
+func createTestController() *Controller {
 	finishedPieces := []bool{true, false, false, false, false, false, false, false, false, true}
 	pieceHashes := createDummyPieceHashSlice(len(finishedPieces))
-	//controllerRxChannels := NewControllerRxChannels()
-	return NewController(finishedPieces, pieceHashes, controllerRxChannels)
+	controllerRxChans := NewControllerRxChans(
+		NewControllerDiskIOChans(),
+		NewControllerPeerManagerChans(),
+		NewPeerControllerChans())
+	return NewController(finishedPieces, pieceHashes, controllerRxChans)
 }
 
 func TestControllerRunStop(t *testing.T) {
 
-	crc := new(ControllerRxChannels)
-	crc.receivedPiece = make(chan ReceivedPiece)
-	crc.newPeer = make(chan PeerComms)
-	crc.peerChokeStatus = make(chan PeerChokeStatus)
-	crc.havePiece = make(chan chan HavePiece)
-
-	cont := createTestController(crc)
+	cont := createTestController()
 	go cont.Run()
 	cont.Stop()
 }
 
 func TestControllerNewPeerReceiveFinishedBitfield(t *testing.T) {
 
-	receivedPieceCh := make(chan ReceivedPiece)
-	newPeerCh := make(chan PeerComms)
-	peerChokeStatusCh := make(chan PeerChokeStatus)
-	havePieceCh := make(chan chan HavePiece)
-	crc := NewControllerRxChannels(receivedPieceCh, newPeerCh, peerChokeStatusCh, havePieceCh)
-
-	cont := createTestController(crc)
+	cont := createTestController()
 	go cont.Run()
 
-	//peer1Comms, peer1RequestPieceCh, peer1CancelPieceCh, peer1HavePieceCh := NewPeerComms("1.2.3.4:1234")
-	peer1Comms, _, _, peer1HavePieceCh := NewPeerComms("1.2.3.4:1234")
-	//peer1Comms, _, _, _ := NewPeerComms("1.2.3.4:1234")
-	newPeerCh <- *peer1Comms
 
-	innerChan := <- peer1HavePieceCh
+	peer1Comms := NewPeerComms("1.2.3.4:1234", *NewControllerPeerChans())
+
+	cont.rxChans.peerManager.newPeer <- *peer1Comms
+
+	// Since this is a new peer, we expect the controller to send the entire bitfield over the HavePiece
+	// channel. 
+	// Emulate the peer by receiving the entire bitfield over the HavePiece chan from the controller
+	innerChan := <- peer1Comms.chans.havePiece
 
 	receivedBitField := make([]bool, len(cont.finishedPieces))
 	for havePiece := range innerChan {
@@ -243,13 +237,7 @@ func TestControllerNewPeerReceiveFinishedBitfield(t *testing.T) {
 
 func TestControllerNewPeerSendControllerPeerBitfield(t *testing.T) {
 
-	receivedPieceCh := make(chan ReceivedPiece)
-	newPeerCh := make(chan PeerComms)
-	peerChokeStatusCh := make(chan PeerChokeStatus)
-	havePieceCh := make(chan chan HavePiece)
-	crc := NewControllerRxChannels(receivedPieceCh, newPeerCh, peerChokeStatusCh, havePieceCh)
-
-	cont := createTestController(crc)
+	cont := createTestController()
 	go cont.Run()
 
 	cont.Stop()

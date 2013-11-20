@@ -61,7 +61,7 @@ type Controller struct {
 	pieceHashes []string
 	activeRequestsTotals []int 
 	peers map[string]PeerInfo
-	rxChans *ControllerRxChannels 
+	rxChans *ControllerRxChans
 	t tomb.Tomb
 }
 
@@ -104,19 +104,19 @@ func NewPeerControllerChans() *PeerControllerChans {
 	return &PeerControllerChans{ chokeStatus: make(chan PeerChokeStatus), havePiece: make(chan chan HavePiece)}
 }
 
-type ControllerRxChannels struct {
+type ControllerRxChans struct {
 	diskIO 		ControllerDiskIOChans
 	peerManager ControllerPeerManagerChans
 	peer 		PeerControllerChans
 }
 
-func NewControllerRxChannels( diskIO ControllerDiskIOChans, peerManager ControllerPeerManagerChans, peer PeerControllerChans) *ControllerRxChannels {
-	return &ControllerRxChannels{ diskIO, peerManager, peer }
+func NewControllerRxChans( diskIO *ControllerDiskIOChans, peerManager *ControllerPeerManagerChans, peer *PeerControllerChans) *ControllerRxChans {
+	return &ControllerRxChans{ *diskIO, *peerManager, *peer }
 }
 
 func NewController(finishedPieces []bool, 
 					pieceHashes []string, 
-					rxChans *ControllerRxChannels) *Controller {
+					rxChans *ControllerRxChans) *Controller {
 
 	cont := new(Controller)
 	cont.finishedPieces = finishedPieces
