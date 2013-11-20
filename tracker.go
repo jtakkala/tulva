@@ -84,7 +84,7 @@ func (tr *tracker) Announce(event int) {
 	// Build and encode the Tracker Request
 	urlParams := url.Values{}
 	urlParams.Set("info_hash", string(tr.infoHash))
-	urlParams.Set("peer_id", string(PeerId[:]))
+	urlParams.Set("peer_id", string(PeerID[:]))
 	urlParams.Set("key", tr.key)
 	urlParams.Set("port", strconv.FormatUint(uint64(tr.port), 10))
 	urlParams.Set("uploaded", strconv.Itoa(tr.stats.Uploaded))
