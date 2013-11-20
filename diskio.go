@@ -15,17 +15,16 @@ import (
 	"path/filepath"
 )
 
-type DiskIOChans struct {
+type diskIOPeerChans struct {
 	// Channels to peers
 	writePiece   chan Piece
 	requestPiece chan RequestPieceDisk
-	// Channels to controller
 }
 
 type DiskIO struct {
 	metaInfo MetaInfo
 	files    []*os.File
-	chans    DiskIOChans
+	peerChans diskIOPeerChans
 	t        tomb.Tomb
 }
 
@@ -138,8 +137,8 @@ func openOrCreateFile(name string) (file *os.File) {
 func NewDiskIO(metaInfo MetaInfo) *DiskIO {
 	diskio := new(DiskIO)
 	diskio.metaInfo = metaInfo
-	diskio.chans.writePiece = make(chan Piece)
-	diskio.chans.requestPiece = make(chan RequestPieceDisk)
+	diskio.peerChans.writePiece = make(chan Piece)
+	diskio.peerChans.requestPiece = make(chan RequestPieceDisk)
 	return diskio
 }
 
@@ -190,6 +189,10 @@ func (diskio *DiskIO) Run() {
 
 	for {
 		select {
+		case piece := <-diskio.peerChans.writePiece:
+			fmt.Println(piece)
+		case request := <-diskio.peerChans.requestPiece:
+			fmt.Println(request)
 		case <-diskio.t.Dying():
 			return
 		}

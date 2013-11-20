@@ -20,22 +20,30 @@ type PeerTuple struct {
 }
 
 type Peer struct {
-	conn *net.TCPConn
+	conn           *net.TCPConn
+	amChoking      bool
+	amInterested   bool
+	peerChoking    bool
+	peerInterested bool
+	infoHash       []byte
+	diskIOChans    diskIOPeerChans
+	t              tomb.Tomb
 }
 
 type PeerManager struct {
-	peersCh <-chan PeerTuple
-	statsCh chan Stats
-	connsCh chan *net.TCPConn
-	peers	map[string]Peer
-	t       tomb.Tomb
+	peers        map[string]*Peer
+	infoHash     []byte
+	serverChans  serverPeerChans
+	trackerChans trackerPeerChans
+	diskIOChans  diskIOPeerChans
+	t            tomb.Tomb
 }
 
 type PeerComms struct {
-	peerID string
-	requestPiece  chan<- RequestPiece // Other end is Peer. Used to tell the peer to request a particular piece.
-	cancelPiece   chan<- CancelPiece  // Other end is Peer. Used to tell the peer to cancel a particular piece.
-	havePiece	chan<- chan HavePiece // Other end is Peer. Used to give the peer the initial bitfield and new pieces. 
+	peerID       string
+	requestPiece chan<- RequestPiece   // Other end is Peer. Used to tell the peer to request a particular piece.
+	cancelPiece  chan<- CancelPiece    // Other end is Peer. Used to tell the peer to cancel a particular piece.
+	havePiece    chan<- chan HavePiece // Other end is Peer. Used to give the peer the initial bitfield and new pieces.
 }
 
 func NewPeerComms(peerID string) (*PeerComms, chan RequestPiece, chan CancelPiece, chan chan HavePiece) {
@@ -47,7 +55,7 @@ func NewPeerComms(peerID string) (*PeerComms, chan RequestPiece, chan CancelPiec
 	pc.cancelPiece = cancelPieceCh
 	havePieceCh := make(chan chan HavePiece)
 	pc.havePiece = havePieceCh
-	return pc, requestPieceCh, cancelPieceCh, havePieceCh 
+	return pc, requestPieceCh, cancelPieceCh, havePieceCh
 }
 
 type PeerInfo struct {
@@ -55,10 +63,10 @@ type PeerInfo struct {
 	isChoked        bool // The peer is connected but choked. Defaults to TRUE (choked)
 	availablePieces []bool
 	activeRequests  map[int]struct{}
-	qtyPiecesNeeded int                 // The quantity of pieces that this peer has that we haven't yet downloaded.
-	requestPieceCh  chan<- RequestPiece // Other end is Peer. Used to tell the peer to request a particular piece.
-	cancelPieceCh   chan<- CancelPiece  // Other end is Peer. Used to tell the peer to cancel a particular piece.
-	havePieceCh	chan<- chan HavePiece // Other end is Peer. Used to give the peer the initial bitfield and new pieces. 
+	qtyPiecesNeeded int                   // The quantity of pieces that this peer has that we haven't yet downloaded.
+	requestPieceCh  chan<- RequestPiece   // Other end is Peer. Used to tell the peer to request a particular piece.
+	cancelPieceCh   chan<- CancelPiece    // Other end is Peer. Used to tell the peer to cancel a particular piece.
+	havePieceCh     chan<- chan HavePiece // Other end is Peer. Used to give the peer the initial bitfield and new pieces.
 }
 
 func NewPeerInfo(quantityOfPieces int, peerComms PeerComms) *PeerInfo {
@@ -69,7 +77,7 @@ func NewPeerInfo(quantityOfPieces int, peerComms PeerComms) *PeerInfo {
 	pi.cancelPieceCh = peerComms.cancelPiece
 	pi.havePieceCh = peerComms.havePiece
 
-	pi.isChoked = false // By default, a peer starts as being choked by the other side. 
+	pi.isChoked = false // By default, a peer starts as being choked by the other side.
 	pi.availablePieces = make([]bool, quantityOfPieces)
 	pi.activeRequests = make(map[int]struct{})
 
@@ -77,10 +85,10 @@ func NewPeerInfo(quantityOfPieces int, peerComms PeerComms) *PeerInfo {
 }
 
 // Sent by the peer to controller indicating a 'choke' state change. It either went from unchoked to choked,
-// or from choked to unchoked. 
+// or from choked to unchoked.
 type PeerChokeStatus struct {
-	peerID string
-	isChoked bool	
+	peerID   string
+	isChoked bool
 }
 
 type SortedPeers []PeerInfo
@@ -110,17 +118,18 @@ func sortedPeersByQtyPiecesNeeded(peers map[string]PeerInfo) SortedPeers {
 	return peerInfoSlice
 }
 
-func NewPeerManager(peersCh chan PeerTuple, statsCh chan Stats, connsCh chan *net.TCPConn) *PeerManager {
+func NewPeerManager(infoHash []byte, diskIOChans diskIOPeerChans, serverChans serverPeerChans, trackerChans trackerPeerChans) *PeerManager {
 	pm := new(PeerManager)
-	pm.peersCh = peersCh
-	pm.statsCh = statsCh
-	pm.connsCh = connsCh
-	pm.peers = make(map[string]Peer)
+	pm.infoHash = infoHash
+	pm.diskIOChans = diskIOChans
+	pm.serverChans = serverChans
+	pm.trackerChans = trackerChans
+	pm.peers = make(map[string]*Peer)
 	return pm
 }
 
 func ConnectToPeer(peerTuple PeerTuple, connCh chan *net.TCPConn) {
-	raddr := net.TCPAddr { peerTuple.IP, int(peerTuple.Port), "" }
+	raddr := net.TCPAddr{peerTuple.IP, int(peerTuple.Port), ""}
 	conn, err := net.DialTCP("tcp4", nil, &raddr)
 	if err != nil {
 		if e, ok := err.(*net.OpError); ok {
@@ -135,10 +144,21 @@ func ConnectToPeer(peerTuple PeerTuple, connCh chan *net.TCPConn) {
 	connCh <- conn
 }
 
+func NewPeer(conn *net.TCPConn, infoHash []byte, diskIOChans diskIOPeerChans) *Peer {
+	return &Peer{conn: conn, infoHash: infoHash, amChoking: true, amInterested: false, peerChoking: true, peerInterested: false, diskIOChans: diskIOChans}
+}
 
-func NewPeer(conn *net.TCPConn) (peer Peer) {
-	peer.conn = conn
-	return
+func (p *Peer) Run() {
+	log.Println("Peer : Run : Started")
+	defer p.t.Done()
+	defer log.Println("Peer : Run : Completed")
+
+	for {
+		select {
+		case <-p.t.Dying():
+			return
+		}
+	}
 }
 
 func (pm *PeerManager) Stop() error {
@@ -154,17 +174,19 @@ func (pm *PeerManager) Run() {
 
 	for {
 		select {
-		case peer := <-pm.peersCh:
+		case peer := <-pm.trackerChans.peers:
 			peerID := fmt.Sprintf("%s:%d", peer.IP.String(), peer.Port)
 			_, ok := pm.peers[peerID]
 			if ok {
 				// Peer already exists
 				log.Printf("PeerManager : Peer %s already in map\n", peerID)
 			} else {
-				go ConnectToPeer(peer, pm.connsCh)
+				go ConnectToPeer(peer, pm.serverChans.conns)
 			}
-		case conn := <-pm.connsCh:
-			pm.peers[conn.RemoteAddr().String()] = NewPeer(conn)
+		case conn := <-pm.serverChans.conns:
+			// Received a new peer connection, instantiate a peer
+			pm.peers[conn.RemoteAddr().String()] = NewPeer(conn, pm.infoHash, pm.diskIOChans)
+			go pm.peers[conn.RemoteAddr().String()].Run()
 		case <-pm.t.Dying():
 			return
 		}

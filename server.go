@@ -5,7 +5,6 @@
 package main
 
 import (
-	"fmt"
 	"launchpad.net/tomb"
 	"log"
 	"math/rand"
@@ -14,18 +13,21 @@ import (
 	"time"
 )
 
+type serverPeerChans struct {
+	conns chan *net.TCPConn
+}
+
 type Server struct {
-	connsCh  chan *net.TCPConn
-	statsCh  chan Stats
-	Port     uint16
-	Listener *net.TCPListener
-	t        tomb.Tomb
+	Port      uint16
+	Listener  *net.TCPListener
+	peerChans serverPeerChans
+	t         tomb.Tomb
 }
 
 func NewServer() *Server {
 	sv := new(Server)
 
-	sv.connsCh = make(chan *net.TCPConn)
+	sv.peerChans.conns = make(chan *net.TCPConn)
 
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	var err error
@@ -34,13 +36,9 @@ func NewServer() *Server {
 	// Try up to 10 times, then exit if we can't bind
 	for i := 0; ; i++ {
 		sv.Port = uint16(r.Intn(49151)) + uint16(16384)
-		portString := fmt.Sprintf(":%d", sv.Port)
-		// TODO: Undo override of default port
+		// TODO: Undo override of random port
 		sv.Port = uint16(6881)
-		portString = ":6881"
-		fmt.Println(portString)
-		laddr := net.TCPAddr { net.ParseIP("0.0.0.0"), 6881, ""}
-		sv.Listener, err = net.ListenTCP("tcp4", &laddr)
+		sv.Listener, err = net.ListenTCP("tcp4", &net.TCPAddr{net.ParseIP("0.0.0.0"), int(sv.Port), ""})
 		if err != nil {
 			if e, ok := err.(*net.OpError); ok {
 				// If reason is EADDRINUSE, then try up to 10 times
@@ -78,7 +76,7 @@ func (sv *Server) Listen() {
 			return
 		}
 		log.Println("Server: New connection from:", conn.RemoteAddr())
-		sv.connsCh <- conn
+		sv.peerChans.conns <- conn
 	}
 }
 
