@@ -65,33 +65,6 @@ type Controller struct {
 	t tomb.Tomb
 }
 
-// Sent from the controller to the peer to request a particular piece
-type RequestPiece struct {
-	pieceNum int
-	expectedHash string
-}
-
-// Sent by the peer to the controller when it receives a HAVE message
-type HavePiece struct {
-	pieceNum int
-	peerID string  
-}
-
-// Sent from the controller to the peer to cancel an outstanding request
-// Also sent from the peer to the controller when it's been choked or 
-// when it loses its network connection 
-type CancelPiece struct {
-	pieceNum int
-	peerID string // needed for when the peer sends a cancel to the controller
-}
-
-// Sent from IO to the controller indicating that a piece has been 
-// received and written to disk
-type ReceivedPiece struct {
-	pieceNum int
-	peerID string
-}
-
 type ControllerRxChannels struct {
 	receivedPiece <-chan ReceivedPiece // Other end is IO 
 	newPeer <-chan PeerComms  // Other end is the PeerManager
