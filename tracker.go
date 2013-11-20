@@ -26,12 +26,16 @@ const (
 	Completed
 )
 
-type TrackerManager struct {
-	completedCh chan bool
-	statsCh     chan Stats
-	peersCh     chan PeerTuple
-	port        uint16
-	t           tomb.Tomb
+type trackerChans struct {
+	completed chan bool
+	stats     chan Stats
+	peers     chan PeerTuple
+}
+
+type trackerManager struct {
+	chans trackerChans
+	port  uint16
+	t     tomb.Tomb
 }
 
 type TrackerResponse struct {
@@ -47,13 +51,11 @@ type TrackerResponse struct {
 	//	Peers          []Peers "peers"
 }
 
-type Tracker struct {
+type tracker struct {
 	announceUrl *url.URL
 	response    TrackerResponse
-	completedCh <-chan bool
-	statsCh     <-chan Stats
-	peersCh     chan<- PeerTuple
-	timerCh     <-chan time.Time
+	chans       trackerChans
+	timer     <-chan time.Time
 	stats       Stats
 	key         string
 	port        uint16
@@ -61,16 +63,16 @@ type Tracker struct {
 	t           tomb.Tomb
 }
 
-func initKey() (key []byte) {
+func initKey() (string) {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	key = make([]byte, 4)
+	key := make([]byte, 4)
 	for i := 0; i < 4; i++ {
 		key[i] = byte(r.Intn(256))
 	}
-	return
+	return hex.EncodeToString(key)
 }
 
-func (tr *Tracker) Announce(event int) {
+func (tr *tracker) Announce(event int) {
 	log.Println("Tracker : Announce : Started")
 	defer log.Println("Tracker : Announce : Completed")
 
@@ -119,7 +121,7 @@ func (tr *Tracker) Announce(event int) {
 	if tr.response.Interval != 0 && event != Stopped {
 		nextAnnounce := time.Second * time.Duration(tr.response.Interval)
 		log.Printf("Tracker : Announce : Scheduling next announce in %v\n", nextAnnounce)
-		tr.timerCh = time.After(nextAnnounce)
+		tr.timer = time.After(nextAnnounce)
 	}
 
 	// If we're not stopping, send the list of peers to the peers channel
@@ -130,53 +132,71 @@ func (tr *Tracker) Announce(event int) {
 			peerPort := uint16(tr.response.Peers[i+4]) << 8
 			peerPort = peerPort | uint16(tr.response.Peers[i+5])
 			// Send the peer IP+port to the Torrent Manager
-			go func() { tr.peersCh <- PeerTuple{peerIP, peerPort} }()
+			go func() { tr.chans.peers <- PeerTuple{peerIP, peerPort} }()
 		}
 	}
 }
 
-func (tr *Tracker) Stop() error {
+func (tr *tracker) Stop() error {
 	log.Println("Tracker : Stop : Stopping")
 	tr.Announce(Stopped)
 	tr.t.Kill(nil)
 	return tr.t.Wait()
 }
 
-func (tr *Tracker) Run() {
+func (tr *tracker) Run() {
 	log.Printf("Tracker : Run : Started (%s)\n", tr.announceUrl)
 	defer tr.t.Done()
 	defer log.Printf("Tracker : Run : Completed (%s)\n", tr.announceUrl)
 
-	tr.timerCh = make(<-chan time.Time)
+	tr.timer = make(<-chan time.Time)
 	tr.Announce(Started)
 
 	for {
 		select {
 		case <-tr.t.Dying():
 			return
-		case <-tr.completedCh:
+		case <-tr.chans.completed:
 			go tr.Announce(Completed)
-		case <-tr.timerCh:
+		case <-tr.timer:
 			log.Printf("Tracker : Run : Interval Timer Expired (%s)\n", tr.announceUrl)
 			go tr.Announce(Interval)
-		case stats := <-tr.statsCh:
+		case stats := <-tr.chans.stats:
 			log.Println("read from stats", stats)
 		}
 	}
 }
 
-func NewTrackerManager(port uint16) *TrackerManager {
-	return &TrackerManager{peersCh: make(chan PeerTuple), completedCh: make(chan bool), statsCh: make(chan Stats), port: port}
+func newTracker(key string, chans trackerChans, port uint16, infoHash []byte, announce string) *tracker {
+	announceURL, err := url.Parse(announce)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if len(key) < 8 {
+		log.Fatalf("newTracker: key too short %d (expected at least 8 bytes)\n", len(key))
+	}
+	tracker := &tracker{key: key, chans: chans, port: port, infoHash: infoHash, announceUrl: announceURL}
+	tracker.infoHash = make([]byte, len(infoHash))
+	copy(tracker.infoHash, infoHash)
+	return tracker
 }
 
-func (tm *TrackerManager) Stop() error {
+func NewTrackerManager(port uint16) *trackerManager {
+	chans := new(trackerChans)
+	chans.completed = make(chan bool)
+	chans.peers = make(chan PeerTuple)
+	chans.stats = make(chan Stats)
+	return &trackerManager{chans: *chans, port: port}
+}
+
+func (tm *trackerManager) Stop() error {
 	log.Println("TrackerManager : Stop : Stopping")
 	tm.t.Kill(nil)
 	return tm.t.Wait()
 }
 
 // Run spawns trackers for each announce URL
-func (tm *TrackerManager) Run(m MetaInfo, infoHash []byte) {
+func (tm *trackerManager) Run(m MetaInfo, infoHash []byte) {
 	log.Println("TrackerManager : Run : Started")
 	defer tm.t.Done()
 	defer log.Println("TrackerManager : Run : Completed")
@@ -191,15 +211,7 @@ func (tm *TrackerManager) Run(m MetaInfo, infoHash []byte) {
 		}
 	*/
 
-	tr := new(Tracker)
-	tr.key = hex.EncodeToString(initKey())
-	tr.statsCh = tm.statsCh
-	tr.peersCh = tm.peersCh
-	tr.completedCh = tm.completedCh
-	tr.port = tm.port
-	tr.infoHash = make([]byte, len(infoHash))
-	copy(tr.infoHash, infoHash)
-	tr.announceUrl, _ = url.Parse(m.Announce)
+	tr := newTracker(initKey(), tm.chans, tm.port, infoHash, m.Announce)
 	go tr.Run()
 
 	for {
