@@ -46,44 +46,33 @@ type PeerManager struct {
 }
 
 type PeerComms struct {
-	peerID       string
-	requestPiece chan<- RequestPiece   // Other end is Peer. Used to tell the peer to request a particular piece.
-	cancelPiece  chan<- CancelPiece    // Other end is Peer. Used to tell the peer to cancel a particular piece.
-	havePiece    chan<- chan HavePiece // Other end is Peer. Used to give the peer the initial bitfield and new pieces.
+	peerName     string
+	chans 		 ControllerPeerChans	
 }
 
-func NewPeerComms(peerID string) (*PeerComms, chan RequestPiece, chan CancelPiece, chan chan HavePiece) {
+func NewPeerComms(peerName string, cpc ControllerPeerChans) *PeerComms {
 	pc := new(PeerComms)
-	pc.peerID = peerID
-	requestPieceCh := make(chan RequestPiece)
-	pc.requestPiece = requestPieceCh
-	cancelPieceCh := make(chan CancelPiece)
-	pc.cancelPiece = cancelPieceCh
-	havePieceCh := make(chan chan HavePiece)
-	pc.havePiece = havePieceCh
-	return pc, requestPieceCh, cancelPieceCh, havePieceCh
+	pc.peerName = peerName
+	pc.chans = cpc
+	return pc
 }
 
 type PeerInfo struct {
-	peerID          string
+	peerName        string
 	isChoked        bool // The peer is connected but choked. Defaults to TRUE (choked)
 	availablePieces []bool
 	activeRequests  map[int]struct{}
 	qtyPiecesNeeded int                   // The quantity of pieces that this peer has that we haven't yet downloaded.
-	requestPieceCh  chan<- RequestPiece   // Other end is Peer. Used to tell the peer to request a particular piece.
-	cancelPieceCh   chan<- CancelPiece    // Other end is Peer. Used to tell the peer to cancel a particular piece.
-	havePieceCh     chan<- chan HavePiece // Other end is Peer. Used to give the peer the initial bitfield and new pieces.
+	chans 			ControllerPeerChans
 }
 
 func NewPeerInfo(quantityOfPieces int, peerComms PeerComms) *PeerInfo {
 	pi := new(PeerInfo)
 
-	pi.peerID = peerComms.peerID
-	pi.requestPieceCh = peerComms.requestPiece
-	pi.cancelPieceCh = peerComms.cancelPiece
-	pi.havePieceCh = peerComms.havePiece
+	pi.peerName = peerComms.peerName
+	pi.chans = peerComms.chans
 
-	pi.isChoked = false // By default, a peer starts as being choked by the other side.
+	pi.isChoked = true // By default, a peer starts as being choked by the other side.
 	pi.availablePieces = make([]bool, quantityOfPieces)
 	pi.activeRequests = make(map[int]struct{})
 
@@ -93,7 +82,7 @@ func NewPeerInfo(quantityOfPieces int, peerComms PeerComms) *PeerInfo {
 // Sent by the peer to controller indicating a 'choke' state change. It either went from unchoked to choked,
 // or from choked to unchoked.
 type PeerChokeStatus struct {
-	peerID   string
+	peerName   string
 	isChoked bool
 }
 
