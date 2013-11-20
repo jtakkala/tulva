@@ -10,8 +10,12 @@ import (
 	"log"
 	"net"
 	"sort"
+	"strconv"
 	"syscall"
+	"time"
 )
+
+const pstr = "BitTorrent protocol"
 
 // PeerTuple represents a single IP+port pair of a peer
 type PeerTuple struct {
@@ -25,6 +29,8 @@ type Peer struct {
 	amInterested   bool
 	peerChoking    bool
 	peerInterested bool
+	keepalive      <-chan time.Time
+	read           chan []byte
 	infoHash       []byte
 	diskIOChans    diskIOPeerChans
 	t              tomb.Tomb
@@ -145,7 +151,44 @@ func ConnectToPeer(peerTuple PeerTuple, connCh chan *net.TCPConn) {
 }
 
 func NewPeer(conn *net.TCPConn, infoHash []byte, diskIOChans diskIOPeerChans) *Peer {
-	return &Peer{conn: conn, infoHash: infoHash, amChoking: true, amInterested: false, peerChoking: true, peerInterested: false, diskIOChans: diskIOChans}
+	p := &Peer{conn: conn, infoHash: infoHash, amChoking: true, amInterested: false, peerChoking: true, peerInterested: false, diskIOChans: diskIOChans}
+	p.read = make(chan []byte)
+	return p
+}
+
+func (p *Peer) Handshake() {
+	log.Println("Peer : Run : Started")
+	defer log.Println("Peer : Run : Completed")
+
+	reserved := make([]byte, 8)
+	buf := make([]byte, 0)
+	buf = strconv.AppendInt(buf, int64(len(pstr)), 10)
+	buf = append(buf, []byte(pstr)...)
+	buf = append(buf, reserved...)
+	buf = append(buf, p.infoHash...)
+	buf = append(buf, PeerID...)
+	n, err := p.conn.Write(buf)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Increment stats here
+	fmt.Printf("Wrote %d bytes to peer\n", n)
+}
+
+func (p *Peer) Reader() {
+	log.Println("Peer : Reader : Started")
+	defer p.t.Done()
+
+	buf := make([]byte, 1024)
+
+	for {
+		n, err := p.conn.Read(buf)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("Read %d bytes\n", n)
+		p.read <- buf
+	}
 }
 
 func (p *Peer) Run() {
@@ -153,8 +196,15 @@ func (p *Peer) Run() {
 	defer p.t.Done()
 	defer log.Println("Peer : Run : Completed")
 
+	//p.conn.SetDeadline(time.Now().Add(30 * time.Second))
+	p.Handshake()
+	go p.Reader()
+
 	for {
 		select {
+		case <-p.keepalive:
+		case buf := <-p.read:
+			fmt.Println("Read from peer:", buf)
 		case <-p.t.Dying():
 			return
 		}
