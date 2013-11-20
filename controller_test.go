@@ -204,9 +204,9 @@ func TestControllerRunStop(t *testing.T) {
 	crc.peerChokeStatus = make(chan PeerChokeStatus)
 	crc.havePiece = make(chan HavePiece)
 
-	controller := createTestController(crc)
-	go controller.Run()
-	controller.Stop()
+	cont := createTestController(crc)
+	go cont.Run()
+	cont.Stop()
 }
 
 func TestControllerNewPeer(t *testing.T) {
@@ -222,8 +222,8 @@ func TestControllerNewPeer(t *testing.T) {
 	crc.peerChokeStatus = peerChokeStatusCh
 	crc.havePiece = havePieceCh
 
-	controller := createTestController(crc)
-	go controller.Run()
+	cont := createTestController(crc)
+	go cont.Run()
 
 	//peer1Comms, peer1RequestPieceCh, peer1CancelPieceCh, peer1HavePieceCh := NewPeerComms("1.2.3.4:1234")
 	peer1Comms, _, _, peer1HavePieceCh := NewPeerComms("1.2.3.4:1234")
@@ -232,7 +232,16 @@ func TestControllerNewPeer(t *testing.T) {
 
 	innerChan := <- peer1HavePieceCh
 
+	receivedBitField := make([]int, len(cont.finishedPieces))
+	for havePiece := range innerChan {
+		receivedBitField[havePiece.pieceNum] = true
+	}
 
+	for pieceNum, havePiece := range receivedBitField {
+		if cont.finishedPieces[pieceNum] != havePiece {
+			t.Errorf("After receiving bitfield from controller, expected pieceNum %d to be %t but it was %t", pieceNum, cont.finishedPieces[pieceNum], havePiece)
+		}
+	}
 
 	controller.Stop()
 }
