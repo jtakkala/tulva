@@ -518,12 +518,6 @@ func (cont *Controller) Run() {
 
 			}
 
-		case chokeStatus := <- cont.rxChans.peer.chokeStatus:
-
-			log.Println(chokeStatus)
-			// IMPLEMENT ME
-
-
 		case <- cont.t.Dying():
 			return
 		}
