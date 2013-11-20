@@ -93,18 +93,18 @@ type ReceivedPiece struct {
 }
 
 type ControllerRxChannels struct {
-	receivedPieceCh <-chan ReceivedPiece // Other end is IO 
-	newPeerCh <-chan PeerComms  // Other end is the PeerManager
-	peerChokeStatusCh <-chan PeerChokeStatus  // Other end is Peer. Used when the peer is becomes choked or unchoked
-	havePieceCh <-chan HavePiece  // Other end is Peer. used When the peer receives a HAVE message
+	receivedPiece <-chan ReceivedPiece // Other end is IO 
+	newPeer <-chan PeerComms  // Other end is the PeerManager
+	peerChokeStatus <-chan PeerChokeStatus  // Other end is Peer. Used when the peer is becomes choked or unchoked
+	havePiece <-chan HavePiece  // Other end is Peer. used When the peer receives a HAVE message
 }
 
 func NewControllerRxChannels() *ControllerRxChannels {
 	crc := new(ControllerRxChannels)
-	crc.receivedPieceCh = make(chan ReceivedPiece)
-	crc.newPeerCh = make(chan PeerComms)
-	crc.peerChokeStatusCh = make(chan PeerChokeStatus)
-	crc.havePieceCh = make(chan HavePiece)
+	crc.receivedPiece = make(chan ReceivedPiece)
+	crc.newPeer = make(chan PeerComms)
+	crc.peerChokeStatus = make(chan PeerChokeStatus)
+	crc.havePiece = make(chan HavePiece)
 	return crc
 }
 
@@ -393,7 +393,7 @@ func (cont *Controller) Run() {
 
 	for {
 		select {
-		case piece := <- cont.rxChannels.receivedPieceCh:
+		case piece := <- cont.rxChannels.receivedPiece:
 			log.Printf("Controller : Run : %s finished downloading piece number %d", piece.peerID, piece.pieceNum)
 
 			// Update our bitfield to show that we now have that piece
@@ -431,7 +431,7 @@ func (cont *Controller) Run() {
 			}
 
 
-		case chokeStatus := <- cont.rxChannels.peerChokeStatusCh:
+		case chokeStatus := <- cont.rxChannels.peerChokeStatus:
 			// The peer is tell us that it can no longer work on a particular piece. 
 			log.Printf("Controller : Run : Received a PeerChokeStatus from %s", chokeStatus.peerID)
 
@@ -463,7 +463,7 @@ func (cont *Controller) Run() {
 			}
 
 
-		case peerComms := <- cont.rxChannels.newPeerCh:
+		case peerComms := <- cont.rxChannels.newPeer:
 
 			peerInfo := *NewPeerInfo(len(cont.finishedPieces), peerComms)
 
@@ -471,7 +471,7 @@ func (cont *Controller) Run() {
 			if _, exists := cont.peers[peerInfo.peerID]; exists {
 				log.Fatalf("Controller : Run : Received pre-existing peer with ID of %s over newPeer channel", peerInfo.peerID)
 			} else {
-				log.Printf("Controller : Run : Received a new PeerInfo with peerID of %s", peerInfo.peerID)
+				log.Printf("Controller : Run : Received a new PeerComms with peerID of %s", peerInfo.peerID)
 			}
 
 			// Add PeerInfo to the peers map using IP:Port as the key
@@ -483,7 +483,7 @@ func (cont *Controller) Run() {
 			// through HAVE messages, we'll then send requests. 
 
 
-		case piece := <- cont.rxChannels.havePieceCh:
+		case piece := <- cont.rxChannels.havePiece:
 			log.Printf("Controller : Run : Received a HavePiece from %s for pieceNum %d", piece.peerID, piece.pieceNum)
 			
 			// Update the peers availability slice. 

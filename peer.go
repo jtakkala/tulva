@@ -33,18 +33,21 @@ type PeerManager struct {
 
 type PeerComms struct {
 	peerID string
-	requestPieceCh  chan<- RequestPiece // Other end is Peer. Used to tell the peer to request a particular piece.
-	cancelPieceCh   chan<- CancelPiece  // Other end is Peer. Used to tell the peer to cancel a particular piece.
-	havePieceCh	chan<- chan<- HavePiece 	// Other end is Peer. Used to give the peer the initial bitfield and new pieces. 
+	requestPiece  chan<- RequestPiece // Other end is Peer. Used to tell the peer to request a particular piece.
+	cancelPiece   chan<- CancelPiece  // Other end is Peer. Used to tell the peer to cancel a particular piece.
+	havePiece	chan<- chan<- HavePiece // Other end is Peer. Used to give the peer the initial bitfield and new pieces. 
 }
 
-func NewPeerComms(peerID string) *PeerComms {
+func NewPeerComms(peerID string) (*PeerComms, chan RequestPiece, chan CancelPiece, chan chan<- HavePiece) {
 	pc := new(PeerComms)
 	pc.peerID = peerID
-	pc.requestPieceCh = make(chan RequestPiece)
-	pc.cancelPieceCh = make(chan CancelPiece)
-	pc.havePieceCh = make(chan chan<- HavePiece)
-	return pc
+	requestPieceCh := make(chan RequestPiece)
+	pc.requestPiece = requestPieceCh
+	cancelPieceCh := make(chan CancelPiece)
+	pc.cancelPiece = cancelPieceCh
+	havePieceCh := make(chan chan<- HavePiece)
+	pc.havePiece = havePieceCh
+	return pc, requestPieceCh, cancelPieceCh, havePieceCh 
 }
 
 type PeerInfo struct {
@@ -55,16 +58,16 @@ type PeerInfo struct {
 	qtyPiecesNeeded int                 // The quantity of pieces that this peer has that we haven't yet downloaded.
 	requestPieceCh  chan<- RequestPiece // Other end is Peer. Used to tell the peer to request a particular piece.
 	cancelPieceCh   chan<- CancelPiece  // Other end is Peer. Used to tell the peer to cancel a particular piece.
-	havePieceCh	chan<- chan<- HavePiece 	// Other end is Peer. Used to give the peer the initial bitfield and new pieces. 
+	havePieceCh	chan<- chan<- HavePiece // Other end is Peer. Used to give the peer the initial bitfield and new pieces. 
 }
 
 func NewPeerInfo(quantityOfPieces int, peerComms PeerComms) *PeerInfo {
 	pi := new(PeerInfo)
 
 	pi.peerID = peerComms.peerID
-	pi.requestPieceCh = peerComms.requestPieceCh
-	pi.cancelPieceCh = peerComms.cancelPieceCh
-	pi.havePieceCh = peerComms.havePieceCh
+	pi.requestPieceCh = peerComms.requestPiece
+	pi.cancelPieceCh = peerComms.cancelPiece
+	pi.havePieceCh = peerComms.havePiece
 
 	pi.isChoked = false // By default, a peer starts as being choked by the other side. 
 	pi.availablePieces = make([]bool, quantityOfPieces)
