@@ -61,7 +61,7 @@ type Controller struct {
 	pieceHashes []string
 	activeRequestsTotals []int 
 	peers map[string]PeerInfo
-	rxChannels *ControllerRxChannels 
+	rxChans *ControllerRxChannels 
 	t tomb.Tomb
 }
 
@@ -79,29 +79,49 @@ func NewControllerPeerChans() *ControllerPeerChans {
 	return cpc
 }
 
-type ControllerRxChannels struct {
+type ControllerDiskIOChans struct {
 	receivedPiece chan ReceivedPiece // Other end is IO 
-	newPeer chan PeerComms  // Other end is the PeerManager
-	peerChokeStatus chan PeerChokeStatus  // Other end is Peer. Used when the peer is becomes choked or unchoked
-	havePiece chan chan HavePiece  // Other end is Peer. used When the peer receives a HAVE message
 }
 
-func NewControllerRxChannels() *ControllerRxChannels {
-	return &ControllerRxChannels{
-		receivedPiece: make(chan ReceivedPiece), 
-		newPeer: make(chan PeerComms),
-		peerChokeStatus: make(chan PeerChokeStatus),
-		havePiece: make(chan chan HavePiece)}
+func NewControllerDiskIOChans() *ControllerDiskIOChans {
+	return &ControllerDiskIOChans{ receivedPiece: make(chan ReceivedPiece) }
+}
+
+type ControllerPeerManagerChans struct {
+	newPeer chan PeerComms  // Other end is the PeerManager
+}
+
+func NewControllerPeerManagerChans() *ControllerPeerManagerChans {
+	return &ControllerPeerManagerChans{ newPeer: make(chan PeerComms)}
+}
+
+type PeerControllerChans struct {
+	chokeStatus 	chan PeerChokeStatus  // Other end is Peer. Used when the peer is becomes choked or unchoked
+	havePiece 		chan chan HavePiece  // Other end is Peer. used When the peer receives a HAVE message
+}
+
+func NewPeerControllerChans() *PeerControllerChans {
+	return &PeerControllerChans{ chokeStatus: make(chan PeerChokeStatus), havePiece: make(chan chan HavePiece)}
+}
+
+type ControllerRxChannels struct {
+	diskIO 		ControllerDiskIOChans
+	peerManager ControllerPeerManagerChans
+	peer 		PeerControllerChans
+}
+
+func NewControllerRxChannels( diskIO ControllerDiskIOChans, peerManager ControllerPeerManagerChans, peer PeerControllerChans) *ControllerRxChannels {
+	return &ControllerRxChannels{ diskIO, peerManager, peer }
 }
 
 func NewController(finishedPieces []bool, 
 					pieceHashes []string, 
-					rxChannels *ControllerRxChannels) *Controller {
+					rxChans *ControllerRxChannels) *Controller {
 
 	cont := new(Controller)
 	cont.finishedPieces = finishedPieces
 	cont.pieceHashes = pieceHashes
-	cont.rxChannels = rxChannels
+	cont.rxChans = rxChans
 	cont.peers = make(map[string]PeerInfo)
 	cont.activeRequestsTotals = make([]int, len(finishedPieces))
 	return cont
@@ -370,7 +390,7 @@ func (cont *Controller) Run() {
 
 	for {
 		select {
-		case piece := <- cont.rxChannels.receivedPiece:
+		case piece := <- cont.rxChans.diskIO.receivedPiece:
 			log.Printf("Controller : Run : %s finished downloading piece number %d", piece.peerName, piece.pieceNum)
 
 			// Update our bitfield to show that we now have that piece
@@ -408,7 +428,7 @@ func (cont *Controller) Run() {
 			}
 
 
-		case chokeStatus := <- cont.rxChannels.peerChokeStatus:
+		case chokeStatus := <- cont.rxChans.peer.chokeStatus:
 			// The peer is tell us that it can no longer work on a particular piece. 
 			log.Printf("Controller : Run : Received a PeerChokeStatus from %s", chokeStatus.peerName)
 
@@ -440,7 +460,7 @@ func (cont *Controller) Run() {
 			}
 
 
-		case peerComms := <- cont.rxChannels.newPeer:
+		case peerComms := <- cont.rxChans.peerManager.newPeer:
 
 			peerInfo := *NewPeerInfo(len(cont.finishedPieces), peerComms)
 
@@ -461,7 +481,7 @@ func (cont *Controller) Run() {
 			// through HAVE messages, we'll then send requests. 
 
 
-		case innerChan := <- cont.rxChannels.havePiece:
+		case innerChan := <- cont.rxChans.peer.havePiece:
 
 			var peerInfo PeerInfo
 
@@ -497,6 +517,11 @@ func (cont *Controller) Run() {
 				cont.sendRequestsToPeer(peerInfo, raritySlice)
 
 			}
+
+		case chokeStatus := <- cont.rxChans.peer.chokeStatus:
+
+			log.Println(chokeStatus)
+			// IMPLEMENT ME
 
 
 		case <- cont.t.Dying():
