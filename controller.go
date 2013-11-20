@@ -65,6 +65,20 @@ type Controller struct {
 	t tomb.Tomb
 }
 
+type ControllerPeerChans struct {
+	requestPiece chan RequestPiece   // Other end is Peer. Used to tell the peer to request a particular piece.
+	cancelPiece  chan CancelPiece    // Other end is Peer. Used to tell the peer to cancel a particular piece.
+	havePiece    chan chan HavePiece // Other end is Peer. Used to give the peer the initial bitfield and new pieces.
+}
+
+func NewControllerPeerChans() *ControllerPeerChans {
+	cpc := new(ControllerPeerChans)
+	cpc.requestPiece = make(chan RequestPiece)
+	cpc.cancelPiece = make(chan CancelPiece)
+	cpc.havePiece = make(chan chan HavePiece)
+	return cpc
+}
+
 type ControllerRxChannels struct {
 	receivedPiece chan ReceivedPiece // Other end is IO 
 	newPeer chan PeerComms  // Other end is the PeerManager
@@ -72,11 +86,7 @@ type ControllerRxChannels struct {
 	havePiece chan chan HavePiece  // Other end is Peer. used When the peer receives a HAVE message
 }
 
-func NewControllerRxChannels(
-		receivedPiece chan ReceivedPiece,
-		newPeer chan PeerComms,
-		peerChokeStatus chan PeerChokeStatus,
-		havePiece chan chan HavePiece) *ControllerRxChannels {
+func NewControllerRxChannels() *ControllerRxChannels {
 	return &ControllerRxChannels{
 		receivedPiece: make(chan ReceivedPiece), 
 		newPeer: make(chan PeerComms),
@@ -108,19 +118,19 @@ func (cont *Controller) sendHaveToPeersWhoNeedPiece(pieceNum int) {
 		if !peerInfo.availablePieces[pieceNum] {
 
 			// This peer doesn't have the piece that we just finished. Send them a HAVE message. 
-			log.Printf("Controller : sendHaveToPeersWhoNeedPiece : Sending HAVE to %s for piece %d", peerInfo.peerID, pieceNum)
+			log.Printf("Controller : sendHaveToPeersWhoNeedPiece : Sending HAVE to %s for piece %d", peerInfo.peerName, pieceNum)
 
 			haveMessage := new(HavePiece)
 
 			// When sent from the controller to the peer, the only relevant field is the piece number
-			// field. The peerID field doesn't need to be set, because the message is being sent
+			// field. The peerName field doesn't need to be set, because the message is being sent
 			// directly to the peer 
 			haveMessage.pieceNum = pieceNum
 
 			go func() { 
 				// Create a temporary channel that's sent through the main HavePiece channel
 				innerChan := make(chan HavePiece)
-				peerInfo.havePieceCh <- innerChan
+				peerInfo.chans.havePiece <- innerChan
 
 				// Now that the other side has the innerChan (and is blocking on it), send the
 				// HAVE message.
@@ -135,7 +145,7 @@ func (cont *Controller) sendHaveToPeersWhoNeedPiece(pieceNum int) {
 }
 
 func (cont *Controller) removePieceFromActiveRequests(piece ReceivedPiece) {
-	finishingPeer := cont.peers[piece.peerID]
+	finishingPeer := cont.peers[piece.peerName]
 	if _, exists := finishingPeer.activeRequests[piece.pieceNum]; exists {
 		// Remove this piece from the peer's activeRequests set
 		delete(finishingPeer.activeRequests, piece.pieceNum)
@@ -144,10 +154,10 @@ func (cont *Controller) removePieceFromActiveRequests(piece ReceivedPiece) {
 		cont.activeRequestsTotals[piece.pieceNum]--
 
 		// Check every peer to see if they're also downloading this piece.  
-		for peerID, peerInfo := range cont.peers {
+		for peerName, peerInfo := range cont.peers {
 			if _, exists := peerInfo.activeRequests[piece.pieceNum]; exists {
 				// This peer was also working on the same piece
-				log.Printf("Controller : removePieceFromActiveRequests : %s was also working on piece %d which is finished. Sending a CANCEL", peerID, piece.pieceNum)
+				log.Printf("Controller : removePieceFromActiveRequests : %s was also working on piece %d which is finished. Sending a CANCEL", peerName, piece.pieceNum)
 				
 				// Remove this piece from the peer's activeRequests set
 				delete(peerInfo.activeRequests, piece.pieceNum)
@@ -157,10 +167,10 @@ func (cont *Controller) removePieceFromActiveRequests(piece ReceivedPiece) {
 
 				cancelMessage := new(CancelPiece)
 				cancelMessage.pieceNum = piece.pieceNum
-				cancelMessage.peerID = peerID
+				cancelMessage.peerName = peerName
 
 				// Tell this peer to stop downloading this piece because it's already finished. 
-				go func() { peerInfo.cancelPieceCh <- *cancelMessage }()
+				go func() { peerInfo.chans.cancelPiece <- *cancelMessage }()
 			}
 		}
 
@@ -172,7 +182,7 @@ func (cont *Controller) removePieceFromActiveRequests(piece ReceivedPiece) {
 
 	} else {
 		// The peer just finished this piece, but it wasn't in its active request list
-		log.Printf("Controller : removePieceFromActiveRequests : %s finished piece %d, but that piece wasn't in its active request list", piece.peerID, piece.pieceNum)
+		log.Printf("Controller : removePieceFromActiveRequests : %s finished piece %d, but that piece wasn't in its active request list", piece.peerName, piece.pieceNum)
 	}
 }
 
@@ -308,8 +318,8 @@ func (cont *Controller) sendRequestsToPeer(peerInfo PeerInfo, raritySlice []int)
 		requestMessage := new(RequestPiece)
 		requestMessage.pieceNum = pieceNum
 		requestMessage.expectedHash = cont.pieceHashes[pieceNum]
-		log.Printf("Controller : sendRequestsToPeer : Requesting %s to get piece number %d", peerInfo.peerID, pieceNum)
-		go func() { peerInfo.requestPieceCh <- *requestMessage }()
+		log.Printf("Controller : sendRequestsToPeer : Requesting %s to get piece number %d", peerInfo.peerName, pieceNum)
+		go func() { peerInfo.chans.requestPiece <- *requestMessage }()
 
 		// Add this pieceNum to the set of pieces that this peer is working on
 		peerInfo.activeRequests[pieceNum] = struct{}{}
@@ -320,7 +330,7 @@ func (cont *Controller) sendRequestsToPeer(peerInfo PeerInfo, raritySlice []int)
 	}
 }
 
-func sendBitfieldOverChannel(outerChan chan<- chan HavePiece, peerID string, bitfield []bool) {
+func sendBitfieldOverChannel(outerChan chan<- chan HavePiece, peerName string, bitfield []bool) {
 
 	bitfieldCopy := make([]bool, len(bitfield))
 	copy(bitfieldCopy, bitfield)
@@ -333,7 +343,7 @@ func sendBitfieldOverChannel(outerChan chan<- chan HavePiece, peerID string, bit
 		for pieceNum, havePiece := range bitfield {
 			if havePiece {
 				haveMessage := new(HavePiece)
-				haveMessage.peerID = peerID
+				haveMessage.peerName = peerName
 				haveMessage.pieceNum = pieceNum
 				innerChan <- *haveMessage
 			}
@@ -361,7 +371,7 @@ func (cont *Controller) Run() {
 	for {
 		select {
 		case piece := <- cont.rxChannels.receivedPiece:
-			log.Printf("Controller : Run : %s finished downloading piece number %d", piece.peerID, piece.pieceNum)
+			log.Printf("Controller : Run : %s finished downloading piece number %d", piece.peerName, piece.pieceNum)
 
 			// Update our bitfield to show that we now have that piece
 			cont.finishedPieces[piece.pieceNum] = true
@@ -400,9 +410,9 @@ func (cont *Controller) Run() {
 
 		case chokeStatus := <- cont.rxChannels.peerChokeStatus:
 			// The peer is tell us that it can no longer work on a particular piece. 
-			log.Printf("Controller : Run : Received a PeerChokeStatus from %s", chokeStatus.peerID)
+			log.Printf("Controller : Run : Received a PeerChokeStatus from %s", chokeStatus.peerName)
 
-			peerInfo, exists := cont.peers[chokeStatus.peerID]
+			peerInfo, exists := cont.peers[chokeStatus.peerName]
 
 			if !exists {
 				log.Fatalf("Controller : Run : Unable to process PeerChokeStatus from %s because it doesn't exist in the peers mapping")
@@ -435,16 +445,16 @@ func (cont *Controller) Run() {
 			peerInfo := *NewPeerInfo(len(cont.finishedPieces), peerComms)
 
 			// Throw an error if the peer is duplicate (same IP/Port. should never happen)
-			if _, exists := cont.peers[peerInfo.peerID]; exists {
-				log.Fatalf("Controller : Run : Received pre-existing peer with ID of %s over newPeer channel", peerInfo.peerID)
+			if _, exists := cont.peers[peerInfo.peerName]; exists {
+				log.Fatalf("Controller : Run : Received pre-existing peer with ID of %s over newPeer channel", peerInfo.peerName)
 			} else {
-				log.Printf("Controller : Run : Received a new PeerComms with peerID of %s", peerInfo.peerID)
+				log.Printf("Controller : Run : Received a new PeerComms with peerName of %s", peerInfo.peerName)
 			}
 
 			// Add PeerInfo to the peers map using IP:Port as the key
-			cont.peers[peerInfo.peerID] = peerInfo
+			cont.peers[peerInfo.peerName] = peerInfo
 
-			sendBitfieldOverChannel(peerInfo.havePieceCh, peerInfo.peerID, cont.finishedPieces)
+			sendBitfieldOverChannel(peerInfo.chans.havePiece, peerInfo.peerName, cont.finishedPieces)
 
 
 			// We're not going to send requests to this peer yet. Once we receive a full bitfield from the peer
@@ -458,16 +468,16 @@ func (cont *Controller) Run() {
 			// Receive one or more pieces over inner channel
 			for piece := range innerChan {
 
-				log.Printf("Controller : Run : Received a HavePiece from %s for pieceNum %d", piece.peerID, piece.pieceNum)
+				log.Printf("Controller : Run : Received a HavePiece from %s for pieceNum %d", piece.peerName, piece.pieceNum)
 				
 				// Update the peers availability slice. 
-				peerInfo, exists := cont.peers[piece.peerID]; 
+				peerInfo, exists := cont.peers[piece.peerName]; 
 				if !exists {
-					log.Fatalf("Controller : Run : Unable to process HavePiece for %s because it doesn't exist in the peers mapping", piece.peerID)
+					log.Fatalf("Controller : Run : Unable to process HavePiece for %s because it doesn't exist in the peers mapping", piece.peerName)
 				} 
 
 				if peerInfo.availablePieces[piece.pieceNum] {
-					log.Fatalf("Controller : Run : Received duplicate HavePiece from %s for piece number %d", peerInfo.peerID, piece.pieceNum)
+					log.Fatalf("Controller : Run : Received duplicate HavePiece from %s for piece number %d", peerInfo.peerName, piece.pieceNum)
 				} 
 
 				// Mark this peer as having this piece
