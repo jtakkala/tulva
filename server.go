@@ -5,7 +5,6 @@
 package main
 
 import (
-	"fmt"
 	"launchpad.net/tomb"
 	"log"
 	"math/rand"
@@ -15,7 +14,7 @@ import (
 )
 
 type serverPeerChans struct {
-	conns  chan *net.TCPConn
+	conns chan *net.TCPConn
 }
 
 type Server struct {
@@ -37,13 +36,9 @@ func NewServer() *Server {
 	// Try up to 10 times, then exit if we can't bind
 	for i := 0; ; i++ {
 		sv.Port = uint16(r.Intn(49151)) + uint16(16384)
-		portString := fmt.Sprintf(":%d", sv.Port)
-		// TODO: Undo override of default port
+		// TODO: Undo override of random port
 		sv.Port = uint16(6881)
-		portString = ":6881"
-		fmt.Println(portString)
-		laddr := net.TCPAddr { net.ParseIP("0.0.0.0"), 6881, ""}
-		sv.Listener, err = net.ListenTCP("tcp4", &laddr)
+		sv.Listener, err = net.ListenTCP("tcp4", &net.TCPAddr{net.ParseIP("0.0.0.0"), int(sv.Port), ""})
 		if err != nil {
 			if e, ok := err.(*net.OpError); ok {
 				// If reason is EADDRINUSE, then try up to 10 times

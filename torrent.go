@@ -89,8 +89,9 @@ func (t *Torrent) Run() {
 		select {
 		case <-t.t.Dying():
 			server.Stop()
-			trackerManager.Stop()
 			peerManager.Stop()
+			trackerManager.Stop()
+			diskIO.Stop()
 			return
 		}
 	}
