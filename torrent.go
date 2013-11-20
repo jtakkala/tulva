@@ -82,7 +82,7 @@ func (t *Torrent) Run() {
 	trackerManager := NewTrackerManager(server.Port)
 	go trackerManager.Run(t.metaInfo, t.infoHash)
 
-	peerManager := NewPeerManager(diskIO.peerChans, server.peerChans, trackerManager.peerChans)
+	peerManager := NewPeerManager(t.infoHash, diskIO.peerChans, server.peerChans, trackerManager.peerChans)
 	go peerManager.Run()
 
 	for {
