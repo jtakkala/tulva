@@ -66,13 +66,17 @@ type Controller struct {
 }
 
 type ControllerRxChannels struct {
-	receivedPiece <-chan ReceivedPiece // Other end is IO 
-	newPeer <-chan PeerComms  // Other end is the PeerManager
-	peerChokeStatus <-chan PeerChokeStatus  // Other end is Peer. Used when the peer is becomes choked or unchoked
-	havePiece <-chan chan HavePiece  // Other end is Peer. used When the peer receives a HAVE message
+	receivedPiece chan ReceivedPiece // Other end is IO 
+	newPeer chan PeerComms  // Other end is the PeerManager
+	peerChokeStatus chan PeerChokeStatus  // Other end is Peer. Used when the peer is becomes choked or unchoked
+	havePiece chan chan HavePiece  // Other end is Peer. used When the peer receives a HAVE message
 }
 
-func NewControllerRxChannels() *ControllerRxChannels {
+func NewControllerRxChannels(
+		receivedPiece chan ReceivedPiece,
+		newPeer chan PeerComms,
+		peerChokeStatus chan PeerChokeStatus,
+		havePiece chan chan HavePiece) *ControllerRxChannels {
 	return &ControllerRxChannels{
 		receivedPiece: make(chan ReceivedPiece), 
 		newPeer: make(chan PeerComms),
@@ -316,33 +320,24 @@ func (cont *Controller) sendRequestsToPeer(peerInfo PeerInfo, raritySlice []int)
 	}
 }
 
-func (cont *Controller) sendOurBitfieldToPeer(peerInfo PeerInfo) {
+func sendBitfieldOverChannel(outerChan chan<- chan HavePiece, peerID string, bitfield []bool) {
 
-	// Create a copy of finishedPieces, as it will be used in a separate goroutine while 
-	// the original finishedPieces slice could be changing.
-	finishedPiecesCopy := make([]bool, len(cont.finishedPieces))
-	copy(finishedPiecesCopy, cont.finishedPieces) 
-	
-	// Send all pieces to the peer (one at a time) using individual HAVE messages over an
-	// inner channel. 
+	bitfieldCopy := make([]bool, len(bitfield))
+	copy(bitfieldCopy, bitfield)
+
 	go func() {
+
 		innerChan := make(chan HavePiece)
+		outerChan <- innerChan
 
-		// Send the inner channel to the other side before sending any pieces so that 
-		// the other side is blocking before we starting sending. 
-		peerInfo.havePieceCh <- innerChan
-
-		for pieceNum, havePiece := range finishedPiecesCopy {
+		for pieceNum, havePiece := range bitfield {
 			if havePiece {
-				// We finished this piece. Send it as a HAVE message to the peer. 
 				haveMessage := new(HavePiece)
+				haveMessage.peerID = peerID
 				haveMessage.pieceNum = pieceNum
-
 				innerChan <- *haveMessage
 			}
 		}
-
-		// Indicate to the other side that we're finished sending by closing the channel. 
 		close(innerChan)
 	}()
 }
@@ -449,7 +444,8 @@ func (cont *Controller) Run() {
 			// Add PeerInfo to the peers map using IP:Port as the key
 			cont.peers[peerInfo.peerID] = peerInfo
 
-			cont.sendOurBitfieldToPeer(peerInfo)
+			sendBitfieldOverChannel(peerInfo.havePieceCh, peerInfo.peerID, cont.finishedPieces)
+
 
 			// We're not going to send requests to this peer yet. Once we receive a full bitfield from the peer
 			// through HAVE messages, we'll then send requests. 
