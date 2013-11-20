@@ -30,7 +30,7 @@ type CancelPiece struct {
 	peerID string // needed for when the peer sends a cancel to the controller
 }
 
-// Sent from IO to the controller indicating that a piece has been 
+// Sent from DiskIO to the controller indicating that a piece has been 
 // received and written to disk
 type ReceivedPiece struct {
 	pieceNum int

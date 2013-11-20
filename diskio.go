@@ -130,6 +130,15 @@ func openOrCreateFile(name string) (file *os.File) {
 	return
 }
 
+func NewDiskIO(metaInfo MetaInfo) *DiskIO {
+	diskio := new(DiskIO)
+	diskio.metaInfo = metaInfo
+	diskio.readPiece = make(chan Piece)
+	diskio.writePiece = make(chan Piece)
+	diskio.requestPiece = make(chan int)
+	return diskio
+}
+
 func (diskio *DiskIO) Init() {
 	if len(diskio.metaInfo.Info.Files) > 0 {
 		// Multiple File Mode
