@@ -69,7 +69,7 @@ type ControllerRxChannels struct {
 	receivedPiece <-chan ReceivedPiece // Other end is IO 
 	newPeer <-chan PeerComms  // Other end is the PeerManager
 	peerChokeStatus <-chan PeerChokeStatus  // Other end is Peer. Used when the peer is becomes choked or unchoked
-	havePiece <-chan HavePiece  // Other end is Peer. used When the peer receives a HAVE message
+	havePiece <-chan chan HavePiece  // Other end is Peer. used When the peer receives a HAVE message
 }
 
 func NewControllerRxChannels() *ControllerRxChannels {
@@ -77,7 +77,7 @@ func NewControllerRxChannels() *ControllerRxChannels {
 		receivedPiece: make(chan ReceivedPiece), 
 		newPeer: make(chan PeerComms),
 		peerChokeStatus: make(chan PeerChokeStatus),
-		havePiece: make(chan HavePiece)}
+		havePiece: make(chan chan HavePiece)}
 }
 
 func NewController(finishedPieces []bool, 
@@ -455,23 +455,31 @@ func (cont *Controller) Run() {
 			// through HAVE messages, we'll then send requests. 
 
 
-		case piece := <- cont.rxChannels.havePiece:
-			log.Printf("Controller : Run : Received a HavePiece from %s for pieceNum %d", piece.peerID, piece.pieceNum)
-			
-			// Update the peers availability slice. 
-			peerInfo, exists := cont.peers[piece.peerID]; 
-			if !exists {
-				log.Fatalf("Controller : Run : Unable to process HavePiece for %s because it doesn't exist in the peers mapping", piece.peerID)
-			} 
+		case innerChan := <- cont.rxChannels.havePiece:
 
-			if peerInfo.availablePieces[piece.pieceNum] {
-				log.Fatalf("Controller : Run : Received duplicate HavePiece from %s for piece number %d", peerInfo.peerID, piece.pieceNum)
-			} 
+			var peerInfo PeerInfo
 
-			// Mark this peer as having this piece
-			peerInfo.availablePieces[piece.pieceNum] = true
+			// Receive one or more pieces over inner channel
+			for piece := range innerChan {
 
-			// This is either one of many HAVE messages sent for the initial peer bitfield, or it's
+				log.Printf("Controller : Run : Received a HavePiece from %s for pieceNum %d", piece.peerID, piece.pieceNum)
+				
+				// Update the peers availability slice. 
+				peerInfo, exists := cont.peers[piece.peerID]; 
+				if !exists {
+					log.Fatalf("Controller : Run : Unable to process HavePiece for %s because it doesn't exist in the peers mapping", piece.peerID)
+				} 
+
+				if peerInfo.availablePieces[piece.pieceNum] {
+					log.Fatalf("Controller : Run : Received duplicate HavePiece from %s for piece number %d", peerInfo.peerID, piece.pieceNum)
+				} 
+
+				// Mark this peer as having this piece
+				peerInfo.availablePieces[piece.pieceNum] = true
+
+			}
+
+			// This is either one or more HAVE messages sent for the initial peer bitfield, or it's
 			// a single HAVE message sent because the peer has a new piece. In either case, we should 
 			// attempt to download more pieces. 
 			if !peerInfo.isChoked && len(peerInfo.activeRequests) < maxSimultaneousDownloadsPerPeer {
