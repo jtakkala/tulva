@@ -166,12 +166,7 @@ func (tr *Tracker) Run() {
 }
 
 func NewTrackerManager(port uint16) *TrackerManager {
-	tm := new(TrackerManager)
-	tm.peersCh = make(chan PeerTuple)
-	tm.completedCh = make(chan bool)
-	tm.statsCh = make(chan Stats)
-	tm.port = port
-	return tm
+	return &TrackerManager{peersCh: make(chan PeerTuple), completedCh: make(chan bool), statsCh: make(chan Stats), port: port}
 }
 
 func (tm *TrackerManager) Stop() error {
