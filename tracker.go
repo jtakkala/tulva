@@ -52,7 +52,7 @@ type TrackerResponse struct {
 }
 
 type tracker struct {
-	announceUrl *url.URL
+	announceURL *url.URL
 	response    TrackerResponse
 	chans       trackerChans
 	timer     <-chan time.Time
@@ -99,12 +99,12 @@ func (tr *tracker) Announce(event int) {
 	case Completed:
 		urlParams.Set("event", "completed")
 	}
-	announceUrl := *tr.announceUrl
-	announceUrl.RawQuery = urlParams.Encode()
+	announceURL := *tr.announceURL
+	announceURL.RawQuery = urlParams.Encode()
 
 	// Send a request to the Tracker
-	log.Printf("Announce: %s\n", announceUrl.String())
-	resp, err := http.Get(announceUrl.String())
+	log.Printf("Announce: %s\n", announceURL.String())
+	resp, err := http.Get(announceURL.String())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -145,9 +145,9 @@ func (tr *tracker) Stop() error {
 }
 
 func (tr *tracker) Run() {
-	log.Printf("Tracker : Run : Started (%s)\n", tr.announceUrl)
+	log.Printf("Tracker : Run : Started (%s)\n", tr.announceURL)
 	defer tr.t.Done()
-	defer log.Printf("Tracker : Run : Completed (%s)\n", tr.announceUrl)
+	defer log.Printf("Tracker : Run : Completed (%s)\n", tr.announceURL)
 
 	tr.timer = make(<-chan time.Time)
 	tr.Announce(Started)
@@ -159,7 +159,7 @@ func (tr *tracker) Run() {
 		case <-tr.chans.completed:
 			go tr.Announce(Completed)
 		case <-tr.timer:
-			log.Printf("Tracker : Run : Interval Timer Expired (%s)\n", tr.announceUrl)
+			log.Printf("Tracker : Run : Interval Timer Expired (%s)\n", tr.announceURL)
 			go tr.Announce(Interval)
 		case stats := <-tr.chans.stats:
 			log.Println("read from stats", stats)
@@ -175,7 +175,7 @@ func newTracker(key string, chans trackerChans, port uint16, infoHash []byte, an
 	if len(key) < 8 {
 		log.Fatalf("newTracker: key too short %d (expected at least 8 bytes)\n", len(key))
 	}
-	tracker := &tracker{key: key, chans: chans, port: port, infoHash: infoHash, announceUrl: announceURL}
+	tracker := &tracker{key: key, chans: chans, port: port, infoHash: infoHash, announceURL: announceURL}
 	tracker.infoHash = make([]byte, len(infoHash))
 	copy(tracker.infoHash, infoHash)
 	return tracker
@@ -203,10 +203,10 @@ func (tm *trackerManager) Run(m MetaInfo, infoHash []byte) {
 
 	// TODO: Handle multiple announce URL's
 	/*
-		for announceUrl := m.AnnounceList {
+		for announceURL := m.AnnounceList {
 			tr := new(Tracker)
 			tr.metaInfo = m
-			tr.announceUrl = announceUrl
+			tr.announceURL = announceURL
 			tr.Run()
 		}
 	*/
