@@ -27,10 +27,11 @@ type Peer struct {
 	peerInterested bool
 	infoHash       []byte
 	diskIOChans    diskIOPeerChans
+	t              tomb.Tomb
 }
 
 type PeerManager struct {
-	peers        map[string]Peer
+	peers        map[string]*Peer
 	infoHash     []byte
 	serverChans  serverPeerChans
 	trackerChans trackerPeerChans
@@ -123,7 +124,7 @@ func NewPeerManager(infoHash []byte, diskIOChans diskIOPeerChans, serverChans se
 	pm.diskIOChans = diskIOChans
 	pm.serverChans = serverChans
 	pm.trackerChans = trackerChans
-	pm.peers = make(map[string]Peer)
+	pm.peers = make(map[string]*Peer)
 	return pm
 }
 
@@ -143,8 +144,21 @@ func ConnectToPeer(peerTuple PeerTuple, connCh chan *net.TCPConn) {
 	connCh <- conn
 }
 
-func NewPeer(conn *net.TCPConn, infoHash []byte, diskIOChans diskIOPeerChans) Peer {
-	return Peer{conn: conn, infoHash: infoHash, amChoking: true, amInterested: false, peerChoking: true, peerInterested: false, diskIOChans: diskIOChans}
+func NewPeer(conn *net.TCPConn, infoHash []byte, diskIOChans diskIOPeerChans) *Peer {
+	return &Peer{conn: conn, infoHash: infoHash, amChoking: true, amInterested: false, peerChoking: true, peerInterested: false, diskIOChans: diskIOChans}
+}
+
+func (p *Peer) Run() {
+	log.Println("Peer : Run : Started")
+	defer p.t.Done()
+	defer log.Println("Peer : Run : Completed")
+
+	for {
+		select {
+		case <-p.t.Dying():
+			return
+		}
+	}
 }
 
 func (pm *PeerManager) Stop() error {
@@ -172,6 +186,7 @@ func (pm *PeerManager) Run() {
 		case conn := <-pm.serverChans.conns:
 			// Received a new peer connection, instantiate a peer
 			pm.peers[conn.RemoteAddr().String()] = NewPeer(conn, pm.infoHash, pm.diskIOChans)
+			go pm.peers[conn.RemoteAddr().String()].Run()
 		case <-pm.t.Dying():
 			return
 		}
