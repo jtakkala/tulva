@@ -33,8 +33,8 @@ type trackerPeerChans struct {
 
 type trackerManager struct {
 	peerChans trackerPeerChans
-	port  uint16
-	t     tomb.Tomb
+	port      uint16
+	t         tomb.Tomb
 }
 
 type TrackerResponse struct {
@@ -55,7 +55,7 @@ type tracker struct {
 	response    TrackerResponse
 	peerChans   trackerPeerChans
 	completedCh chan bool
-	timer     <-chan time.Time
+	timer       <-chan time.Time
 	stats       Stats
 	key         string
 	port        uint16
@@ -63,7 +63,7 @@ type tracker struct {
 	t           tomb.Tomb
 }
 
-func initKey() (string) {
+func initKey() string {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	key := make([]byte, 4)
 	for i := 0; i < 4; i++ {
