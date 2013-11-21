@@ -5,7 +5,9 @@
 package main
 
 import (
+	//"errors"
 	"fmt"
+	"io"
 	"launchpad.net/tomb"
 	"log"
 	"net"
@@ -16,6 +18,20 @@ import (
 )
 
 const pstr = "BitTorrent protocol"
+
+// Message ID values 
+const (
+	MsgChoke int = iota
+	MsgUnchoke
+	MsgInterested
+	MsgNotInterested
+	MsgHave
+	MsgBitfield
+	MsgRequest
+	MsgPiece
+	MsgCancel
+	MsgPort
+)
 
 // PeerTuple represents a single IP+port pair of a peer
 type PeerTuple struct {
@@ -33,16 +49,22 @@ type Peer struct {
 	read           chan []byte
 	infoHash       []byte
 	diskIOChans    diskIOPeerChans
+	peerManagerChans peerManagerChans
 	t              tomb.Tomb
 }
 
 type PeerManager struct {
 	peers        map[string]*Peer
 	infoHash     []byte
+	peerChans    peerManagerChans
 	serverChans  serverPeerChans
 	trackerChans trackerPeerChans
 	diskIOChans  diskIOPeerChans
 	t            tomb.Tomb
+}
+
+type peerManagerChans struct {
+	deadPeer chan string
 }
 
 type PeerComms struct {
@@ -119,6 +141,7 @@ func NewPeerManager(infoHash []byte, diskIOChans diskIOPeerChans, serverChans se
 	pm.diskIOChans = diskIOChans
 	pm.serverChans = serverChans
 	pm.trackerChans = trackerChans
+	pm.peerChans.deadPeer = make(chan string)
 	pm.peers = make(map[string]*Peer)
 	return pm
 }
@@ -164,37 +187,82 @@ func (p *Peer) Handshake() {
 	fmt.Printf("Wrote %d bytes to peer\n", n)
 }
 
+/*
+func constructMsg(id int, payload []byte) (msg []byte, err error) {
+	msg := make([]byte, 5)
+	msg[4] = byte(id)
+	// Default message length to 1
+	msgLen := 1
+
+	switch id {
+	case MsgHave:
+		msgLen = 5
+		msg = append(msg, payload)
+	case MsgBitfield:
+		msgLen = 1 + len(payload)
+		msg = append(msg, payload)
+	case MsgRequest:
+		msgLen = 13
+		msg = append(msg, payload)
+	case MsgPiece:
+	case MsgCancel:
+		msgLen = 13
+	case MsgPort:
+		msgLen = 3
+	default:
+		err = errors.New("Unrecognized message type")
+	}
+	return
+}
+*/
+
 func (p *Peer) Reader() {
 	log.Println("Peer : Reader : Started")
-	defer p.t.Done()
 
 	buf := make([]byte, 1024)
 
 	for {
 		n, err := p.conn.Read(buf)
 		if err != nil {
-			log.Fatal(err)
+			if err == io.EOF {
+				continue
+			} else {
+				if e, ok := err.(*net.OpError); ok {
+					if e.Err == syscall.ECONNRESET {
+						log.Println("ConnectToPeer : Connection Reset:", p.conn.RemoteAddr().String())
+						return
+					}
+				}
+				log.Fatal(err)
+			}
 		}
 		fmt.Printf("Read %d bytes\n", n)
 		p.read <- buf
 	}
 }
 
+func (p *Peer) Stop() error {
+	log.Println("Peer : Stop : Stopping")
+	p.t.Kill(nil)
+	return p.t.Wait()
+}
+
 func (p *Peer) Run() {
 	log.Println("Peer : Run : Started")
-	defer p.t.Done()
 	defer log.Println("Peer : Run : Completed")
 
-	//p.conn.SetDeadline(time.Now().Add(30 * time.Second))
 	p.Handshake()
 	go p.Reader()
 
 	for {
 		select {
 		case <-p.keepalive:
-		case buf := <-p.read:
-			fmt.Println("Read from peer:", buf)
+		case <-p.read:
+			fmt.Println("p.read")
+		//case buf := <-p.read:
+			//fmt.Println("Read from peer:", buf)
 		case <-p.t.Dying():
+			p.peerManagerChans.deadPeer <- p.conn.RemoteAddr().String()
 			return
 		}
 	}
@@ -226,7 +294,13 @@ func (pm *PeerManager) Run() {
 			// Received a new peer connection, instantiate a peer
 			pm.peers[conn.RemoteAddr().String()] = NewPeer(conn, pm.infoHash, pm.diskIOChans)
 			go pm.peers[conn.RemoteAddr().String()].Run()
+		case peer := <-pm.peerChans.deadPeer:
+			log.Printf("PeerManager : Deleting peer %s\n", peer)
+			delete(pm.peers, peer)
 		case <-pm.t.Dying():
+			for _, peer := range pm.peers {
+				peer.Stop()
+			}
 			return
 		}
 	}
