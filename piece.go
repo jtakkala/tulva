@@ -29,11 +29,8 @@ type HavePiece struct {
 }
 
 // Sent from the controller to the peer to cancel an outstanding request
-// Also sent from the peer to the controller when it's been choked or
-// when it loses its network connection
 type CancelPiece struct {
 	pieceNum int
-	peerName   string // needed for when the peer sends a cancel to the controller
 }
 
 // Sent from DiskIO to the controller indicating that a piece has been

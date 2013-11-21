@@ -10,9 +10,10 @@ import (
 	"sort"
 )
 
+/*
 const (
 	maxSimultaneousDownloadsPerPeer = 5
-)
+)*/
 
 type RarityMap struct {
 	data map[int][]int
@@ -61,6 +62,7 @@ type Controller struct {
 	pieceHashes []string
 	activeRequestsTotals []int 
 	peers map[string]*PeerInfo
+	maxSimultaneousDownloadsPerPeer int
 	rxChans *ControllerRxChans
 	t tomb.Tomb
 }
@@ -89,6 +91,7 @@ func NewControllerDiskIOChans() *ControllerDiskIOChans {
 
 type ControllerPeerManagerChans struct {
 	newPeer chan PeerComms  // Other end is the PeerManager
+	deadPeer chan string  // Other end is the PeerManager
 }
 
 func NewControllerPeerManagerChans() *ControllerPeerManagerChans {
@@ -124,6 +127,7 @@ func NewController(finishedPieces []bool,
 	cont.rxChans = rxChans
 	cont.peers = make(map[string]*PeerInfo)
 	cont.activeRequestsTotals = make([]int, len(finishedPieces))
+	cont.maxSimultaneousDownloadsPerPeer = 5  // suggested default 
 	return cont
 }
 
@@ -187,7 +191,6 @@ func (cont *Controller) removePieceFromActiveRequests(piece ReceivedPiece) {
 
 				cancelMessage := new(CancelPiece)
 				cancelMessage.pieceNum = piece.pieceNum
-				cancelMessage.peerName = peerName
 
 				// Tell this peer to stop downloading this piece because it's already finished. 
 				go func() { peerInfo.chans.cancelPiece <- *cancelMessage }()
@@ -329,7 +332,7 @@ func (cont *Controller) sendRequestsToPeer(peerInfo *PeerInfo, raritySlice []int
 	log.Printf("Controller : SendRequestsToPeer : Built downloadPriority with %d pieces for peer %s", len(downloadPriority), peerInfo.peerName)
 
 	for _, pieceNum := range downloadPriority {
-		if len(peerInfo.activeRequests) >= maxSimultaneousDownloadsPerPeer {
+		if len(peerInfo.activeRequests) >= cont.maxSimultaneousDownloadsPerPeer {
 			// We've sent enough requests
 			break
 		}
@@ -390,16 +393,18 @@ func (cont *Controller) Run() {
 
 	for {
 		select {
+
+		// === START OF MESSAGES FROM DISK_IO === 
 		case piece := <- cont.rxChans.diskIO.receivedPiece:
 
 			_, exists := cont.peers[piece.peerName]
 
 			if !exists {
-				log.Printf("Controller : Run : WARNING. Was notified that %s finished downloading %d, but it doesn't currently exist in the peers mapping.", piece.peerName, piece.pieceNum)
+				log.Printf("Controller : Run (Received Piece) : WARNING. Was notified that %s finished downloading %d, but it doesn't currently exist in the peers mapping.", piece.peerName, piece.pieceNum)
 			} else if !cont.peers[piece.peerName].isChoked {
-				log.Printf("Controller : Run : %s finished downloading piece number %d", piece.peerName, piece.pieceNum)
+				log.Printf("Controller : Run (Received Piece) : %s finished downloading piece number %d", piece.peerName, piece.pieceNum)
 			} else {
-				log.Printf("Controller : Run : WARNING. Was notified that %s finished downloading %d but it's currently choked.", piece.peerName, piece.pieceNum)
+				log.Printf("Controller : Run (Received Piece) : WARNING. Was notified that %s finished downloading %d but it's currently choked.", piece.peerName, piece.pieceNum)
 			}
 
 			// Update our bitfield to show that we now have that piece
@@ -431,20 +436,57 @@ func (cont *Controller) Run() {
 			for _, peerInfo := range sortedPeers {
 				// Confirm that this peer is still connected and is available to take requests
 				// and also that the peer needs more requests
-				if !peerInfo.isChoked && len(peerInfo.activeRequests) < maxSimultaneousDownloadsPerPeer {
+				if !peerInfo.isChoked && len(peerInfo.activeRequests) < cont.maxSimultaneousDownloadsPerPeer {
 					cont.sendRequestsToPeer(peerInfo, raritySlice)
 				}
 			}
+		// === END OF MESSAGES FROM DISK_IO === 
 
 
+		// === START OF MESSAGES FROM PEER_MANAGER === 
+		case peerComms := <- cont.rxChans.peerManager.newPeer:
+
+			peerInfo := NewPeerInfo(len(cont.finishedPieces), peerComms)
+
+			// Throw an error if the peer is duplicate (same IP/Port. should never happen)
+			if _, exists := cont.peers[peerInfo.peerName]; exists {
+				log.Fatalf("Controller : Run (New Peer) : Received pre-existing peer with ID of %s over newPeer channel", peerInfo.peerName)
+			} else {
+				log.Printf("Controller : Run (New Peer) : Received a new PeerComms with peerName of %s", peerInfo.peerName)
+			}
+
+			// Add PeerInfo to the peers map using IP:Port as the key
+			cont.peers[peerInfo.peerName] = peerInfo
+
+			sendBitfieldOverChannel(peerInfo.chans.havePiece, peerInfo.peerName, cont.finishedPieces)
+
+			// We're not going to send requests to this peer yet. Once we receive a full bitfield from the peer
+			// through HAVE messages, we'll then send requests. 
+
+
+		case peerName := <- cont.rxChans.peerManager.deadPeer:
+
+			_, exists := cont.peers[peerName]
+
+			if !exists {
+				log.Fatalf("Controller : Run (Dead Peer) : Was told that %s is dead, but that peer doesn't exist in the mapping", peerName)
+			}
+
+			delete(cont.peers, peerName)
+
+		// === END OF MESSAGES FROM PEER_MANAGER === 
+
+
+
+		// === START OF MESSAGES FROM PEER === 
 		case chokeStatus := <- cont.rxChans.peer.chokeStatus:
 			// The peer is tell us that it can no longer work on a particular piece. 
-			log.Printf("Controller : Run : Received a PeerChokeStatus from %s with value %t", chokeStatus.peerName, chokeStatus.isChoked)
+			log.Printf("Controller : Run (Choke Status) : Received a PeerChokeStatus from %s with value %t", chokeStatus.peerName, chokeStatus.isChoked)
 
 			peerInfo, exists := cont.peers[chokeStatus.peerName]
 
 			if !exists {
-				log.Fatalf("Controller : Run : Unable to process PeerChokeStatus from %s because it doesn't exist in the peers mapping")
+				log.Fatalf("Controller : Run (Choke Status) : Unable to process PeerChokeStatus from %s because it doesn't exist in the peers mapping")
 			}
 
 			peerInfo.isChoked = chokeStatus.isChoked
@@ -469,25 +511,6 @@ func (cont *Controller) Run() {
 			}
 
 
-		case peerComms := <- cont.rxChans.peerManager.newPeer:
-
-			peerInfo := NewPeerInfo(len(cont.finishedPieces), peerComms)
-
-			// Throw an error if the peer is duplicate (same IP/Port. should never happen)
-			if _, exists := cont.peers[peerInfo.peerName]; exists {
-				log.Fatalf("Controller : Run : Received pre-existing peer with ID of %s over newPeer channel", peerInfo.peerName)
-			} else {
-				log.Printf("Controller : Run : Received a new PeerComms with peerName of %s", peerInfo.peerName)
-			}
-
-			// Add PeerInfo to the peers map using IP:Port as the key
-			cont.peers[peerInfo.peerName] = peerInfo
-
-			sendBitfieldOverChannel(peerInfo.chans.havePiece, peerInfo.peerName, cont.finishedPieces)
-
-			// We're not going to send requests to this peer yet. Once we receive a full bitfield from the peer
-			// through HAVE messages, we'll then send requests. 
-
 
 		case innerChan := <- cont.rxChans.peer.havePiece:
 
@@ -497,16 +520,16 @@ func (cont *Controller) Run() {
 			// Receive one or more pieces over inner channel
 			for piece := range innerChan {
 
-				log.Printf("Controller : Run : Received a HavePiece from %s for pieceNum %d", piece.peerName, piece.pieceNum)
+				log.Printf("Controller : Run (Have Piece) : Received a HavePiece from %s for pieceNum %d", piece.peerName, piece.pieceNum)
 				
 				// Update the peers availability slice. 
 				peerInfo, exists = cont.peers[piece.peerName]; 
 				if !exists {
-					log.Fatalf("Controller : Run : Unable to process HavePiece for %s because it doesn't exist in the peers mapping", piece.peerName)
+					log.Fatalf("Controller : Run (Have Piece) : Unable to process HavePiece for %s because it doesn't exist in the peers mapping", piece.peerName)
 				} 
 
 				if peerInfo.availablePieces[piece.pieceNum] {
-					log.Fatalf("Controller : Run : Received duplicate HavePiece from %s for piece number %d", peerInfo.peerName, piece.pieceNum)
+					log.Fatalf("Controller : Run (Have Piece) : Received duplicate HavePiece from %s for piece number %d", peerInfo.peerName, piece.pieceNum)
 				} 
 
 				// Mark this peer as having this piece
@@ -517,7 +540,7 @@ func (cont *Controller) Run() {
 			// This is either one or more HAVE messages sent for the initial peer bitfield, or it's
 			// a single HAVE message sent because the peer has a new piece. In either case, we should 
 			// attempt to download more pieces. 
-			if !peerInfo.isChoked && len(peerInfo.activeRequests) < maxSimultaneousDownloadsPerPeer {
+			if !peerInfo.isChoked && len(peerInfo.activeRequests) < cont.maxSimultaneousDownloadsPerPeer {
 
 				// Create a slice of pieces sorted by rarity
 				raritySlice := cont.createRaritySlice()
@@ -527,6 +550,10 @@ func (cont *Controller) Run() {
 				cont.sendRequestsToPeer(peerInfo, raritySlice)
 
 			}
+		// === END OF MESSAGES FROM PEER === 
+
+
+
 
 		case <- cont.t.Dying():
 			return
