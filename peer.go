@@ -108,7 +108,7 @@ type PeerChokeStatus struct {
 	isChoked bool
 }
 
-type SortedPeers []PeerInfo
+type SortedPeers []*PeerInfo
 
 func (sp SortedPeers) Less(i, j int) bool {
 	return sp[i].qtyPiecesNeeded <= sp[j].qtyPiecesNeeded
@@ -124,7 +124,7 @@ func (sp SortedPeers) Len() int {
 	return len(sp)
 }
 
-func sortedPeersByQtyPiecesNeeded(peers map[string]PeerInfo) SortedPeers {
+func sortedPeersByQtyPiecesNeeded(peers map[string]*PeerInfo) SortedPeers {
 	peerInfoSlice := make(SortedPeers, 0)
 
 	for _, peerInfo := range peers {
