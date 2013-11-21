@@ -3,6 +3,7 @@ package main
 import (
 	"testing"
 	"strconv"
+	"time"
 )
 
 func assertOrder(t *testing.T, sortedPieceSlice []int, index int, expectedPieceNum int) {
@@ -210,7 +211,7 @@ func TestControllerNewPeerReceiveFinishedBitfield(t *testing.T) {
 
 	cont := createTestController()
 	go cont.Run()
-
+	defer cont.Stop()
 
 	peer1Comms := NewPeerComms("1.2.3.4:1234", *NewControllerPeerChans())
 
@@ -231,17 +232,99 @@ func TestControllerNewPeerReceiveFinishedBitfield(t *testing.T) {
 			t.Errorf("After receiving bitfield from controller, expected pieceNum %d to be %t but it was %t", pieceNum, cont.finishedPieces[pieceNum], havePiece)
 		}
 	}
-
-	cont.Stop()
+	
 }
 
-func TestControllerNewPeerSendControllerPeerBitfield(t *testing.T) {
+func TestControllerAskNewPeerToGetOnePiece(t *testing.T) {
 
 	cont := createTestController()
 	go cont.Run()
+	defer cont.Stop()
 
-	cont.Stop()
+	peer1Name := "1.2.3.4:1234"
+	peer1Comms := NewPeerComms(peer1Name, *NewControllerPeerChans())
+
+	cont.rxChans.peerManager.newPeer <- *peer1Comms
+
+	// Ignore the bitfield that the controller is sending to the peer
+
+	// The peer is expected to send its entire bitfield to the controller. Emulate the peer by sending
+	// the controller a fake bitfield. 
+
+	// peer1 has pieces 0, 1
+	peer1Bitfield := []bool{true, true, false, false, false, false, false, false, false, false}
+	sendBitfieldOverChannel(cont.rxChans.peer.havePiece, peer1Name, peer1Bitfield)
+
+	// Sleep briefly to give the controller a chance to process the bitfield
+	time.Sleep(50 * time.Millisecond)
+
+	// The peer is still choked (by default it starts choked). Confirm that the controller doesn't ask the
+	// peer to request any pieces. 
+	select {
+	case <- peer1Comms.chans.requestPiece:
+		t.Errorf("The controller sent a peer a request before the peer was unchoked")
+
+	default:
+		// Pass. The peer didn't receive any piece request
+	}
+
+	// Tell the controller that the peer is now unchoked
+	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{ peer1Name, false }
+
+	// Sleep briefly to give the controller a chance to process the message
+	time.Sleep(50 * time.Millisecond)
+
+	// The controller should now tell the peer to retrieve only piece 1, since the controller 
+	// already has piece 0
+	select {
+	case request := <- peer1Comms.chans.requestPiece:
+		if request.pieceNum != 1 {
+			t.Errorf("Expected the controller to request piece number %d but received request for piece number %d", 1, request.pieceNum)
+		} 
+	default:
+		t.Errorf("We expected the controller to request piece number %d, but it wasn't received", 1)
+	}
+
+
+	// Sleep briefly to give the controller a chance to queue another message if it intends to
+	time.Sleep(50 * time.Millisecond)
+
+	select {
+	case request := <- peer1Comms.chans.requestPiece:
+		t.Errorf("The controller sent the peer a second requests for piece number %d, but we didn't expect any more requests", request.pieceNum)
+
+	default:
+		// Pass. We didn't receive any additional request over the channel 
+	}
+
 
 }
+
+
+/*
+func TestControllerNewPeerSendControllerPeerBitfieldTwo(t *testing.T) {
+
+	cont := createTestController()
+	go cont.Run()
+	defer cont.Stop()
+
+	peer1Name := "1.2.3.4:1234"
+	peer1Comms := NewPeerComms(peer1Name, *NewControllerPeerChans())
+
+	cont.rxChans.peerManager.newPeer <- *peer1Comms
+
+	// Ignore the bitfield that the controller is sending to the peer
+
+	// The peer is expected to send its entire bitfield to the controller. Emulate the peer by sending
+	// the controller a fake bitfield. 
+
+	// peer1 has pieces 0, 1, 3, 4 and 8
+	peer1Bitfield := []bool{true, true, false, true, true, false, false, false, true, false}
+	sendBitfieldOverChannel(cont.rxChans.peer.havePiece, peer1Name, peer1Bitfield)
+
+	// The controller should now tell the peer to retrieve pieces 1, 3, 4 and 8
+
+
+}*/
 
 

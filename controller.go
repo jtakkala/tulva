@@ -329,7 +329,7 @@ func (cont *Controller) sendRequestsToPeer(peerInfo PeerInfo, raritySlice []int)
 	downloadPriority := cont.createDownloadPriorityForPeer(peerInfo, raritySlice)
 
 	for _, pieceNum := range downloadPriority {
-		if len(peerInfo.activeRequests) < maxSimultaneousDownloadsPerPeer {
+		if len(peerInfo.activeRequests) >= maxSimultaneousDownloadsPerPeer {
 			// We've sent enough requests
 			break
 		}
@@ -338,7 +338,7 @@ func (cont *Controller) sendRequestsToPeer(peerInfo PeerInfo, raritySlice []int)
 		requestMessage := new(RequestPiece)
 		requestMessage.pieceNum = pieceNum
 		requestMessage.expectedHash = cont.pieceHashes[pieceNum]
-		log.Printf("Controller : sendRequestsToPeer : Requesting %s to get piece number %d", peerInfo.peerName, pieceNum)
+		log.Printf("Controller : sendRequestsToPeer : Requesting %s to get pieceNum %d", peerInfo.peerName, pieceNum)
 		go func() { peerInfo.chans.requestPiece <- *requestMessage }()
 
 		// Add this pieceNum to the set of pieces that this peer is working on
@@ -430,7 +430,7 @@ func (cont *Controller) Run() {
 
 		case chokeStatus := <- cont.rxChans.peer.chokeStatus:
 			// The peer is tell us that it can no longer work on a particular piece. 
-			log.Printf("Controller : Run : Received a PeerChokeStatus from %s", chokeStatus.peerName)
+			log.Printf("Controller : Run : Received a PeerChokeStatus from %s with value %t", chokeStatus.peerName, chokeStatus.isChoked)
 
 			peerInfo, exists := cont.peers[chokeStatus.peerName]
 
@@ -476,7 +476,6 @@ func (cont *Controller) Run() {
 
 			sendBitfieldOverChannel(peerInfo.chans.havePiece, peerInfo.peerName, cont.finishedPieces)
 
-
 			// We're not going to send requests to this peer yet. Once we receive a full bitfield from the peer
 			// through HAVE messages, we'll then send requests. 
 
@@ -484,6 +483,7 @@ func (cont *Controller) Run() {
 		case innerChan := <- cont.rxChans.peer.havePiece:
 
 			var peerInfo PeerInfo
+			var exists bool
 
 			// Receive one or more pieces over inner channel
 			for piece := range innerChan {
@@ -491,7 +491,7 @@ func (cont *Controller) Run() {
 				log.Printf("Controller : Run : Received a HavePiece from %s for pieceNum %d", piece.peerName, piece.pieceNum)
 				
 				// Update the peers availability slice. 
-				peerInfo, exists := cont.peers[piece.peerName]; 
+				peerInfo, exists = cont.peers[piece.peerName]; 
 				if !exists {
 					log.Fatalf("Controller : Run : Unable to process HavePiece for %s because it doesn't exist in the peers mapping", piece.peerName)
 				} 
@@ -514,6 +514,7 @@ func (cont *Controller) Run() {
 				raritySlice := cont.createRaritySlice()
 
 				// Send requests to the peer
+
 				cont.sendRequestsToPeer(peerInfo, raritySlice)
 
 			}
