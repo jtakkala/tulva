@@ -208,6 +208,7 @@ func TestControllerRunStop(t *testing.T) {
 	cont.Stop()
 }
 
+// Confirm that the controller sends the new peer the bitfield of finished pieces
 func TestControllerNewPeerReceiveFinishedBitfield(t *testing.T) {
 
 	cont := createTestController()
@@ -549,7 +550,6 @@ func TestControllerDownloadPriorityForFourPeers(t *testing.T) {
 }
 
 
-/*
 // Two peers. Both Are working on the same piece. One finishes, so the other should be told to CANCEL.
 func TestControllerTwoPeersDownloadingSamePieceAndOneFinishes(t *testing.T) {
 	cont := createTestController()
@@ -597,7 +597,7 @@ func TestControllerTwoPeersDownloadingSamePieceAndOneFinishes(t *testing.T) {
 		// PASS. Peer1 was not told to cancel any piece. 
 	}
 
-}*/
+}
 
 
 
