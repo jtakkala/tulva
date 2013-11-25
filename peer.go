@@ -46,6 +46,7 @@ type Peer struct {
 	amInterested   bool
 	peerChoking    bool
 	peerInterested bool
+	initiator      bool
 	keepalive      <-chan time.Time // channel for sending keepalives
 	lastTxKeepalive  time.Time
 	lastRxKeepalive  time.Time
@@ -166,8 +167,8 @@ func ConnectToPeer(peerTuple PeerTuple, connCh chan *net.TCPConn) {
 	connCh <- conn
 }
 
-func NewPeer(conn *net.TCPConn, infoHash []byte, diskIOChans diskIOPeerChans) *Peer {
-	p := &Peer{conn: conn, infoHash: infoHash, amChoking: true, amInterested: false, peerChoking: true, peerInterested: false, diskIOChans: diskIOChans}
+func NewPeer(infoHash []byte, initiator bool, diskIOChans diskIOPeerChans) *Peer {
+	p := &Peer{infoHash: infoHash, amChoking: true, amInterested: false, peerChoking: true, peerInterested: false, initiator: initiator, diskIOChans: diskIOChans}
 	p.read = make(chan []byte)
 	return p
 }
@@ -238,7 +239,9 @@ func (p *Peer) Run() {
 	log.Println("Peer : Run : Started")
 	defer log.Println("Peer : Run : Completed")
 
-	p.Handshake()
+	if p.initiator {
+		p.Handshake()
+	}
 	go p.Reader()
 
 	for {
@@ -271,15 +274,19 @@ func (pm *PeerManager) Run() {
 		case peer := <-pm.trackerChans.peers:
 			peerID := fmt.Sprintf("%s:%d", peer.IP.String(), peer.Port)
 			_, ok := pm.peers[peerID]
-			if ok {
-				// Peer already exists
-				log.Printf("PeerManager : Peer %s already in map\n", peerID)
-			} else {
+			if !ok {
+				// Construct the Peer object
+				pm.peers[peerID] = NewPeer(pm.infoHash, true, pm.diskIOChans)
 				go ConnectToPeer(peer, pm.serverChans.conns)
 			}
 		case conn := <-pm.serverChans.conns:
-			// Received a new peer connection, instantiate a peer
-			pm.peers[conn.RemoteAddr().String()] = NewPeer(conn, pm.infoHash, pm.diskIOChans)
+			_, ok := pm.peers[conn.RemoteAddr().String()]
+			if !ok {
+				// Construct the Peer object
+				pm.peers[conn.RemoteAddr().String()] = NewPeer(pm.infoHash, false, pm.diskIOChans)
+			}
+			// Associate the connection with the peer object and start the peer
+			pm.peers[conn.RemoteAddr().String()].conn = conn
 			go pm.peers[conn.RemoteAddr().String()].Run()
 		case peer := <-pm.peerChans.deadPeer:
 			log.Printf("PeerManager : Deleting peer %s\n", peer)
