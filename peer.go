@@ -5,6 +5,7 @@
 package main
 
 import (
+	"encoding/binary"
 	//"errors"
 	"fmt"
 	"io"
@@ -190,15 +191,10 @@ func (p *Peer) Handshake() {
 }
 
 func constructMessage(id int, payload []byte) (msg []byte, err error) {
-	msg = make([]byte, 0)
+	msg = make([]byte, 4)
 
-	// Calculate the length of the payload and pad so it fits within 4 bytes
-	msg = append(msg, []byte(fmt.Sprintf("%04d", len(payload) + 1))...)
-	for i := range msg {
-		// fmt.Sprintf returns ASCII values, subtract the ASCII offset
-		msg[i] = msg[i] - 0x30
-	}
-	// Append the message type and payloda
+	// Store the length of payload + id in network byte order
+	binary.PutVarint(msg, int64(len(payload) + 1))
 	msg = append(msg, byte(id))
 	msg = append(msg, payload...)
 
