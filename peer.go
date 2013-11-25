@@ -45,7 +45,9 @@ type Peer struct {
 	amInterested   bool
 	peerChoking    bool
 	peerInterested bool
-	keepalive      <-chan time.Time
+	keepalive      <-chan time.Time // channel for sending keepalives
+	lastTxKeepalive  time.Time
+	lastRxKeepalive  time.Time
 	read           chan []byte
 	infoHash       []byte
 	diskIOChans    diskIOPeerChans
@@ -187,34 +189,21 @@ func (p *Peer) Handshake() {
 	fmt.Printf("Wrote %d bytes to peer\n", n)
 }
 
-/*
-func constructMsg(id int, payload []byte) (msg []byte, err error) {
-	msg := make([]byte, 5)
-	msg[4] = byte(id)
-	// Default message length to 1
-	msgLen := 1
+func constructMessage(id int, payload []byte) (msg []byte, err error) {
+	msg = make([]byte, 0)
 
-	switch id {
-	case MsgHave:
-		msgLen = 5
-		msg = append(msg, payload)
-	case MsgBitfield:
-		msgLen = 1 + len(payload)
-		msg = append(msg, payload)
-	case MsgRequest:
-		msgLen = 13
-		msg = append(msg, payload)
-	case MsgPiece:
-	case MsgCancel:
-		msgLen = 13
-	case MsgPort:
-		msgLen = 3
-	default:
-		err = errors.New("Unrecognized message type")
+	// Calculate the length of the payload and pad so it fits within 4 bytes
+	msg = append(msg, []byte(fmt.Sprintf("%04d", len(payload) + 1))...)
+	for i := range msg {
+		// fmt.Sprintf returns ASCII values, subtract the ASCII offset
+		msg[i] = msg[i] - 0x30
 	}
+	// Append the message type and payloda
+	msg = append(msg, byte(id))
+	msg = append(msg, payload...)
+
 	return
 }
-*/
 
 func (p *Peer) Reader() {
 	log.Println("Peer : Reader : Started")
@@ -225,11 +214,12 @@ func (p *Peer) Reader() {
 		n, err := p.conn.Read(buf)
 		if err != nil {
 			if err == io.EOF {
-				continue
+				log.Println("Reader : EOF:", p.conn.RemoteAddr().String())
+				return
 			} else {
 				if e, ok := err.(*net.OpError); ok {
 					if e.Err == syscall.ECONNRESET {
-						log.Println("ConnectToPeer : Connection Reset:", p.conn.RemoteAddr().String())
+						log.Println("Reader : Connection Reset:", p.conn.RemoteAddr().String())
 						return
 					}
 				}

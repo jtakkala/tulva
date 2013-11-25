@@ -6,13 +6,20 @@ package main
 
 // Piece represents a piece number and data
 type Piece struct {
-	pieceNum  int
-	pieceData []byte
+	index int
+	begin int
+	block []byte
+}
+
+type Request struct {
+	index  int
+	begin  int
+	length int
 }
 
 // RequestPieceDisk used by peer for requsting pieces from DiskIO
 type RequestPieceDisk struct {
-	pieceNum     int
+	request Request
 	responseChan chan Piece // channel that diskIO should send the response on
 }
 
