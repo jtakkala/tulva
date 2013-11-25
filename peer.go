@@ -194,7 +194,7 @@ func constructMessage(id int, payload []byte) (msg []byte, err error) {
 	msg = make([]byte, 4)
 
 	// Store the length of payload + id in network byte order
-	binary.PutVarint(msg, int64(len(payload) + 1))
+	binary.BigEndian.PutUint32(msg, uint32(len(payload) + 1))
 	msg = append(msg, byte(id))
 	msg = append(msg, payload...)
 
