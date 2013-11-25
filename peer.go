@@ -5,6 +5,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/binary"
 	//"errors"
 	"fmt"
@@ -46,7 +47,10 @@ type Peer struct {
 	amInterested   bool
 	peerChoking    bool
 	peerInterested bool
+	ourBitfield    []bool
+	peerBitfield   []bool
 	initiator      bool
+	peerID         []byte
 	keepalive      <-chan time.Time // channel for sending keepalives
 	lastTxKeepalive  time.Time
 	lastRxKeepalive  time.Time
@@ -54,7 +58,14 @@ type Peer struct {
 	infoHash       []byte
 	diskIOChans    diskIOPeerChans
 	peerManagerChans peerManagerChans
+	stats          PeerStats
 	t              tomb.Tomb
+}
+
+type PeerStats struct {
+	read int
+	write int
+	errors int
 }
 
 type PeerManager struct {
@@ -173,25 +184,6 @@ func NewPeer(infoHash []byte, initiator bool, diskIOChans diskIOPeerChans) *Peer
 	return p
 }
 
-func (p *Peer) Handshake() {
-	log.Println("Peer : Handshake : Started")
-	defer log.Println("Peer : Handshake : Completed")
-
-	reserved := make([]byte, 8)
-	buf := make([]byte, 0)
-	buf = append(buf, byte(len(pstr)))
-	buf = append(buf, []byte(pstr)...)
-	buf = append(buf, reserved...)
-	buf = append(buf, p.infoHash...)
-	buf = append(buf, PeerID...)
-	n, err := p.conn.Write(buf)
-	if err != nil {
-		log.Fatal(err)
-	}
-	// Increment stats here
-	fmt.Printf("Wrote %d bytes to peer\n", n)
-}
-
 func constructMessage(id int, payload []byte) (msg []byte, err error) {
 	msg = make([]byte, 4)
 
@@ -229,6 +221,82 @@ func (p *Peer) Reader() {
 	}
 }
 
+func (p *Peer) sendHandshake() {
+	log.Println("Peer : sendHandshake : Started")
+	defer log.Println("Peer : sendHandshake : Completed")
+
+	reserved := make([]byte, 8)
+	buf := make([]byte, 0)
+	buf = append(buf, byte(len(pstr)))
+	buf = append(buf, []byte(pstr)...)
+	buf = append(buf, reserved...)
+	buf = append(buf, p.infoHash...)
+	buf = append(buf, PeerID...)
+	n, err := p.conn.Write(buf)
+	if err != nil {
+		log.Fatal(err)
+	}
+	p.stats.write += n
+}
+
+func (p *Peer) receiveHandshake() (error) {
+	log.Println("Peer : receiveHandshake : Started")
+	defer log.Println("Peer : receiveHandshake : Completed")
+
+	buf := make([]byte, 1024)
+	//p.conn.SetReadDeadline(time.Now().Add(time.Second * 1))
+	n, err := p.conn.Read(buf)
+	if err != nil {
+		if err == io.EOF {
+			log.Println("Reader : EOF:", p.conn.RemoteAddr().String())
+			return err
+		} else {
+			if e, ok := err.(*net.OpError); ok {
+				if e.Err == syscall.ECONNRESET {
+					log.Println("Reader : Connection Reset:", p.conn.RemoteAddr().String())
+					return err
+				}
+			}
+			log.Fatal(err)
+		}
+	}
+	p.stats.read += n
+
+	pstrlen := len(pstr)
+	if (buf[0] != byte(pstrlen)) {
+		pstrerr := fmt.Sprintf("Unexpected length for pstrlen (wanted %d, got %d)", pstrlen, buf[0])
+		log.Fatal(pstrerr)
+	}
+	offset := 1
+	if !bytes.Equal(buf[offset:offset + pstrlen], []byte(pstr)) {
+		pstrerr := fmt.Sprintf("Protocol mismtach: got %s, expected %s", buf[offset:offset + pstrlen], pstr)
+		log.Fatal(pstrerr)
+	}
+	offset += pstrlen
+	// ignore reserved bits for now
+	offset += 8
+	if !bytes.Equal(buf[offset:offset + 20], p.infoHash) {
+		pstrerr := fmt.Sprintf("Invalid infoHash: got %x, expected %x", buf[offset:offset + 20], p.infoHash)
+		log.Fatal(pstrerr)
+	}
+	offset += 20
+	p.peerID = make([]byte, 20)
+	copy(p.peerID, buf[offset:offset + 20])
+	fmt.Printf("Handshake success with peer %s, ID %q\n", p.conn.RemoteAddr().String(), p.peerID)
+
+	return nil
+}
+
+func (p *Peer) doHandshake() {
+	if p.initiator {
+		p.sendHandshake()
+		p.receiveHandshake()
+	} else {
+		p.receiveHandshake()
+		p.sendHandshake()
+	}
+}
+
 func (p *Peer) Stop() error {
 	log.Println("Peer : Stop : Stopping")
 	p.t.Kill(nil)
@@ -239,9 +307,7 @@ func (p *Peer) Run() {
 	log.Println("Peer : Run : Started")
 	defer log.Println("Peer : Run : Completed")
 
-	if p.initiator {
-		p.Handshake()
-	}
+	p.doHandshake()
 	go p.Reader()
 
 	for {
