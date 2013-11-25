@@ -208,6 +208,7 @@ func TestControllerRunStop(t *testing.T) {
 	cont.Stop()
 }
 
+// Confirm that the controller sends the new peer the bitfield of finished pieces
 func TestControllerNewPeerReceiveFinishedBitfield(t *testing.T) {
 
 	cont := createTestController()
@@ -443,10 +444,113 @@ func TestControllerPeerSwitchesBetweenUnchokedAndChokedRepeatedly(t *testing.T) 
 
 }
 
-/*
 
-// Two peers. Both Are working on the same piece. One finishes, so the other should be told to CANCEL
-// and then both should be told to work on a new piece. 
+func assertCancelReceived(t *testing.T, cancelCh chan CancelPiece, expectedPieceNum int) {
+
+	time.Sleep(10 * time.Millisecond)
+	select {
+	case message := <- cancelCh:
+		if message.pieceNum != expectedPieceNum {
+			t.Errorf("Expected to receive a cancel message or piece %d but it was %d", expectedPieceNum, message.pieceNum)
+		} else {
+			// Pass. We received the cancel for the piece that was expected. 
+		}
+		
+	default:
+		t.Errorf("Expected to receive a cancel message for piece %d but it wasn't received", expectedPieceNum)
+	}
+}
+
+func assertRequestOrder(t *testing.T, peerComms *PeerComms, expectedRequests []int) {
+
+	// For every request received from the controller, tell it that we finished the piece, then wait
+	// for more requests in the request channel. 
+	for _, expectedPieceNum := range expectedRequests {
+		time.Sleep(10 * time.Millisecond)
+		select {
+		case request := <- peerComms.chans.requestPiece:
+
+			// Confirm that the piece that it was just told to get it what was expected
+			if request.pieceNum != expectedPieceNum {
+				t.Errorf("Expected %s to be told to get pieceNum %d next, but it was told to get pieceNum %d instead", peerComms.peerName, expectedPieceNum, request.pieceNum)
+			}
+
+		default:
+			t.Errorf("%s wasn't told to get any more pieces, but it was expected to be told to get pieceNum %d", peerComms.peerName, expectedPieceNum)
+		}
+	}
+}
+
+// Confirm that download priority works as expected with multiple peers. In this case, there are 
+// four peers who each have different (and somewhat overlapping) sets of pieces. 
+func TestControllerDownloadPriorityForFourPeers(t *testing.T) {
+	cont := createTestController()
+
+	// Override the maxSimultaneousDownloadsPerPeer value to confirm the order of downloadPriority
+	// cont.maxSimultaneousDownloadsPerPeer = 1
+
+	go cont.Run()
+	defer cont.Stop()
+
+	peer1Name := "1.2.3.4:1234"
+	peer1Comms := NewPeerComms(peer1Name, *NewControllerPeerChans())
+
+	peer2Name := "2.3.4.5:2345"
+	peer2Comms := NewPeerComms(peer2Name, *NewControllerPeerChans())
+
+	peer3Name := "3.4.5.6:3456"
+	peer3Comms := NewPeerComms(peer3Name, *NewControllerPeerChans())
+
+	peer4Name := "4.5.6.7:4567"
+	peer4Comms := NewPeerComms(peer4Name, *NewControllerPeerChans())
+
+	cont.rxChans.peerManager.newPeer <- *peer1Comms
+	cont.rxChans.peerManager.newPeer <- *peer2Comms
+	cont.rxChans.peerManager.newPeer <- *peer3Comms
+	cont.rxChans.peerManager.newPeer <- *peer4Comms
+
+	// peer1 has pieces 0, 1, 3, 4, 8 
+	peer1Bitfield := []bool{true, true, false, true, true, false, false, false, true, false}
+	sendBitfieldOverChannel(cont.rxChans.peer.havePiece, peer1Name, peer1Bitfield)
+
+	// peer2 has pieces 0, 2, 3, 4, 6
+	peer2Bitfield := []bool{true, false, true, true, true, false, true, false, false, false}
+	sendBitfieldOverChannel(cont.rxChans.peer.havePiece, peer2Name, peer2Bitfield)
+
+	// peer3 has pieces 0, 1, 4
+	peer3Bitfield := []bool{true, true, false, false, true, false, false, false, false, false}
+	sendBitfieldOverChannel(cont.rxChans.peer.havePiece, peer3Name, peer3Bitfield)
+
+	// peer3 has all 10 pieces
+	peer4Bitfield := []bool{true, true, true, true, true, true, true, true, true, true}
+	sendBitfieldOverChannel(cont.rxChans.peer.havePiece, peer4Name, peer4Bitfield)
+
+	// At this point no peers would have been told to retrieve and pieces, because they're all
+	// still choked. 
+
+	time.Sleep(10 * time.Millisecond)
+
+	peer1ExpectedRequests := []int{3, 8, 1, 4} // Since peer2 isn't considered yet, piece 3 has rarity of 2 (not 3)
+	peer2ExpectedRequests := []int{2, 6, 3, 4}
+	peer3ExpectedRequests := []int{1, 4}
+	// Note that peer4 won't be asked to get more than 5 pieces because of maxSimultaneousDownloadsPerPeer
+	peer4ExpectedRequests := []int{5, 7, 2, 6, 8}  
+
+	// Send the unchoke message for peer3 first because he has the smallest list of needed pieces
+	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{ peer3Name, false }
+	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{ peer1Name, false }
+	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{ peer2Name, false }
+	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{ peer4Name, false }
+
+	assertRequestOrder(t, peer1Comms, peer1ExpectedRequests)
+	assertRequestOrder(t, peer2Comms, peer2ExpectedRequests)
+	assertRequestOrder(t, peer3Comms, peer3ExpectedRequests)
+	assertRequestOrder(t, peer4Comms, peer4ExpectedRequests)
+
+}
+
+
+// Two peers. Both Are working on the same piece. One finishes, so the other should be told to CANCEL.
 func TestControllerTwoPeersDownloadingSamePieceAndOneFinishes(t *testing.T) {
 	cont := createTestController()
 	go cont.Run()
@@ -461,12 +565,39 @@ func TestControllerTwoPeersDownloadingSamePieceAndOneFinishes(t *testing.T) {
 	cont.rxChans.peerManager.newPeer <- *peer1Comms
 	cont.rxChans.peerManager.newPeer <- *peer2Comms
 
+	// unchoke both peers
+	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{ peer1Name, false }
+	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{ peer2Name, false }
 
-	// peer1 has pieces 0, 1, 3, 4 and 8
-	peer1Bitfield := []bool{true, true, false, true, true, true, true, false, true, false}
+	time.Sleep(10 * time.Millisecond)
+
+	// peer1 only has piece 1 
+	peer1Bitfield := []bool{true, true, false, false, false, false, false, false, false, false}
 	sendBitfieldOverChannel(cont.rxChans.peer.havePiece, peer1Name, peer1Bitfield)
 
-}*/
+	// peer2 also only has piece 1 
+	peer2Bitfield := []bool{true, true, false, false, false, false, false, false, false, false}
+	sendBitfieldOverChannel(cont.rxChans.peer.havePiece, peer2Name, peer2Bitfield)
+
+	// Controller will now tell both peers to download piece 1, but that was confirmed in 
+	// previous tests
+
+
+	// Inform controller that piece1 was finished by peer1
+	cont.rxChans.diskIO.receivedPiece <- ReceivedPiece{1, peer1Name}
+
+	// Confirm that peer2 is told to cancel piece number 1
+	assertCancelReceived(t, peer2Comms.chans.cancelPiece, 1)
+
+	// Confirm that peer1 is not told to cancel
+	select {
+	case message := <- peer1Comms.chans.cancelPiece:
+		t.Errorf("Peer1 was told to cancel piece %d, but this shouldn't have happened.", message.pieceNum)
+	default:
+		// PASS. Peer1 was not told to cancel any piece. 
+	}
+
+}
 
 
 
