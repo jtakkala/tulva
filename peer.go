@@ -13,7 +13,7 @@ import (
 	"log"
 	"net"
 	"sort"
-	"strconv"
+	//"strconv"
 	"syscall"
 	"time"
 )
@@ -151,6 +151,7 @@ func NewPeerManager(infoHash []byte, diskIOChans diskIOPeerChans, serverChans se
 
 func ConnectToPeer(peerTuple PeerTuple, connCh chan *net.TCPConn) {
 	raddr := net.TCPAddr{peerTuple.IP, int(peerTuple.Port), ""}
+	log.Println("Connecting to", raddr)
 	conn, err := net.DialTCP("tcp4", nil, &raddr)
 	if err != nil {
 		if e, ok := err.(*net.OpError); ok {
@@ -172,12 +173,12 @@ func NewPeer(conn *net.TCPConn, infoHash []byte, diskIOChans diskIOPeerChans) *P
 }
 
 func (p *Peer) Handshake() {
-	log.Println("Peer : Run : Started")
-	defer log.Println("Peer : Run : Completed")
+	log.Println("Peer : Handshake : Started")
+	defer log.Println("Peer : Handshake : Completed")
 
 	reserved := make([]byte, 8)
 	buf := make([]byte, 0)
-	buf = strconv.AppendInt(buf, int64(len(pstr)), 10)
+	buf = append(buf, byte(len(pstr)))
 	buf = append(buf, []byte(pstr)...)
 	buf = append(buf, reserved...)
 	buf = append(buf, p.infoHash...)
