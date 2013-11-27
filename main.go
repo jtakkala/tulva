@@ -15,14 +15,14 @@ import (
 )
 
 // Unique client ID, encoded as '-' + 'TV' + <version number> + random digits
-var PeerID = []byte{'-', 'T', 'V', '0', '0', '0', '1'}
+var PeerID = [20]byte{'-', 'T', 'V', '0', '0', '0', '1'}
 
 // init initializes a random PeerID for this client
 func init() {
 	// Initialize PeerID
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for i := 7; i < 20; i++ {
-		PeerID = append(PeerID, byte(r.Intn(256)))
+		PeerID[i] = byte(r.Intn(256))
 	}
 }
 

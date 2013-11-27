@@ -7,19 +7,20 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
-	//"errors"
+	"errors"
 	"fmt"
 	"io"
 	"launchpad.net/tomb"
 	"log"
 	"net"
+	"reflect"
 	"sort"
 	//"strconv"
 	"syscall"
 	"time"
 )
 
-const pstr = "BitTorrent protocol"
+var Protocol = [19]byte{'B', 'i', 't', 'T', 'o', 'r', 'r', 'e', 'n', 't', ' ', 'p', 'r', 'o', 't', 'o', 'c', 'o', 'l'}
 
 // Message ID values 
 const (
@@ -101,6 +102,14 @@ type PeerInfo struct {
 	activeRequests  map[int]struct{}
 	qtyPiecesNeeded int                   // The quantity of pieces that this peer has that we haven't yet downloaded.
 	chans 			ControllerPeerChans
+}
+
+type Handshake struct {
+	Len      uint8
+	Protocol [19]byte
+	Reserved [8]uint8
+	InfoHash [20]byte
+	PeerID   [20]byte
 }
 
 func NewPeerInfo(quantityOfPieces int, peerComms PeerComms) *PeerInfo {
@@ -225,18 +234,18 @@ func (p *Peer) sendHandshake() {
 	log.Println("Peer : sendHandshake : Started")
 	defer log.Println("Peer : sendHandshake : Completed")
 
-	reserved := make([]byte, 8)
-	buf := make([]byte, 0)
-	buf = append(buf, byte(len(pstr)))
-	buf = append(buf, []byte(pstr)...)
-	buf = append(buf, reserved...)
-	buf = append(buf, p.infoHash...)
-	buf = append(buf, PeerID...)
-	n, err := p.conn.Write(buf)
+	handshake := Handshake{
+		Len: uint8(len(Protocol)),
+		Protocol: Protocol,
+		PeerID: PeerID,
+	}
+	copy(handshake.InfoHash[:], p.infoHash)
+	err := binary.Write(p.conn, binary.BigEndian, &handshake)
 	if err != nil {
+		// TODO: Handle errors
 		log.Fatal(err)
 	}
-	p.stats.write += n
+	p.stats.write += int(reflect.TypeOf(handshake).Size())
 }
 
 func (p *Peer) receiveHandshake() (error) {
@@ -262,22 +271,22 @@ func (p *Peer) receiveHandshake() (error) {
 	}
 	p.stats.read += n
 
-	pstrlen := len(pstr)
+	pstrlen := len(Protocol)
 	if (buf[0] != byte(pstrlen)) {
 		pstrerr := fmt.Sprintf("Unexpected length for pstrlen (wanted %d, got %d)", pstrlen, buf[0])
-		log.Fatal(pstrerr)
+		return errors.New(pstrerr)
 	}
 	offset := 1
-	if !bytes.Equal(buf[offset:offset + pstrlen], []byte(pstr)) {
-		pstrerr := fmt.Sprintf("Protocol mismtach: got %s, expected %s", buf[offset:offset + pstrlen], pstr)
-		log.Fatal(pstrerr)
+	if !bytes.Equal(buf[offset:offset + pstrlen], Protocol[:]) {
+		pstrerr := fmt.Sprintf("Protocol mismtach: got %s, expected %s", buf[offset:offset + pstrlen], Protocol)
+		return errors.New(pstrerr)
 	}
 	offset += pstrlen
 	// ignore reserved bits for now
 	offset += 8
 	if !bytes.Equal(buf[offset:offset + 20], p.infoHash) {
 		pstrerr := fmt.Sprintf("Invalid infoHash: got %x, expected %x", buf[offset:offset + 20], p.infoHash)
-		log.Fatal(pstrerr)
+		return errors.New(pstrerr)
 	}
 	offset += 20
 	p.peerID = make([]byte, 20)
