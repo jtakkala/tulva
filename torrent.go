@@ -5,8 +5,13 @@
 package main
 
 import (
+	"bytes"
+	"code.google.com/p/bencode-go"
+	"crypto/sha1"
+	"errors"
 	"launchpad.net/tomb"
 	"log"
+	"os"
 )
 
 type Torrent struct {
@@ -44,6 +49,59 @@ type MetaInfo struct {
 	Comment      string
 	CreatedBy    string "created by"
 	Encoding     string
+}
+
+// ParseTorrentFile opens the torrent filename specified and parses it,
+// returning a Torrent structure with the MetaInfo and SHA-1 hash of the
+// Info dictionary.
+func ParseTorrentFile(filename string) (torrent Torrent, err error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	// Decode the file into a generic bencode representation
+	m, err := bencode.Decode(file)
+	if err != nil {
+		return
+	}
+	// WTF?: Understand the next line
+	metaMap, ok := m.(map[string]interface{})
+	if !ok {
+		err = errors.New("Couldn't parse torrent file")
+		return
+	}
+	infoDict, ok := metaMap["info"]
+	if !ok {
+		err = errors.New("Unable to locate info dict in torrent file")
+		return
+	}
+
+	// Create an Info dict based on the decoded file
+	var b bytes.Buffer
+	err = bencode.Marshal(&b, infoDict)
+	if err != nil {
+		return
+	}
+
+	// Compute the info hash
+	h := sha1.New()
+	h.Write(b.Bytes())
+	torrent.infoHash = append(torrent.infoHash, h.Sum(nil)...)
+
+	// Populate the metaInfo structure
+	file.Seek(0, 0)
+	err = bencode.Unmarshal(file, &torrent.metaInfo)
+	if err != nil {
+		return
+	}
+
+	// Print a summary about the torrent file 
+	log.Printf("Parse : ParseTorrentFile : Successfully parsed %s", filename)
+	log.Printf("Parse : ParseTorrentFile : Determined that %d pieces exist in the torrent", (len(torrent.metaInfo.Info.Pieces) / 20))
+
+	return
 }
 
 // Init completes the initalization of the Torrent structure
