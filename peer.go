@@ -7,7 +7,7 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
+	//"errors"
 	"fmt"
 	"io"
 	"launchpad.net/tomb"
@@ -51,6 +51,7 @@ type Peer struct {
 	ourBitfield    []bool
 	peerBitfield   []bool
 	initiator      bool
+	handshake      bool
 	peerID         []byte
 	keepalive      <-chan time.Time // channel for sending keepalives
 	lastTxKeepalive  time.Time
@@ -207,10 +208,10 @@ func constructMessage(id int, payload []byte) (msg []byte, err error) {
 func (p *Peer) Reader() {
 	log.Println("Peer : Reader : Started")
 
-	buf := make([]byte, 1024)
-
 	for {
+		buf := make([]byte, 65536)
 		n, err := p.conn.Read(buf)
+		buf = buf[:n]
 		if err != nil {
 			if err == io.EOF {
 				log.Println("Reader : EOF:", p.conn.RemoteAddr().String())
@@ -225,7 +226,47 @@ func (p *Peer) Reader() {
 				log.Fatal(err)
 			}
 		}
-		fmt.Printf("Read %d bytes\n", n)
+		log.Printf("Read %d bytes\n", n)
+
+		for {
+			if !p.handshake {
+				// process handshake
+				pstrlen := len(Protocol)
+				if (buf[0] != byte(pstrlen)) {
+					fmt.Sprintf("Unexpected length for pstrlen (wanted %d, got %d)", pstrlen, buf[0])
+					p.conn.Close()
+				}
+				buf = buf[1:]
+				if !bytes.Equal(buf[:pstrlen], Protocol[:]) {
+					fmt.Sprintf("Protocol mismtach: got %s, expected %s", buf[:pstrlen], Protocol)
+					p.conn.Close()
+				}
+				// ignore reserved bits (8 octets) for now
+				buf = buf[27:]
+				if !bytes.Equal(buf[:20], p.infoHash) {
+					fmt.Sprintf("Invalid infoHash: got %x, expected %x", buf[:20], p.infoHash)
+					p.conn.Close()
+				}
+				p.peerID = make([]byte, 20)
+				buf = buf[20:]
+				copy(p.peerID, buf[:20])
+				fmt.Printf("Handshake success with peer %s, ID %q\n", p.conn.RemoteAddr().String(), p.peerID)
+				buf = buf[20:]
+				p.handshake = true
+			} else {
+				fmt.Printf("buffer %d\n", len(buf))
+				length := binary.BigEndian.Uint32(buf[0:4])
+				buf = buf[4:]
+				if length == 0 {
+					break
+				} else {
+					fmt.Println(buf[:length])
+					break
+				}
+				// parse wire protocol
+			}
+		}
+
 		p.read <- buf
 	}
 }
@@ -248,6 +289,7 @@ func (p *Peer) sendHandshake() {
 	p.stats.write += int(reflect.TypeOf(handshake).Size())
 }
 
+/*
 func (p *Peer) receiveHandshake() (error) {
 	log.Println("Peer : receiveHandshake : Started")
 	defer log.Println("Peer : receiveHandshake : Completed")
@@ -295,16 +337,7 @@ func (p *Peer) receiveHandshake() (error) {
 
 	return nil
 }
-
-func (p *Peer) doHandshake() {
-	if p.initiator {
-		p.sendHandshake()
-		p.receiveHandshake()
-	} else {
-		p.receiveHandshake()
-		p.sendHandshake()
-	}
-}
+*/
 
 func (p *Peer) Stop() error {
 	log.Println("Peer : Stop : Stopping")
@@ -316,7 +349,7 @@ func (p *Peer) Run() {
 	log.Println("Peer : Run : Started")
 	defer log.Println("Peer : Run : Completed")
 
-	p.doHandshake()
+	go p.sendHandshake()
 	go p.Reader()
 
 	for {
