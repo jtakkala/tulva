@@ -7,7 +7,7 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
-	//"errors"
+	"errors"
 	"fmt"
 	"io"
 	"launchpad.net/tomb"
@@ -205,8 +205,33 @@ func constructMessage(id int, payload []byte) (msg []byte, err error) {
 	return
 }
 
+func verifyHandshake(handshake *Handshake, infoHash []byte) error {
+	if int(handshake.Len) != len(Protocol) {
+		err := fmt.Sprintf("Unexpected length for pstrlen (wanted %d, got %d)", len(Protocol), int(handshake.Len))
+		return errors.New(err)
+	}
+	if !bytes.Equal(handshake.Protocol[:], Protocol[:]) {
+		err := fmt.Sprintf("Protocol mismtach: got %s, expected %s", handshake.Protocol, Protocol)
+		return errors.New(err)
+	}
+	if !bytes.Equal(handshake.InfoHash[:], infoHash) {
+		err := fmt.Sprintf("Invalid infoHash: got %x, expected %x", handshake.InfoHash, infoHash)
+		return errors.New(err)
+	}
+	return nil
+}
+
 func (p *Peer) Reader() {
 	log.Println("Peer : Reader : Started")
+
+	var handshake Handshake
+	binary.Read(p.conn, binary.BigEndian, &handshake)
+	err := verifyHandshake(&handshake, p.infoHash)
+	if err != nil {
+		p.conn.Close()
+		return
+	}
+	p.peerID = handshake.PeerID[:]
 
 	for {
 		buf := make([]byte, 65536)
@@ -229,31 +254,6 @@ func (p *Peer) Reader() {
 		log.Printf("Read %d bytes\n", n)
 
 		for {
-			if !p.handshake {
-				// process handshake
-				pstrlen := len(Protocol)
-				if (buf[0] != byte(pstrlen)) {
-					fmt.Sprintf("Unexpected length for pstrlen (wanted %d, got %d)", pstrlen, buf[0])
-					p.conn.Close()
-				}
-				buf = buf[1:]
-				if !bytes.Equal(buf[:pstrlen], Protocol[:]) {
-					fmt.Sprintf("Protocol mismtach: got %s, expected %s", buf[:pstrlen], Protocol)
-					p.conn.Close()
-				}
-				// ignore reserved bits (8 octets) for now
-				buf = buf[27:]
-				if !bytes.Equal(buf[:20], p.infoHash) {
-					fmt.Sprintf("Invalid infoHash: got %x, expected %x", buf[:20], p.infoHash)
-					p.conn.Close()
-				}
-				p.peerID = make([]byte, 20)
-				buf = buf[20:]
-				copy(p.peerID, buf[:20])
-				fmt.Printf("Handshake success with peer %s, ID %q\n", p.conn.RemoteAddr().String(), p.peerID)
-				buf = buf[20:]
-				p.handshake = true
-			} else {
 				fmt.Printf("buffer %d\n", len(buf))
 				length := binary.BigEndian.Uint32(buf[0:4])
 				buf = buf[4:]
@@ -264,7 +264,6 @@ func (p *Peer) Reader() {
 					break
 				}
 				// parse wire protocol
-			}
 		}
 
 		p.read <- buf
