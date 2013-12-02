@@ -233,10 +233,11 @@ func (p *Peer) Reader() {
 	}
 	p.peerID = handshake.PeerID[:]
 
+	want := 4
+	buf := make([]byte, want)
+	offset := 0
 	for {
-		buf := make([]byte, 65536)
-		n, err := p.conn.Read(buf)
-		buf = buf[:n]
+		n, err := p.conn.Read(buf[offset:])
 		if err != nil {
 			if err == io.EOF {
 				log.Println("Reader : EOF:", p.conn.RemoteAddr().String())
@@ -252,21 +253,13 @@ func (p *Peer) Reader() {
 			}
 		}
 		log.Printf("Read %d bytes\n", n)
-
-		for {
-				fmt.Printf("buffer %d\n", len(buf))
-				length := binary.BigEndian.Uint32(buf[0:4])
-				buf = buf[4:]
-				if length == 0 {
-					break
-				} else {
-					fmt.Println(buf[:length])
-					break
-				}
-				// parse wire protocol
+		if n < want {
 		}
+		length := binary.BigEndian.Uint32(buf[0:4])
+		buf = append(buf, make([]byte, length - n)...)
+		offset += n
 
-		p.read <- buf
+		//p.read <- buf
 	}
 }
 
