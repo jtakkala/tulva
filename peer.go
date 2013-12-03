@@ -51,7 +51,6 @@ type Peer struct {
 	ourBitfield    []bool
 	peerBitfield   []bool
 	initiator      bool
-	handshake      bool
 	peerID         []byte
 	keepalive      <-chan time.Time // channel for sending keepalives
 	lastTxKeepalive  time.Time
@@ -233,32 +232,18 @@ func (p *Peer) Reader() {
 	}
 	p.peerID = handshake.PeerID[:]
 
-	want := 4
-	buf := make([]byte, want)
-	offset := 0
 	for {
-		n, err := p.conn.Read(buf[offset:])
+		length := make([]byte, 4)
+		n, err := io.ReadFull(p.conn, length)
 		if err != nil {
-			if err == io.EOF {
-				log.Println("Reader : EOF:", p.conn.RemoteAddr().String())
-				return
-			} else {
-				if e, ok := err.(*net.OpError); ok {
-					if e.Err == syscall.ECONNRESET {
-						log.Println("Reader : Connection Reset:", p.conn.RemoteAddr().String())
-						return
-					}
-				}
-				log.Fatal(err)
-			}
+			return
 		}
-		log.Printf("Read %d bytes\n", n)
-		if n < want {
+		payload := make([]byte, binary.BigEndian.Uint32(length))
+		n, err = io.ReadFull(p.conn, payload)
+		if err != nil {
+			return
 		}
-		length := binary.BigEndian.Uint32(buf[0:4])
-		buf = append(buf, make([]byte, length - n)...)
-		offset += n
-
+		log.Printf("Read %d bytes of %x\n", n, payload)
 		//p.read <- buf
 	}
 }
@@ -280,56 +265,6 @@ func (p *Peer) sendHandshake() {
 	}
 	p.stats.write += int(reflect.TypeOf(handshake).Size())
 }
-
-/*
-func (p *Peer) receiveHandshake() (error) {
-	log.Println("Peer : receiveHandshake : Started")
-	defer log.Println("Peer : receiveHandshake : Completed")
-
-	buf := make([]byte, 1024)
-	//p.conn.SetReadDeadline(time.Now().Add(time.Second * 1))
-	n, err := p.conn.Read(buf)
-	if err != nil {
-		if err == io.EOF {
-			log.Println("Reader : EOF:", p.conn.RemoteAddr().String())
-			return err
-		} else {
-			if e, ok := err.(*net.OpError); ok {
-				if e.Err == syscall.ECONNRESET {
-					log.Println("Reader : Connection Reset:", p.conn.RemoteAddr().String())
-					return err
-				}
-			}
-			log.Fatal(err)
-		}
-	}
-	p.stats.read += n
-
-	pstrlen := len(Protocol)
-	if (buf[0] != byte(pstrlen)) {
-		pstrerr := fmt.Sprintf("Unexpected length for pstrlen (wanted %d, got %d)", pstrlen, buf[0])
-		return errors.New(pstrerr)
-	}
-	offset := 1
-	if !bytes.Equal(buf[offset:offset + pstrlen], Protocol[:]) {
-		pstrerr := fmt.Sprintf("Protocol mismtach: got %s, expected %s", buf[offset:offset + pstrlen], Protocol)
-		return errors.New(pstrerr)
-	}
-	offset += pstrlen
-	// ignore reserved bits for now
-	offset += 8
-	if !bytes.Equal(buf[offset:offset + 20], p.infoHash) {
-		pstrerr := fmt.Sprintf("Invalid infoHash: got %x, expected %x", buf[offset:offset + 20], p.infoHash)
-		return errors.New(pstrerr)
-	}
-	offset += 20
-	p.peerID = make([]byte, 20)
-	copy(p.peerID, buf[offset:offset + 20])
-	fmt.Printf("Handshake success with peer %s, ID %q\n", p.conn.RemoteAddr().String(), p.peerID)
-
-	return nil
-}
-*/
 
 func (p *Peer) Stop() error {
 	log.Println("Peer : Stop : Stopping")
