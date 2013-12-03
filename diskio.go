@@ -155,7 +155,6 @@ func (diskio *DiskIO) writePiece(piece Piece) {
 			n, err := diskio.files[i].WriteAt(piece.data[:max], int64(offset))
 			if err != nil {
 				log.Fatal(err)
-				return
 			}
 			log.Printf("Wrote %d bytes for piece %x at offset %x, file %s\n", n, piece.index, offset, diskio.metaInfo.Info.Files[i].Path)
 			piece.data = piece.data[max:]
