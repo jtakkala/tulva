@@ -220,6 +220,46 @@ func verifyHandshake(handshake *Handshake, infoHash []byte) error {
 	return nil
 }
 
+func (p *Peer) decodeMessage(payload []byte) {
+	if len(payload) == 0 {
+		// keepalive
+		return
+	}
+
+	switch payload[0] {
+	case 0:
+		// choke
+		break
+	case 1:
+		// unchoke
+		break
+	case 2:
+		// interested
+		break
+	case 3:
+		// not interested
+		break
+	case 4:
+		// have
+		break
+	case 5:
+		// bitfield
+		break
+	case 6:
+		// request
+		break
+	case 7:
+		// piece
+		break
+	case 8:
+		// cancel
+		break
+	case 9:
+		// port
+		break
+	}
+}
+
 func (p *Peer) Reader() {
 	log.Println("Peer : Reader : Started")
 
@@ -244,6 +284,7 @@ func (p *Peer) Reader() {
 			return
 		}
 		log.Printf("Read %d bytes of %x\n", n, payload)
+		p.decodeMessage(payload)
 		//p.read <- buf
 	}
 }
