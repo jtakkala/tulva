@@ -95,7 +95,7 @@ type ControllerPeerManagerChans struct {
 }
 
 func NewControllerPeerManagerChans() *ControllerPeerManagerChans {
-	return &ControllerPeerManagerChans{ newPeer: make(chan PeerComms)}
+	return &ControllerPeerManagerChans{newPeer: make(chan PeerComms), deadPeer: make(chan string)}
 }
 
 type PeerControllerChans struct {
