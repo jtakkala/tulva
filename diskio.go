@@ -22,11 +22,11 @@ type diskIOPeerChans struct {
 }
 
 type DiskIO struct {
-	metaInfo MetaInfo
-	files    []*os.File
+	metaInfo  MetaInfo
+	files     []*os.File
 	peerChans diskIOPeerChans
 	contChans ControllerDiskIOChans
-	t        tomb.Tomb
+	t         tomb.Tomb
 }
 
 // checkHash accepts a byte buffer and pieceIndex, computes the SHA-1 hash of
@@ -147,7 +147,7 @@ func NewDiskIO(metaInfo MetaInfo) *DiskIO {
 func (diskio *DiskIO) writePiece(piece Piece) {
 	offset := piece.index * diskio.metaInfo.Info.PieceLength
 
-	for i := 0; i <= len(diskio.metaInfo.Info.Files) ; i++ {
+	for i := 0; i <= len(diskio.metaInfo.Info.Files); i++ {
 		if offset > diskio.metaInfo.Info.Files[i].Length {
 			offset -= diskio.metaInfo.Info.Files[i].Length
 		} else {
@@ -214,7 +214,10 @@ func (diskio *DiskIO) Run() {
 	for {
 		select {
 		case piece := <-diskio.peerChans.writePiece:
-			diskio.writePiece(piece)
+			go func() {
+				diskio.writePiece(piece)
+				diskio.contChans.receivedPiece <- ReceivedPiece{pieceNum: piece.index, peerName: piece.peerName}
+			}()
 		case request := <-diskio.peerChans.requestPiece:
 			fmt.Println(request)
 		case <-diskio.t.Dying():
