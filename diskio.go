@@ -144,6 +144,29 @@ func NewDiskIO(metaInfo MetaInfo) *DiskIO {
 	return diskio
 }
 
+func (diskio *DiskIO) writePiece(piece Piece) {
+	offset := piece.index * diskio.metaInfo.Info.PieceLength
+
+	for i := 0; i <= len(diskio.metaInfo.Info.Files) ; i++ {
+		if offset > diskio.metaInfo.Info.Files[i].Length {
+			offset -= diskio.metaInfo.Info.Files[i].Length
+		} else {
+			max := diskio.metaInfo.Info.Files[i].Length - offset
+			n, err := diskio.files[i].WriteAt(piece.data[:max], int64(offset))
+			if err != nil {
+				log.Fatal(err)
+				return
+			}
+			log.Printf("Wrote %d bytes for piece %x at offset %x, file %s\n", n, piece.index, offset, diskio.metaInfo.Info.Files[i].Path)
+			piece.data = piece.data[max:]
+			offset = 0
+			if len(piece.data) == 0 {
+				break
+			}
+		}
+	}
+}
+
 func (diskio *DiskIO) Init() {
 	log.Println("DiskIO : Init : Started")
 	defer log.Println("DiskIO : Init : Completed")
@@ -191,7 +214,7 @@ func (diskio *DiskIO) Run() {
 	for {
 		select {
 		case piece := <-diskio.peerChans.writePiece:
-			fmt.Println(piece)
+			diskio.writePiece(piece)
 		case request := <-diskio.peerChans.requestPiece:
 			fmt.Println(request)
 		case <-diskio.t.Dying():

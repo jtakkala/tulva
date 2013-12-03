@@ -7,8 +7,8 @@ package main
 // Piece represents a piece number and data
 type Piece struct {
 	index int
-	begin int
-	block []byte
+	data  []byte
+	peerName string
 }
 
 type Request struct {
