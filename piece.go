@@ -26,7 +26,7 @@ type RequestPieceDisk struct {
 // Sent from the controller to the peer to request a particular piece
 type RequestPiece struct {
 	pieceNum     int
-	expectedHash string
+	expectedHash []byte
 }
 
 // Sent by the peer to the controller when it receives a HAVE message

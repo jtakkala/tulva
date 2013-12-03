@@ -131,17 +131,26 @@ func (t *Torrent) Run() {
 	defer log.Println("Torrent : Run : Completed")
 	t.Init()
 
+	pieceHashes := make([][]byte, 0)
+	for offset := 0; offset <= len(t.metaInfo.Info.Pieces) - 20; offset += 20 {
+		pieceHashes = append(pieceHashes, []byte(t.metaInfo.Info.Pieces[offset:offset + 20]))
+	}
+
 	diskIO := NewDiskIO(t.metaInfo)
+	diskIO.Init()
+	pieces := diskIO.Verify()
 	go diskIO.Run()
 
 	server := NewServer()
-	go server.Run()
-
 	trackerManager := NewTrackerManager(server.Port)
-	go trackerManager.Run(t.metaInfo, t.infoHash)
-
 	peerManager := NewPeerManager(t.infoHash, diskIO.peerChans, server.peerChans, trackerManager.peerChans)
+
+	controller := NewController(pieces, pieceHashes, diskIO.contChans, peerManager.contChans, peerManager.peerContChans)
+
+	go controller.Run()
 	go peerManager.Run()
+	go server.Run()
+	go trackerManager.Run(t.metaInfo, t.infoHash)
 
 	for {
 		select {

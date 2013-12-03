@@ -25,6 +25,7 @@ type DiskIO struct {
 	metaInfo MetaInfo
 	files    []*os.File
 	peerChans diskIOPeerChans
+	contChans ControllerDiskIOChans
 	t        tomb.Tomb
 }
 
@@ -139,10 +140,14 @@ func NewDiskIO(metaInfo MetaInfo) *DiskIO {
 	diskio.metaInfo = metaInfo
 	diskio.peerChans.writePiece = make(chan Piece)
 	diskio.peerChans.requestPiece = make(chan RequestPieceDisk)
+	diskio.contChans.receivedPiece = make(chan ReceivedPiece)
 	return diskio
 }
 
 func (diskio *DiskIO) Init() {
+	log.Println("DiskIO : Init : Started")
+	defer log.Println("DiskIO : Init : Completed")
+
 	if len(diskio.metaInfo.Info.Files) > 0 {
 		// Multiple File Mode
 		directory := diskio.metaInfo.Info.Name
@@ -182,10 +187,6 @@ func (diskio *DiskIO) Run() {
 	log.Println("DiskIO : Run : Started")
 	defer diskio.t.Done()
 	defer log.Println("DiskIO : Run : Completed")
-
-	diskio.Init()
-	finishedPieces := diskio.Verify()
-	fmt.Println(finishedPieces)
 
 	for {
 		select {

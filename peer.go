@@ -76,6 +76,8 @@ type PeerManager struct {
 	serverChans  serverPeerChans
 	trackerChans trackerPeerChans
 	diskIOChans  diskIOPeerChans
+	contChans    ControllerPeerManagerChans
+	peerContChans PeerControllerChans
 	t            tomb.Tomb
 }
 
@@ -167,6 +169,10 @@ func NewPeerManager(infoHash []byte, diskIOChans diskIOPeerChans, serverChans se
 	pm.trackerChans = trackerChans
 	pm.peerChans.deadPeer = make(chan string)
 	pm.peers = make(map[string]*Peer)
+	pm.contChans.newPeer = make(chan PeerComms)
+	pm.contChans.deadPeer = make(chan string)
+	pm.peerContChans.chokeStatus = make(chan PeerChokeStatus)
+	pm.peerContChans.havePiece = make(chan chan HavePiece)
 	return pm
 }
 

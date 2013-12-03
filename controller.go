@@ -59,7 +59,7 @@ func (r *RarityMap) getPiecesByRarity() []int {
 
 type Controller struct {
 	finishedPieces []bool
-	pieceHashes []string
+	pieceHashes [][]byte
 	activeRequestsTotals []int 
 	peers map[string]*PeerInfo
 	maxSimultaneousDownloadsPerPeer int
@@ -113,18 +113,13 @@ type ControllerRxChans struct {
 	peer 		PeerControllerChans
 }
 
-func NewControllerRxChans( diskIO *ControllerDiskIOChans, peerManager *ControllerPeerManagerChans, peer *PeerControllerChans) *ControllerRxChans {
-	return &ControllerRxChans{ *diskIO, *peerManager, *peer }
-}
-
-func NewController(finishedPieces []bool, 
-					pieceHashes []string, 
-					rxChans *ControllerRxChans) *Controller {
+func NewController(finishedPieces []bool, pieceHashes [][]byte, diskIOChans ControllerDiskIOChans,
+	peerManagerChans ControllerPeerManagerChans, peerChans PeerControllerChans) *Controller {
 
 	cont := new(Controller)
 	cont.finishedPieces = finishedPieces
 	cont.pieceHashes = pieceHashes
-	cont.rxChans = rxChans
+	cont.rxChans = &ControllerRxChans{diskIOChans, peerManagerChans, peerChans}
 	cont.peers = make(map[string]*PeerInfo)
 	cont.activeRequestsTotals = make([]int, len(finishedPieces))
 	cont.maxSimultaneousDownloadsPerPeer = 5  // suggested default 
