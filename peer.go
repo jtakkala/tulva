@@ -336,10 +336,32 @@ func (p *Peer) decodeMessage(payload []byte) {
 	case 0:
 		// Choke Message
 		log.Printf("Received a Choke message from %s", p.peerName)
+		if !p.peerChoking {
+			// We're changing from being unchoked to choked
+			p.peerChoking = true
+
+			// Tell the controller that we've switched from unchoked to choked
+			go func() {
+				p.contTxChans.chokeStatus <- PeerChokeStatus{peerName: p.peerName, isChoked: true}
+			}()
+		} else {
+			// Ignore choke message because we're already choked. 
+		}
 		break
 	case 1:
 		// Unchoke Message
 		log.Printf("Received an Unchoke message from %s", p.peerName)
+		if p.peerChoking {
+			// We're changing from being choked to unchoked
+			p.peerChoking = false
+
+			// Tell the controller that we've switched from choked to unchoked
+			go func() {
+				p.contTxChans.chokeStatus <- PeerChokeStatus{peerName: p.peerName, isChoked: false}
+			}()
+		} else {
+			// Ignore unchoke message because we're already unchoked. 
+		}
 		break
 	case 2:
 		// Interested Message
