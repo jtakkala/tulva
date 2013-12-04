@@ -250,12 +250,15 @@ func verifyHandshake(handshake *Handshake, infoHash []byte) error {
 	return nil
 }
 
-// Send zero or more HavePiece messages to the controller. To send zero HavePiece
-// messages (like when sending an empty bitfield), the pieces argument should 
-// just be an empty slice. 
+// Send one or more HavePiece messages to the controller. 
 // NOTE: This function will potentially block and should be run
 // as a separate goroutine. 
 func (p *Peer) sendHaveMessagesToController(pieces []HavePiece) {
+
+	if len(pieces) == 0 {
+		log.Fatalf("There must be at least one Have to send to the controller")
+	}
+
 	// make an inner channel that will be used to send the individual HavePiece
 	// messages to the controller. 
 	innerChan := make(chan HavePiece)
@@ -286,14 +289,6 @@ func (p *Peer) decodeMessage(payload []byte) {
 		return
 	}
 
-/*
-	leadingZeros := make([]byte, 3)
-	buf := p.readBytesFromConn(1)
-	log.Printf("BUF: %x", buf)
-	bufWithLeadingZeros := append(leadingZeros,buf...) 
-	log.Printf("BUFWITHLEADINGZEROS: %x", bufWithLeadingZeros)
-	messageID := binary.BigEndian.Uint32(bufWithLeadingZeros)
-*/
 
 	messageID := payload[0]
 
