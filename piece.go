@@ -6,8 +6,8 @@ package main
 
 // Piece represents a piece number and data
 type Piece struct {
-	index int
-	data  []byte
+	index    int
+	data     []byte
 	peerName string
 }
 
@@ -19,7 +19,7 @@ type Request struct {
 
 // RequestPieceDisk used by peer for requsting pieces from DiskIO
 type RequestPieceDisk struct {
-	request Request
+	request      Request
 	responseChan chan Piece // channel that diskIO should send the response on
 }
 
@@ -32,7 +32,7 @@ type RequestPiece struct {
 // Sent by the peer to the controller when it receives a HAVE message
 type HavePiece struct {
 	pieceNum int
-	peerName   string
+	peerName string
 }
 
 // Sent from the controller to the peer to cancel an outstanding request
@@ -44,5 +44,5 @@ type CancelPiece struct {
 // received and written to disk
 type ReceivedPiece struct {
 	pieceNum int
-	peerName   string
+	peerName string
 }

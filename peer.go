@@ -23,7 +23,7 @@ import (
 
 var Protocol = [19]byte{'B', 'i', 't', 'T', 'o', 'r', 'r', 'e', 'n', 't', ' ', 'p', 'r', 'o', 't', 'o', 'c', 'o', 'l'}
 
-// Message ID values 
+// Message ID values
 const (
 	MsgChoke int = iota
 	MsgUnchoke
@@ -44,33 +44,33 @@ type PeerTuple struct {
 }
 
 type Peer struct {
-	conn           *net.TCPConn
-	peerName       string
-	amChoking      bool
-	amInterested   bool
-	peerChoking    bool
-	peerInterested bool
-	ourBitfield    []bool
-	peerBitfield   []bool
-	initiator      bool
-	peerID         []byte
-	keepalive      <-chan time.Time // channel for sending keepalives
+	conn             *net.TCPConn
+	peerName         string
+	amChoking        bool
+	amInterested     bool
+	peerChoking      bool
+	peerInterested   bool
+	ourBitfield      []bool
+	peerBitfield     []bool
+	initiator        bool
+	peerID           []byte
+	keepalive        <-chan time.Time // channel for sending keepalives
 	lastTxKeepalive  time.Time
 	lastRxKeepalive  time.Time
-	read           chan []byte
-	infoHash       []byte
-	diskIOChans    diskIOPeerChans
+	read             chan []byte
+	infoHash         []byte
+	diskIOChans      diskIOPeerChans
 	peerManagerChans peerManagerChans
-	contRxChans    ControllerPeerChans
-	contTxChans    PeerControllerChans
-	stats          PeerStats
-	t              tomb.Tomb
+	contRxChans      ControllerPeerChans
+	contTxChans      PeerControllerChans
+	stats            PeerStats
+	t                tomb.Tomb
 }
 
 type PeerStats struct {
-	mu   sync.Mutex
-	read int
-	write int
+	mu     sync.Mutex
+	read   int
+	write  int
 	errors int
 }
 
@@ -93,16 +93,16 @@ func (ps *PeerStats) addError(value int) {
 }
 
 type PeerManager struct {
-	peers        map[string]*Peer
-	infoHash     []byte
-	numPieces    int
-	peerChans    peerManagerChans
-	serverChans  serverPeerChans
-	trackerChans trackerPeerChans
-	diskIOChans  diskIOPeerChans
-	contChans    ControllerPeerManagerChans
+	peers         map[string]*Peer
+	infoHash      []byte
+	numPieces     int
+	peerChans     peerManagerChans
+	serverChans   serverPeerChans
+	trackerChans  trackerPeerChans
+	diskIOChans   diskIOPeerChans
+	contChans     ControllerPeerManagerChans
 	peerContChans PeerControllerChans
-	t            tomb.Tomb
+	t             tomb.Tomb
 }
 
 type peerManagerChans struct {
@@ -110,8 +110,8 @@ type peerManagerChans struct {
 }
 
 type PeerComms struct {
-	peerName     string
-	chans 		 ControllerPeerChans	
+	peerName string
+	chans    ControllerPeerChans
 }
 
 func NewPeerComms(peerName string, cpc ControllerPeerChans) *PeerComms {
@@ -126,8 +126,8 @@ type PeerInfo struct {
 	isChoked        bool // The peer is connected but choked. Defaults to TRUE (choked)
 	availablePieces []bool
 	activeRequests  map[int]struct{}
-	qtyPiecesNeeded int                   // The quantity of pieces that this peer has that we haven't yet downloaded.
-	chans 			ControllerPeerChans
+	qtyPiecesNeeded int // The quantity of pieces that this peer has that we haven't yet downloaded.
+	chans           ControllerPeerChans
 }
 
 type Handshake struct {
@@ -154,7 +154,7 @@ func NewPeerInfo(quantityOfPieces int, peerComms PeerComms) *PeerInfo {
 // Sent by the peer to controller indicating a 'choke' state change. It either went from unchoked to choked,
 // or from choked to unchoked.
 type PeerChokeStatus struct {
-	peerName   string
+	peerName string
 	isChoked bool
 }
 
@@ -219,26 +219,26 @@ func ConnectToPeer(peerTuple PeerTuple, connCh chan *net.TCPConn) {
 }
 
 func NewPeer(
-			peerName string,
-			infoHash []byte, 
-			initiator bool, 
-			numPieces int,
-			diskIOChans diskIOPeerChans,
-			contRxChans ControllerPeerChans,
-			contTxChans PeerControllerChans) *Peer {
+	peerName string,
+	infoHash []byte,
+	initiator bool,
+	numPieces int,
+	diskIOChans diskIOPeerChans,
+	contRxChans ControllerPeerChans,
+	contTxChans PeerControllerChans) *Peer {
 	p := &Peer{
-			peerName: peerName,
-			infoHash: infoHash, 
-			peerBitfield: make([]bool, numPieces), 
-			ourBitfield: make([]bool, numPieces),
-			amChoking: true, 
-			amInterested: false, 
-			peerChoking: true, 
-			peerInterested: false, 
-			initiator: initiator, 
-			diskIOChans: diskIOChans,
-			contRxChans: contRxChans,
-			contTxChans: contTxChans}
+		peerName:       peerName,
+		infoHash:       infoHash,
+		peerBitfield:   make([]bool, numPieces),
+		ourBitfield:    make([]bool, numPieces),
+		amChoking:      true,
+		amInterested:   false,
+		peerChoking:    true,
+		peerInterested: false,
+		initiator:      initiator,
+		diskIOChans:    diskIOChans,
+		contRxChans:    contRxChans,
+		contTxChans:    contTxChans}
 	p.read = make(chan []byte)
 	return p
 }
@@ -247,7 +247,7 @@ func constructMessage(id int, payload []byte) (msg []byte, err error) {
 	msg = make([]byte, 4)
 
 	// Store the length of payload + id in network byte order
-	binary.BigEndian.PutUint32(msg, uint32(len(payload) + 1))
+	binary.BigEndian.PutUint32(msg, uint32(len(payload)+1))
 	msg = append(msg, byte(id))
 	msg = append(msg, payload...)
 
@@ -282,9 +282,9 @@ func (p *Peer) sendBitfieldToController(bitfield []bool) {
 	p.sendHaveMessagesToController(haveSlice)
 }
 
-// Send one or more HavePiece messages to the controller. 
+// Send one or more HavePiece messages to the controller.
 // NOTE: This function will potentially block and should be run
-// as a separate goroutine. 
+// as a separate goroutine.
 func (p *Peer) sendHaveMessagesToController(pieces []HavePiece) {
 
 	if len(pieces) == 0 {
@@ -292,7 +292,7 @@ func (p *Peer) sendHaveMessagesToController(pieces []HavePiece) {
 	}
 
 	// make an inner channel that will be used to send the individual HavePiece
-	// messages to the controller. 
+	// messages to the controller.
 	innerChan := make(chan HavePiece)
 	p.contTxChans.havePiece <- innerChan
 
@@ -301,7 +301,7 @@ func (p *Peer) sendHaveMessagesToController(pieces []HavePiece) {
 	}
 
 	// close the inner channel to signal to the controller that we're finished
-	// sending HavePiece messages. 
+	// sending HavePiece messages.
 	close(innerChan)
 }
 
@@ -317,7 +317,7 @@ func (p *Peer) readBytesFromConn(numBytes int) []byte {
 */
 
 // Need to send targetSize because the byte slice will potentially have padding
-// bits at the end if the bitfield size is not divisible by 8. 
+// bits at the end if the bitfield size is not divisible by 8.
 func convertByteSliceToBoolSlice(targetSize int, original []byte) []bool {
 	result := make([]bool, targetSize)
 	if ((len(original) * 8) - targetSize) > 7 {
@@ -328,15 +328,15 @@ func convertByteSliceToBoolSlice(targetSize int, original []byte) []bool {
 		for j := 0; j < 8; j++ {
 			resultIndex := (i * 8) + j
 			if resultIndex >= targetSize {
-				// We've hit bit padding at the end of the byte slice. 
+				// We've hit bit padding at the end of the byte slice.
 				break
-			} 
+			}
 
 			currentByte := original[i]
-			currentBit := (currentByte >> uint32(7 - j)) & 1
+			currentBit := (currentByte >> uint32(7-j)) & 1
 			result[resultIndex] = currentBit == 1
 		}
-	} 
+	}
 	return result
 }
 
@@ -349,7 +349,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 
 	messageID := payload[0]
 
-	// Remove the messageID 
+	// Remove the messageID
 	payload = payload[1:]
 
 	switch messageID {
@@ -370,7 +370,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 				p.contTxChans.chokeStatus <- PeerChokeStatus{peerName: p.peerName, isChoked: true}
 			}()
 		} else {
-			// Ignore choke message because we're already choked. 
+			// Ignore choke message because we're already choked.
 		}
 		break
 	case 1:
@@ -389,7 +389,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 				p.contTxChans.chokeStatus <- PeerChokeStatus{peerName: p.peerName, isChoked: false}
 			}()
 		} else {
-			// Ignore unchoke message because we're already unchoked. 
+			// Ignore unchoke message because we're already unchoked.
 		}
 		break
 	case 2:
@@ -428,9 +428,9 @@ func (p *Peer) decodeMessage(payload []byte) {
 		// Update the local peer bitfield
 		p.peerBitfield[pieceNum] = true
 
-		// Send a single HavePiece struct to the controller 
+		// Send a single HavePiece struct to the controller
 		have := make([]HavePiece, 1)
-		have[0] = HavePiece{pieceNum: pieceNum, peerName: p.peerName} 
+		have[0] = HavePiece{pieceNum: pieceNum, peerName: p.peerName}
 		go p.sendHaveMessagesToController(have)
 
 		break
@@ -440,8 +440,8 @@ func (p *Peer) decodeMessage(payload []byte) {
 
 		p.peerBitfield = convertByteSliceToBoolSlice(len(p.peerBitfield), payload)
 
-		// Break the bitfield into a slice of HavePiece structs and send them 
-		// to the controller  
+		// Break the bitfield into a slice of HavePiece structs and send them
+		// to the controller
 		go p.sendBitfieldToController(p.peerBitfield)
 
 		break
@@ -500,7 +500,7 @@ func (p *Peer) Reader() {
 		n, err = io.ReadFull(p.conn, payload)
 		if err != nil {
 			// FIXME if this is not a keepalive, we should
-			// definitely get a payload 
+			// definitely get a payload
 			return
 		}
 		p.stats.addRead(n)
@@ -515,9 +515,9 @@ func (p *Peer) sendHandshake() {
 	log.Printf("Peer : sendHandshake : Sending handshake to %s", p.peerName)
 
 	handshake := Handshake{
-		Len: uint8(len(Protocol)),
+		Len:      uint8(len(Protocol)),
 		Protocol: Protocol,
-		PeerID: PeerID,
+		PeerID:   PeerID,
 	}
 	copy(handshake.InfoHash[:], p.infoHash)
 
@@ -545,14 +545,16 @@ func (p *Peer) sendKeepalive() {
 	p.stats.addWrite(4)
 }
 
-// Sends any message besides a handshake or a keepalive, both of which 
+// Sends any message besides a handshake or a keepalive, both of which
 // don't have a beginning LEN-ID structure. The length is automatically calculated.
 func (p *Peer) sendMessage(ID int, payload interface{}) {
-	
+
 	// Write the payload to a slice of bytes so the length can be computed
 	payloadBuffer := new(bytes.Buffer)
 	err := binary.Write(payloadBuffer, binary.BigEndian, payload)
-	if err != nil {log.Fatal(err)}
+	if err != nil {
+		log.Fatal(err)
+	}
 	payloadBytes := payloadBuffer.Bytes()
 
 	messageBuffer := new(bytes.Buffer)
@@ -561,26 +563,32 @@ func (p *Peer) sendMessage(ID int, payload interface{}) {
 	lengthField := uint32(len(payloadBytes) + 1) // plus 1 to account for the ID
 
 	err = binary.Write(messageBuffer, binary.BigEndian, lengthField)
-	if err != nil {log.Fatal(err)}
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// Write a 1-byte ID field to the buffer
 	err = binary.Write(messageBuffer, binary.BigEndian, uint8(ID))
-	if err != nil {log.Fatal(err)}
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// Write the variable length payload to the buffer (potentially 0 bytes)
 	err = binary.Write(messageBuffer, binary.BigEndian, payloadBytes)
-	if err != nil {log.Fatal(err)}
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// Write the message over TCP to the peer
 	message := messageBuffer.Bytes()
 	log.Printf("TEMP: Sending over TCP: %v", message)
 	err = binary.Write(p.conn, binary.BigEndian, message)
-	if err != nil {log.Fatal(err)}
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	p.stats.addWrite(len(message))
 }
-
-
 
 func (p *Peer) sendChoke() {
 	log.Printf("Peer : sendChoke : Sending choke to %s", p.peerName)
@@ -605,7 +613,9 @@ func (p *Peer) sendNotInterested() {
 func (p *Peer) sendHave(pieceNum int) {
 	payloadBuffer := new(bytes.Buffer)
 	err := binary.Write(payloadBuffer, binary.BigEndian, uint64(pieceNum))
-	if err != nil {log.Fatal(err)}
+	if err != nil {
+		log.Fatal(err)
+	}
 	p.sendMessage(4, payloadBuffer.Bytes())
 }
 
@@ -646,29 +656,29 @@ func (p *Peer) Run() {
 		case <-p.read:
 			fmt.Println("p.read")
 		//case buf := <-p.read:
-			//fmt.Println("Read from peer:", buf)
+		//fmt.Println("Read from peer:", buf)
 
-			/*
-		case requestPiece := <-p.contRxChans.requestPiece:
-		case cancelPiece := <-p.contRxChans.cancelPiece:
-		case innerChan := <-p.contRxChans.havePiece:
-			// Create a slice of HaveMessage structs from all individual 
-			// Have messages received from the controller
-			//haveMessages := p.receiveHaveMessagesFromController(innerChan)
+		/*
+			case requestPiece := <-p.contRxChans.requestPiece:
+			case cancelPiece := <-p.contRxChans.cancelPiece:
+			case innerChan := <-p.contRxChans.havePiece:
+				// Create a slice of HaveMessage structs from all individual
+				// Have messages received from the controller
+				//haveMessages := p.receiveHaveMessagesFromController(innerChan)
 
 
-			// update our local bitfield based on the Have messages received from the controller. 
+				// update our local bitfield based on the Have messages received from the controller.
 
-			if !initialBitfieldSentToPeer {
-				// Send the entire bitfield to the peer
+				if !initialBitfieldSentToPeer {
+					// Send the entire bitfield to the peer
 
-			} else {
-				// Send a single have message to the peer 
+				} else {
+					// Send a single have message to the peer
 
-			}
+				}
 
-			// situation #2: The controller sends us  
-			*/ 
+				// situation #2: The controller sends us
+		*/
 		case <-p.t.Dying():
 			p.peerManagerChans.deadPeer <- p.conn.RemoteAddr().String()
 			return
@@ -701,14 +711,14 @@ func (pm *PeerManager) Run() {
 				// Construct the Peer object
 				pm.peers[peerName] = NewPeer(
 					peerName,
-					pm.infoHash, 
-					true, 
+					pm.infoHash,
+					true,
 					pm.numPieces,
 					pm.diskIOChans,
 					contTxChans,
 					pm.peerContChans)
 
-				// Give the controller the channels that it will use to 
+				// Give the controller the channels that it will use to
 				// transmit messages to this new peer
 				go func() {
 					pm.contChans.newPeer <- PeerComms{peerName: peerName, chans: contTxChans}
@@ -728,14 +738,14 @@ func (pm *PeerManager) Run() {
 				peerName := conn.RemoteAddr().String()
 				pm.peers[peerName] = NewPeer(
 					peerName,
-					pm.infoHash, 
-					false, 
+					pm.infoHash,
+					false,
 					pm.numPieces,
 					pm.diskIOChans,
 					contTxChans,
 					pm.peerContChans)
 
-				// Give the controller the channels that it will use to 
+				// Give the controller the channels that it will use to
 				// transmit messages to this new peer
 				go func() {
 					pm.contChans.newPeer <- PeerComms{peerName: peerName, chans: contTxChans}

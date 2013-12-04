@@ -97,7 +97,7 @@ func ParseTorrentFile(filename string) (torrent Torrent, err error) {
 		return
 	}
 
-	// Print a summary about the torrent file 
+	// Print a summary about the torrent file
 	log.Printf("Parse : ParseTorrentFile : Successfully parsed %s", filename)
 	log.Printf("Parse : ParseTorrentFile : Determined that %d pieces exist in the torrent", (len(torrent.metaInfo.Info.Pieces) / 20))
 
@@ -132,8 +132,8 @@ func (t *Torrent) Run() {
 	t.Init()
 
 	pieceHashes := make([][]byte, 0)
-	for offset := 0; offset <= len(t.metaInfo.Info.Pieces) - 20; offset += 20 {
-		pieceHashes = append(pieceHashes, []byte(t.metaInfo.Info.Pieces[offset:offset + 20]))
+	for offset := 0; offset <= len(t.metaInfo.Info.Pieces)-20; offset += 20 {
+		pieceHashes = append(pieceHashes, []byte(t.metaInfo.Info.Pieces[offset:offset+20]))
 	}
 
 	diskIO := NewDiskIO(t.metaInfo)

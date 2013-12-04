@@ -1,25 +1,25 @@
 package main
 
 import (
-	"testing"
 	"strconv"
+	"testing"
 	"time"
 	//"log"
 )
 
 func assertOrder(t *testing.T, sortedPieceSlice []int, index int, expectedPieceNum int) {
-	if sortedPieceSlice[index] != expectedPieceNum { 
-		t.Errorf("Expected sorted[%d] to be piece number %d, but it was %d", index, expectedPieceNum, sortedPieceSlice[index]) 
+	if sortedPieceSlice[index] != expectedPieceNum {
+		t.Errorf("Expected sorted[%d] to be piece number %d, but it was %d", index, expectedPieceNum, sortedPieceSlice[index])
 	}
 }
 
-// Create two PiecePriority objects with the same activeRequestsTotal but 
+// Create two PiecePriority objects with the same activeRequestsTotal but
 // different rarity index. Confirm that they're sorted by rarity index in
-// ascending order. 
+// ascending order.
 func TestPiecePrioritySliceSortingOne(t *testing.T) {
 
 	pps := make(PiecePrioritySlice, 0)
-	
+
 	ppOne := new(PiecePriority)
 	ppOne.pieceNum = 1
 	ppOne.activeRequestsTotal = 0
@@ -40,12 +40,12 @@ func TestPiecePrioritySliceSortingOne(t *testing.T) {
 }
 
 // Create two PiecePriority objects with different activeRequestTotal values
-// and different rarityIndex values. Confirm that the sorting is based on 
+// and different rarityIndex values. Confirm that the sorting is based on
 // activeRequestTotal and NOT rarityIndex
 func TestPiecePrioritySliceSortingTwo(t *testing.T) {
 
 	pps := make(PiecePrioritySlice, 0)
-	
+
 	ppOne := new(PiecePriority)
 	ppOne.pieceNum = 1
 	ppOne.activeRequestsTotal = 0
@@ -65,7 +65,7 @@ func TestPiecePrioritySliceSortingTwo(t *testing.T) {
 
 }
 
-// An additional test using eight PiecePriority objects with varying 
+// An additional test using eight PiecePriority objects with varying
 // activeRequestsTotal and rarityIndex values
 func TestPiecePrioritySliceSortingThree(t *testing.T) {
 
@@ -108,7 +108,7 @@ func TestRarityMapOneValue(t *testing.T) {
 	rs := rm.getPiecesByRarity()
 
 	if len(rs) != 1 {
-		t.Errorf("Expected slice len to be %d but it was %d",1, len(rs))
+		t.Errorf("Expected slice len to be %d but it was %d", 1, len(rs))
 	}
 	if rs[0] != 3 {
 		t.Errorf("Expected rs[%d] to be %d but it was %d", 0, 3, rs[0])
@@ -117,7 +117,7 @@ func TestRarityMapOneValue(t *testing.T) {
 
 // Put two pairs with the same rarity and convert it to a rarity slice
 func TestRarityMapTwoValuesSameRarity(t *testing.T) {
-	
+
 	rm := NewRarityMap()
 	rm.put(5, 3)
 	rm.put(5, 2)
@@ -180,14 +180,14 @@ func TestRaritySeveralValues(t *testing.T) {
 	AssertRaritySliceValue(t, rs, 7, 4)
 	AssertRaritySliceValue(t, rs, 8, 1)
 	AssertRaritySliceValue(t, rs, 9, 5)
-		
+
 }
 
 func createDummyPieceHashSlice(sliceLength int) []string {
 	pieceHashes := make([]string, sliceLength)
 	for index := 0; index < sliceLength; index++ {
 		pieceHashes[index] = strconv.FormatInt(int64(index), 10)
-	} 
+	}
 	return pieceHashes
 }
 
@@ -220,9 +220,9 @@ func TestControllerNewPeerReceiveFinishedBitfield(t *testing.T) {
 	cont.rxChans.peerManager.newPeer <- *peer1Comms
 
 	// Since this is a new peer, we expect the controller to send the entire bitfield over the HavePiece
-	// channel. 
+	// channel.
 	// Emulate the peer by receiving the entire bitfield over the HavePiece chan from the controller
-	innerChan := <- peer1Comms.chans.havePiece
+	innerChan := <-peer1Comms.chans.havePiece
 
 	receivedBitField := make([]bool, len(cont.finishedPieces))
 	for havePiece := range innerChan {
@@ -234,12 +234,12 @@ func TestControllerNewPeerReceiveFinishedBitfield(t *testing.T) {
 			t.Errorf("After receiving bitfield from controller, expected pieceNum %d to be %t but it was %t", pieceNum, cont.finishedPieces[pieceNum], havePiece)
 		}
 	}
-	
+
 }
 
 // When a new peer comes online (when we're connected to no other peers) and we need
-// a single piece from that peer, confirm that the controller doesn't ask it to get 
-// pieces that we don't need.  
+// a single piece from that peer, confirm that the controller doesn't ask it to get
+// pieces that we don't need.
 func TestControllerAskNewPeerToGetOnePiece(t *testing.T) {
 
 	cont := createTestController()
@@ -254,7 +254,7 @@ func TestControllerAskNewPeerToGetOnePiece(t *testing.T) {
 	// Ignore the bitfield that the controller is sending to the peer
 
 	// The peer is expected to send its entire bitfield to the controller. Emulate the peer by sending
-	// the controller a fake bitfield. 
+	// the controller a fake bitfield.
 
 	// peer1 has pieces 0, 1
 	peer1Bitfield := []bool{true, true, false, false, false, false, false, false, false, false}
@@ -264,9 +264,9 @@ func TestControllerAskNewPeerToGetOnePiece(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	// The peer is still choked (by default it starts choked). Confirm that the controller doesn't ask the
-	// peer to request any pieces. 
+	// peer to request any pieces.
 	select {
-	case <- peer1Comms.chans.requestPiece:
+	case <-peer1Comms.chans.requestPiece:
 		t.Errorf("The controller sent a peer a request before the peer was unchoked")
 
 	default:
@@ -274,34 +274,32 @@ func TestControllerAskNewPeerToGetOnePiece(t *testing.T) {
 	}
 
 	// Tell the controller that the peer is now unchoked
-	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{ peer1Name, false }
+	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{peer1Name, false}
 
 	// Sleep briefly to give the controller a chance to process the message
 	time.Sleep(10 * time.Millisecond)
 
-	// The controller should now tell the peer to retrieve only piece 1, since the controller 
+	// The controller should now tell the peer to retrieve only piece 1, since the controller
 	// already has piece 0
 	select {
-	case request := <- peer1Comms.chans.requestPiece:
+	case request := <-peer1Comms.chans.requestPiece:
 		if request.pieceNum != 1 {
 			t.Errorf("Expected the controller to request piece number %d but received request for piece number %d", 1, request.pieceNum)
-		} 
+		}
 	default:
 		t.Errorf("We expected the controller to request piece number %d, but it wasn't received", 1)
 	}
-
 
 	// Sleep briefly to give the controller a chance to queue another message if it intends to
 	time.Sleep(10 * time.Millisecond)
 
 	select {
-	case request := <- peer1Comms.chans.requestPiece:
+	case request := <-peer1Comms.chans.requestPiece:
 		t.Errorf("The controller sent the peer a second requests for piece number %d, but we didn't expect any more requests", request.pieceNum)
 
 	default:
-		// Pass. We didn't receive any additional request over the channel 
+		// Pass. We didn't receive any additional request over the channel
 	}
-
 
 }
 
@@ -311,7 +309,7 @@ func convertZeroOrMoreRequestsToBitfield(t *testing.T, requestChan chan RequestP
 	for {
 		time.Sleep(10 * time.Millisecond)
 		select {
-		case request := <- requestChan:
+		case request := <-requestChan:
 			requestBitField[request.pieceNum] = true
 		default:
 			// That was the last request
@@ -330,19 +328,19 @@ func assertActualBitfieldMatchesExpected(t *testing.T, expectedBitfield []bool, 
 	}
 }
 
-// After a new peer comes online, it first signals that it's unchoked, then it sends its bitfield, 
-// instead of the other way around. Confirm that the controller requests for the peer to get pieces. 
+// After a new peer comes online, it first signals that it's unchoked, then it sends its bitfield,
+// instead of the other way around. Confirm that the controller requests for the peer to get pieces.
 func TestControllerANewPeerSendsUnchokeBeforeBitfield(t *testing.T) {
 	cont := createTestController()
 	go cont.Run()
 	defer cont.Stop()
-	
+
 	peer1Name := "1.2.3.4:1234"
 	peer1Comms := NewPeerComms(peer1Name, *NewControllerPeerChans())
 
 	cont.rxChans.peerManager.newPeer <- *peer1Comms
 
-	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{ peer1Name, false }
+	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{peer1Name, false}
 
 	time.Sleep(10 * time.Millisecond)
 
@@ -357,7 +355,6 @@ func TestControllerANewPeerSendsUnchokeBeforeBitfield(t *testing.T) {
 	expectedRequestsBitfield := []bool{false, true, false, false, false, false, false, false, false, false, false}
 
 	assertActualBitfieldMatchesExpected(t, expectedRequestsBitfield, requestsFromController)
-
 
 }
 
@@ -381,7 +378,7 @@ func TestControllerNewPeerWithSeveralPiecesThatWeNeed(t *testing.T) {
 
 	time.Sleep(10 * time.Millisecond)
 
-	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{ peer1Name, false }
+	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{peer1Name, false}
 
 	// The controller should now tell the peer to retrieve pieces 1, 3, 4, 5, 6 but not 8
 	// because there are a max of 5 simultaneous downloads
@@ -394,10 +391,9 @@ func TestControllerNewPeerWithSeveralPiecesThatWeNeed(t *testing.T) {
 
 }
 
-
-// Switch to unchoked, then back to choked, then back to unchoked. When the peer switches to 
+// Switch to unchoked, then back to choked, then back to unchoked. When the peer switches to
 // unchoked for the second time, expect that the controller will tell it again to download
-// the same pieces. 
+// the same pieces.
 func TestControllerPeerSwitchesBetweenUnchokedAndChokedRepeatedly(t *testing.T) {
 
 	cont := createTestController()
@@ -414,28 +410,28 @@ func TestControllerPeerSwitchesBetweenUnchokedAndChokedRepeatedly(t *testing.T) 
 	sendBitfieldOverChannel(cont.rxChans.peer.havePiece, peer1Name, peer1Bitfield)
 
 	// Signal that the peer is unchoked
-	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{ peer1Name, false }
+	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{peer1Name, false}
 
 	requestsFromController := convertZeroOrMoreRequestsToBitfield(t, peer1Comms.chans.requestPiece, len(peer1Bitfield))
 	expectedRequestsBitfield := []bool{false, true, false, true, true, true, true, false, false, false, false}
 	assertActualBitfieldMatchesExpected(t, expectedRequestsBitfield, requestsFromController)
 
 	// Signal that the peer is choked
-	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{ peer1Name, true }
+	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{peer1Name, true}
 
-	// Pause briefly to give the controller time to process the choke. 
+	// Pause briefly to give the controller time to process the choke.
 	time.Sleep(10 * time.Millisecond)
 
-	// Confirm that the peer is not told to request anything after switching to a choked state. 
+	// Confirm that the peer is not told to request anything after switching to a choked state.
 	select {
-	case <- peer1Comms.chans.requestPiece:
+	case <-peer1Comms.chans.requestPiece:
 		t.Errorf("The controller shouldn't have sent any requests after the peer switched to a choked state")
 	default:
-		// Pass. Nothing was received. 
-	}	
+		// Pass. Nothing was received.
+	}
 
 	// Signal that the peer is unchoked
-	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{ peer1Name, false }
+	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{peer1Name, false}
 
 	// The same requests should be re-sent by the controller to the peer
 	requestsFromController = convertZeroOrMoreRequestsToBitfield(t, peer1Comms.chans.requestPiece, len(peer1Bitfield))
@@ -444,18 +440,17 @@ func TestControllerPeerSwitchesBetweenUnchokedAndChokedRepeatedly(t *testing.T) 
 
 }
 
-
 func assertCancelReceived(t *testing.T, cancelCh chan CancelPiece, expectedPieceNum int) {
 
 	time.Sleep(10 * time.Millisecond)
 	select {
-	case message := <- cancelCh:
+	case message := <-cancelCh:
 		if message.pieceNum != expectedPieceNum {
 			t.Errorf("Expected to receive a cancel message or piece %d but it was %d", expectedPieceNum, message.pieceNum)
 		} else {
-			// Pass. We received the cancel for the piece that was expected. 
+			// Pass. We received the cancel for the piece that was expected.
 		}
-		
+
 	default:
 		t.Errorf("Expected to receive a cancel message for piece %d but it wasn't received", expectedPieceNum)
 	}
@@ -464,11 +459,11 @@ func assertCancelReceived(t *testing.T, cancelCh chan CancelPiece, expectedPiece
 func assertRequestOrder(t *testing.T, peerComms *PeerComms, expectedRequests []int) {
 
 	// For every request received from the controller, tell it that we finished the piece, then wait
-	// for more requests in the request channel. 
+	// for more requests in the request channel.
 	for _, expectedPieceNum := range expectedRequests {
 		time.Sleep(10 * time.Millisecond)
 		select {
-		case request := <- peerComms.chans.requestPiece:
+		case request := <-peerComms.chans.requestPiece:
 
 			// Confirm that the piece that it was just told to get it what was expected
 			if request.pieceNum != expectedPieceNum {
@@ -481,8 +476,8 @@ func assertRequestOrder(t *testing.T, peerComms *PeerComms, expectedRequests []i
 	}
 }
 
-// Confirm that download priority works as expected with multiple peers. In this case, there are 
-// four peers who each have different (and somewhat overlapping) sets of pieces. 
+// Confirm that download priority works as expected with multiple peers. In this case, there are
+// four peers who each have different (and somewhat overlapping) sets of pieces.
 func TestControllerDownloadPriorityForFourPeers(t *testing.T) {
 	cont := createTestController()
 
@@ -509,7 +504,7 @@ func TestControllerDownloadPriorityForFourPeers(t *testing.T) {
 	cont.rxChans.peerManager.newPeer <- *peer3Comms
 	cont.rxChans.peerManager.newPeer <- *peer4Comms
 
-	// peer1 has pieces 0, 1, 3, 4, 8 
+	// peer1 has pieces 0, 1, 3, 4, 8
 	peer1Bitfield := []bool{true, true, false, true, true, false, false, false, true, false}
 	sendBitfieldOverChannel(cont.rxChans.peer.havePiece, peer1Name, peer1Bitfield)
 
@@ -526,7 +521,7 @@ func TestControllerDownloadPriorityForFourPeers(t *testing.T) {
 	sendBitfieldOverChannel(cont.rxChans.peer.havePiece, peer4Name, peer4Bitfield)
 
 	// At this point no peers would have been told to retrieve and pieces, because they're all
-	// still choked. 
+	// still choked.
 
 	time.Sleep(10 * time.Millisecond)
 
@@ -534,13 +529,13 @@ func TestControllerDownloadPriorityForFourPeers(t *testing.T) {
 	peer2ExpectedRequests := []int{2, 6, 3, 4}
 	peer3ExpectedRequests := []int{1, 4}
 	// Note that peer4 won't be asked to get more than 5 pieces because of maxSimultaneousDownloadsPerPeer
-	peer4ExpectedRequests := []int{5, 7, 2, 6, 8}  
+	peer4ExpectedRequests := []int{5, 7, 2, 6, 8}
 
 	// Send the unchoke message for peer3 first because he has the smallest list of needed pieces
-	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{ peer3Name, false }
-	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{ peer1Name, false }
-	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{ peer2Name, false }
-	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{ peer4Name, false }
+	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{peer3Name, false}
+	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{peer1Name, false}
+	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{peer2Name, false}
+	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{peer4Name, false}
 
 	assertRequestOrder(t, peer1Comms, peer1ExpectedRequests)
 	assertRequestOrder(t, peer2Comms, peer2ExpectedRequests)
@@ -548,7 +543,6 @@ func TestControllerDownloadPriorityForFourPeers(t *testing.T) {
 	assertRequestOrder(t, peer4Comms, peer4ExpectedRequests)
 
 }
-
 
 // Two peers. Both Are working on the same piece. One finishes, so the other should be told to CANCEL.
 func TestControllerTwoPeersDownloadingSamePieceAndOneFinishes(t *testing.T) {
@@ -566,22 +560,21 @@ func TestControllerTwoPeersDownloadingSamePieceAndOneFinishes(t *testing.T) {
 	cont.rxChans.peerManager.newPeer <- *peer2Comms
 
 	// unchoke both peers
-	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{ peer1Name, false }
-	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{ peer2Name, false }
+	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{peer1Name, false}
+	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{peer2Name, false}
 
 	time.Sleep(10 * time.Millisecond)
 
-	// peer1 only has piece 1 
+	// peer1 only has piece 1
 	peer1Bitfield := []bool{true, true, false, false, false, false, false, false, false, false}
 	sendBitfieldOverChannel(cont.rxChans.peer.havePiece, peer1Name, peer1Bitfield)
 
-	// peer2 also only has piece 1 
+	// peer2 also only has piece 1
 	peer2Bitfield := []bool{true, true, false, false, false, false, false, false, false, false}
 	sendBitfieldOverChannel(cont.rxChans.peer.havePiece, peer2Name, peer2Bitfield)
 
-	// Controller will now tell both peers to download piece 1, but that was confirmed in 
+	// Controller will now tell both peers to download piece 1, but that was confirmed in
 	// previous tests
-
 
 	// Inform controller that piece1 was finished by peer1
 	cont.rxChans.diskIO.receivedPiece <- ReceivedPiece{1, peer1Name}
@@ -591,13 +584,10 @@ func TestControllerTwoPeersDownloadingSamePieceAndOneFinishes(t *testing.T) {
 
 	// Confirm that peer1 is not told to cancel
 	select {
-	case message := <- peer1Comms.chans.cancelPiece:
+	case message := <-peer1Comms.chans.cancelPiece:
 		t.Errorf("Peer1 was told to cancel piece %d, but this shouldn't have happened.", message.pieceNum)
 	default:
-		// PASS. Peer1 was not told to cancel any piece. 
+		// PASS. Peer1 was not told to cancel any piece.
 	}
 
 }
-
-
-
