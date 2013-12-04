@@ -52,12 +52,10 @@ type Peer struct {
 	peerInterested   bool
 	ourBitfield      []bool
 	peerBitfield     []bool
-	initiator        bool
 	peerID           []byte
 	keepalive        <-chan time.Time // channel for sending keepalives
 	lastTxKeepalive  time.Time
 	lastRxKeepalive  time.Time
-	read             chan []byte
 	infoHash         []byte
 	diskIOChans      diskIOPeerChans
 	peerManagerChans peerManagerChans
@@ -201,27 +199,26 @@ func NewPeerManager(infoHash []byte, numPieces int, diskIOChans diskIOPeerChans,
 	return pm
 }
 
-func ConnectToPeer(peerTuple PeerTuple, connCh chan *net.TCPConn) {
+func connectToPeer(peerTuple PeerTuple, connCh chan *net.TCPConn) {
 	raddr := net.TCPAddr{peerTuple.IP, int(peerTuple.Port), ""}
 	log.Println("Connecting to", raddr)
 	conn, err := net.DialTCP("tcp4", nil, &raddr)
 	if err != nil {
 		if e, ok := err.(*net.OpError); ok {
 			if e.Err == syscall.ECONNREFUSED {
-				log.Println("ConnectToPeer : Connection Refused:", raddr)
+				log.Println("connectToPeer : Connection Refused:", raddr)
 				return
 			}
 		}
 		log.Fatal(err)
 	}
-	log.Println("ConnectToPeer : Connected:", raddr)
+	log.Println("connectToPeer : Connected:", raddr)
 	connCh <- conn
 }
 
 func NewPeer(
 	peerName string,
 	infoHash []byte,
-	initiator bool,
 	numPieces int,
 	diskIOChans diskIOPeerChans,
 	contRxChans ControllerPeerChans,
@@ -235,11 +232,9 @@ func NewPeer(
 		amInterested:   false,
 		peerChoking:    true,
 		peerInterested: false,
-		initiator:      initiator,
 		diskIOChans:    diskIOChans,
 		contRxChans:    contRxChans,
 		contTxChans:    contTxChans}
-	p.read = make(chan []byte)
 	return p
 }
 
@@ -464,8 +459,8 @@ func (p *Peer) decodeMessage(payload []byte) {
 	}
 }
 
-func (p *Peer) Reader() {
-	log.Println("Peer : Reader : Started")
+func (p *Peer) reader() {
+	log.Println("Peer : reader : Started")
 
 	var handshake Handshake
 	binary.Read(p.conn, binary.BigEndian, &handshake)
@@ -498,7 +493,6 @@ func (p *Peer) Reader() {
 
 		log.Printf("Read %d bytes of %x\n", (n + 4), payload)
 		p.decodeMessage(payload)
-		//p.read <- buf
 	}
 }
 
@@ -639,16 +633,11 @@ func (p *Peer) Run() {
 	//initialBitfieldSentToPeer := false
 
 	p.sendHandshake()
-	go p.Reader()
+	go p.reader()
 
 	for {
 		select {
 		case <-p.keepalive:
-		case <-p.read:
-			fmt.Println("p.read")
-		//case buf := <-p.read:
-		//fmt.Println("Read from peer:", buf)
-
 		/*
 			case requestPiece := <-p.contRxChans.requestPiece:
 			case cancelPiece := <-p.contRxChans.cancelPiece:
@@ -703,7 +692,6 @@ func (pm *PeerManager) Run() {
 				pm.peers[peerName] = NewPeer(
 					peerName,
 					pm.infoHash,
-					true,
 					pm.numPieces,
 					pm.diskIOChans,
 					contTxChans,
@@ -717,7 +705,7 @@ func (pm *PeerManager) Run() {
 
 				// Have the 'peer' routine create an outbound
 				// TCP connection to the remote peer
-				go ConnectToPeer(peer, pm.serverChans.conns)
+				go connectToPeer(peer, pm.serverChans.conns)
 			}
 		case conn := <-pm.serverChans.conns:
 			_, ok := pm.peers[conn.RemoteAddr().String()]
@@ -730,7 +718,6 @@ func (pm *PeerManager) Run() {
 				pm.peers[peerName] = NewPeer(
 					peerName,
 					pm.infoHash,
-					false,
 					pm.numPieces,
 					pm.diskIOChans,
 					contTxChans,
