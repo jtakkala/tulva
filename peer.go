@@ -59,6 +59,8 @@ type Peer struct {
 	infoHash       []byte
 	diskIOChans    diskIOPeerChans
 	peerManagerChans peerManagerChans
+	contRxChans    ControllerPeerChans
+	contTxChans    PeerControllerChans
 	stats          PeerStats
 	t              tomb.Tomb
 }
@@ -193,8 +195,22 @@ func ConnectToPeer(peerTuple PeerTuple, connCh chan *net.TCPConn) {
 	connCh <- conn
 }
 
-func NewPeer(infoHash []byte, initiator bool, diskIOChans diskIOPeerChans) *Peer {
-	p := &Peer{infoHash: infoHash, amChoking: true, amInterested: false, peerChoking: true, peerInterested: false, initiator: initiator, diskIOChans: diskIOChans}
+func NewPeer(
+			infoHash []byte, 
+			initiator bool, 
+			diskIOChans diskIOPeerChans,
+			contRxChans ControllerPeerChans,
+			contTxChans PeerControllerChans) *Peer {
+	p := &Peer{
+			infoHash: infoHash, 
+			amChoking: true, 
+			amInterested: false, 
+			peerChoking: true, 
+			peerInterested: false, 
+			initiator: initiator, 
+			diskIOChans: diskIOChans,
+			contRxChans: contRxChans,
+			contTxChans: contTxChans}
 	p.read = make(chan []byte)
 	return p
 }
@@ -354,18 +370,52 @@ func (pm *PeerManager) Run() {
 	for {
 		select {
 		case peer := <-pm.trackerChans.peers:
-			peerID := fmt.Sprintf("%s:%d", peer.IP.String(), peer.Port)
-			_, ok := pm.peers[peerID]
+			peerName := fmt.Sprintf("%s:%d", peer.IP.String(), peer.Port)
+			_, ok := pm.peers[peerName]
 			if !ok {
+				// FIXME Code in this block is duplicated below
+
+				// Create the Controller->Peer chans struct
+				contTxChans := *NewControllerPeerChans()
+
 				// Construct the Peer object
-				pm.peers[peerID] = NewPeer(pm.infoHash, true, pm.diskIOChans)
+				pm.peers[peerName] = NewPeer(
+					pm.infoHash, 
+					true, 
+					pm.diskIOChans,
+					contTxChans,
+					pm.peerContChans)
+
+				// Give the controller the channels that it will use to 
+				// transmit messages to this new peer
+				go func() {
+					pm.contChans.newPeer <- PeerComms{peerName: peerName, chans: contTxChans}
+				}()
+
+				// Have the 'peer' routine create an outbound
+				// TCP connection to the remote peer
 				go ConnectToPeer(peer, pm.serverChans.conns)
 			}
 		case conn := <-pm.serverChans.conns:
 			_, ok := pm.peers[conn.RemoteAddr().String()]
 			if !ok {
+				// Create the Controller->Peer chans struct
+				contTxChans := *NewControllerPeerChans()
+
 				// Construct the Peer object
-				pm.peers[conn.RemoteAddr().String()] = NewPeer(pm.infoHash, false, pm.diskIOChans)
+				peerName := conn.RemoteAddr().String()
+				pm.peers[peerName] = NewPeer(
+					pm.infoHash, 
+					false, 
+					pm.diskIOChans,
+					contTxChans,
+					pm.peerContChans)
+
+				// Give the controller the channels that it will use to 
+				// transmit messages to this new peer
+				go func() {
+					pm.contChans.newPeer <- PeerComms{peerName: peerName, chans: contTxChans}
+				}()
 			}
 			// Associate the connection with the peer object and start the peer
 			pm.peers[conn.RemoteAddr().String()].conn = conn
