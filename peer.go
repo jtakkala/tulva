@@ -277,6 +277,7 @@ func (p *Peer) readBytesFromConn(numBytes int) []byte {
 func (p *Peer) decodeMessage(payload []byte) {
 	if len(payload) == 0 {
 		// keepalive
+		log.Printf("Received a Keepalive message from %s", p.peerName)
 		return
 	}
 
@@ -285,21 +286,27 @@ func (p *Peer) decodeMessage(payload []byte) {
 	switch messageID {
 	case 0:
 		// Choke Message
+		log.Printf("Received a Choke message from %s", p.peerName)
 		break
 	case 1:
 		// Unchoke Message
+		log.Printf("Received an Unchoke message from %s", p.peerName)
 		break
 	case 2:
 		// Interested Message
+		log.Printf("Received an Interested message from %s", p.peerName)
 		break
 	case 3:
 		// Not Interested Message
+		log.Printf("Received a Not Interested message from %s", p.peerName)
 		break
 	case 4:
 		// Have Message
 
 		// Determine the piece number
 		pieceNum := int(binary.BigEndian.Uint32(p.readBytesFromConn(4)))
+
+		log.Printf("Received a Have message for piece %d from %s", pieceNum, p.peerName)
 
 		// Update the local peer bitfield
 		p.peerBitfield[pieceNum] = true
@@ -311,6 +318,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 		break
 	case 5:
 		// Bitfield Message
+		log.Printf("Received a Bitfield message from %s", p.peerName)
 
 		// Record the peer bitfield locally
 
@@ -319,15 +327,25 @@ func (p *Peer) decodeMessage(payload []byte) {
 		break
 	case 6:
 		// Request Message
+		pieceNum := 0 // FIXME
+
+		log.Printf("Received a Request message for piece %d from %s", pieceNum, p.peerName)
 		break
 	case 7:
 		// Piece Message
+		pieceNum := 0 // FIXME
+
+		log.Printf("Received a Piece message for piece %d from %s", pieceNum, p.peerName)
 		break
 	case 8:
 		// Cancel Message
+		pieceNum := 0 // FIXME
+
+		log.Printf("Received a Cancel message for piece %d from %s", pieceNum, p.peerName)
 		break
 	case 9:
 		// Port Message
+		log.Printf("Received a Port message from %s", p.peerName)
 		break
 	}
 }
