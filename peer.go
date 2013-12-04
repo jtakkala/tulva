@@ -522,22 +522,35 @@ func (p *Peer) sendKeepalive() {
 // don't have a beginning LEN-ID structure. The length is automatically calculated.
 func (p *Peer) sendMessage(ID int, payload interface{}) {
 	
-	message := make([]byte, 0)
+	// Write the payload to a slice of bytes so the length can be computed
+	payloadBuffer := new(bytes.Buffer)
+	err := binary.Write(payloadBuffer, binary.BigEndian, payload)
+	if err != nil {log.Fatal(err)}
+	payloadBytes := payloadBuffer.Bytes()
 
-	payloadSize := int(reflect.TypeOf(payload).Size())
-	
-	//lengthField := uint32(payloadSize + 1) // plus 1 to account for the ID
+	messageBuffer := new(bytes.Buffer)
 
-	// UNFINISHED -- need to construct. Should we write the individual fields to 
-	// a temporary bytes.Buffer object, and then write the buffer to the TCP connection?
-	// Or is there another way to do it?
+	// Write a 4-byte length field to the buffer
+	lengthField := uint32(len(payloadBytes) + 1) // plus 1 to account for the ID
 
-	err := binary.Write(p.conn, binary.BigEndian, message)
-	if err != nil {
-		// TODO: Handle errors
-		log.Fatal(err)
-	}
-	p.stats.write += payloadSize + 5
+	err = binary.Write(messageBuffer, binary.BigEndian, lengthField)
+	if err != nil {log.Fatal(err)}
+
+	// Write a 1-byte ID field to the buffer
+	err = binary.Write(messageBuffer, binary.BigEndian, uint8(ID))
+	if err != nil {log.Fatal(err)}
+
+	// Write the variable length payload to the buffer (potentially 0 bytes)
+	err = binary.Write(messageBuffer, binary.BigEndian, payloadBytes)
+	if err != nil {log.Fatal(err)}
+
+	// Write the message over TCP to the peer
+	message := messageBuffer.Bytes()
+	log.Printf("TEMP: Sending over TCP: %v", message)
+	err = binary.Write(p.conn, binary.BigEndian, message)
+	if err != nil {log.Fatal(err)}
+
+	p.stats.write += len(message)
 }
 
 
@@ -593,6 +606,7 @@ func (p *Peer) Run() {
 	defer log.Println("Peer : Run : Completed")
 
 	//initialBitfieldSentToPeer := false
+
 
 	go p.sendHandshake()
 	go p.Reader()
