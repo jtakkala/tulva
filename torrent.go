@@ -148,7 +148,7 @@ func (t *Torrent) Run() {
 
 	server := NewServer()
 	trackerManager := NewTrackerManager(server.Port)
-	peerManager := NewPeerManager(t.infoHash, len(pieceHashes), diskIO.peerChans, server.peerChans, trackerManager.peerChans)
+	peerManager := NewPeerManager(t.infoHash, len(pieceHashes), t.metaInfo.Info.PieceLength, diskIO.peerChans, server.peerChans, trackerManager.peerChans)
 
 	controller := NewController(pieces, pieceHashes, diskIO.contChans, peerManager.contChans, peerManager.peerContChans)
 
