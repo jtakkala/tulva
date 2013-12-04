@@ -75,6 +75,7 @@ type PeerStats struct {
 type PeerManager struct {
 	peers        map[string]*Peer
 	infoHash     []byte
+	numPieces    int
 	peerChans    peerManagerChans
 	serverChans  serverPeerChans
 	trackerChans trackerPeerChans
@@ -164,9 +165,10 @@ func sortedPeersByQtyPiecesNeeded(peers map[string]*PeerInfo) SortedPeers {
 	return peerInfoSlice
 }
 
-func NewPeerManager(infoHash []byte, diskIOChans diskIOPeerChans, serverChans serverPeerChans, trackerChans trackerPeerChans) *PeerManager {
+func NewPeerManager(infoHash []byte, numPieces int, diskIOChans diskIOPeerChans, serverChans serverPeerChans, trackerChans trackerPeerChans) *PeerManager {
 	pm := new(PeerManager)
 	pm.infoHash = infoHash
+	pm.numPieces = numPieces
 	pm.diskIOChans = diskIOChans
 	pm.serverChans = serverChans
 	pm.trackerChans = trackerChans
@@ -200,12 +202,15 @@ func NewPeer(
 			peerName string,
 			infoHash []byte, 
 			initiator bool, 
+			numPieces int,
 			diskIOChans diskIOPeerChans,
 			contRxChans ControllerPeerChans,
 			contTxChans PeerControllerChans) *Peer {
 	p := &Peer{
 			peerName: peerName,
 			infoHash: infoHash, 
+			peerBitfield: make([]bool, numPieces), 
+			ourBitfield: make([]bool, numPieces),
 			amChoking: true, 
 			amInterested: false, 
 			peerChoking: true, 
@@ -281,7 +286,18 @@ func (p *Peer) decodeMessage(payload []byte) {
 		return
 	}
 
-	messageID := binary.BigEndian.Uint32(p.readBytesFromConn(1))
+/*
+	leadingZeros := make([]byte, 3)
+	buf := p.readBytesFromConn(1)
+	log.Printf("BUF: %x", buf)
+	bufWithLeadingZeros := append(leadingZeros,buf...) 
+	log.Printf("BUFWITHLEADINGZEROS: %x", bufWithLeadingZeros)
+	messageID := binary.BigEndian.Uint32(bufWithLeadingZeros)
+*/
+
+	messageID := payload[0]
+
+	payload = payload[1:]
 
 	switch messageID {
 	case 0:
@@ -302,9 +318,12 @@ func (p *Peer) decodeMessage(payload []byte) {
 		break
 	case 4:
 		// Have Message
+		if len(payload) != 4 {
+			log.Fatalf("Received a Have from %s with invalid payload size of %d", p.peerName, len(payload))
+		}
 
 		// Determine the piece number
-		pieceNum := int(binary.BigEndian.Uint32(p.readBytesFromConn(4)))
+		pieceNum := int(binary.BigEndian.Uint32(payload))
 
 		log.Printf("Received a Have message for piece %d from %s", pieceNum, p.peerName)
 
@@ -313,7 +332,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 
 		// Send a single HavePiece struct to the controller 
 		have := make([]HavePiece, 1)
-		have[1] = HavePiece{pieceNum: pieceNum, peerName: p.peerName} 
+		have[0] = HavePiece{pieceNum: pieceNum, peerName: p.peerName} 
 		go p.sendHaveMessagesToController(have)
 		break
 	case 5:
@@ -321,6 +340,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 		log.Printf("Received a Bitfield message from %s", p.peerName)
 
 		// Record the peer bitfield locally
+
 
 		// Break the bitfield into a slice of HavePiece structs and send them 
 		// to the controller  
@@ -454,6 +474,7 @@ func (pm *PeerManager) Run() {
 					peerName,
 					pm.infoHash, 
 					true, 
+					pm.numPieces,
 					pm.diskIOChans,
 					contTxChans,
 					pm.peerContChans)
@@ -480,6 +501,7 @@ func (pm *PeerManager) Run() {
 					peerName,
 					pm.infoHash, 
 					false, 
+					pm.numPieces,
 					pm.diskIOChans,
 					contTxChans,
 					pm.peerContChans)
