@@ -450,8 +450,6 @@ func (cont *Controller) Run() {
 		// === START OF MESSAGES FROM PEER_MANAGER === 
 		case peerComms := <- cont.rxChans.peerManager.newPeer:
 
-			log.Printf("len(finishedPieces): %d", cont.finishedPieces)
-
 			peerInfo := NewPeerInfo(len(cont.finishedPieces), peerComms)
 
 			// Throw an error if the peer is duplicate (same IP/Port. should never happen)
