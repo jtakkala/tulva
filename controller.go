@@ -520,26 +520,26 @@ func (cont *Controller) Run() {
 
 			var peerInfo *PeerInfo
 			var exists bool
+			pieceCount := 0
 
 			// Receive one or more pieces over inner channel
 			for piece := range innerChan {
 
-				log.Printf("Controller : Run (Have Piece) : Received a HavePiece from %s for pieceNum %d", piece.peerName, piece.pieceNum)
-				
 				// Update the peers availability slice. 
 				peerInfo, exists = cont.peers[piece.peerName]; 
 				if !exists {
 					log.Fatalf("Controller : Run (Have Piece) : Unable to process HavePiece for %s because the peer doesn't exist in the peers mapping", piece.peerName)
 				} 
 
-				if peerInfo.availablePieces[piece.pieceNum] {
-					log.Fatalf("Controller : Run (Have Piece) : Received duplicate HavePiece from %s for piece number %d", peerInfo.peerName, piece.pieceNum)
-				} 
-
 				// Mark this peer as having this piece
 				peerInfo.availablePieces[piece.pieceNum] = true
 
+				pieceCount += 1
+
 			}
+
+			log.Printf("Controller : Run (Have Piece) : Received %d HavePiece messages from %s", pieceCount, peerInfo.peerName)
+				
 
 			// This is either one or more HAVE messages sent for the initial peer bitfield, or it's
 			// a single HAVE message sent because the peer has a new piece. In either case, we should 
