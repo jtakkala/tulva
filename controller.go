@@ -534,8 +534,6 @@ func (cont *Controller) Run() {
 					log.Fatalf("Controller : Run (Have Piece) : Unable to process HavePiece for %s because the peer doesn't exist in the peers mapping", piece.peerName)
 				} 
 
-				log.Printf("len(availablePieces): %d", len(peerInfo.availablePieces))
-
 				if peerInfo.availablePieces[piece.pieceNum] {
 					log.Fatalf("Controller : Run (Have Piece) : Received duplicate HavePiece from %s for piece number %d", peerInfo.peerName, piece.pieceNum)
 				} 
