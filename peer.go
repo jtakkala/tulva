@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"sort"
 	//"strconv"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -67,9 +68,28 @@ type Peer struct {
 }
 
 type PeerStats struct {
+	mu   sync.Mutex
 	read int
 	write int
 	errors int
+}
+
+func (ps *PeerStats) addRead(value int) {
+	ps.mu.Lock()
+	ps.read += value
+	ps.mu.Unlock()
+}
+
+func (ps *PeerStats) addWrite(value int) {
+	ps.mu.Lock()
+	ps.write += value
+	ps.mu.Unlock()
+}
+
+func (ps *PeerStats) addError(value int) {
+	ps.mu.Lock()
+	ps.errors += value
+	ps.mu.Unlock()
 }
 
 type PeerManager struct {
@@ -458,6 +478,8 @@ func (p *Peer) Reader() {
 
 	var handshake Handshake
 	binary.Read(p.conn, binary.BigEndian, &handshake)
+	p.stats.addRead(int(reflect.TypeOf(handshake).Size()))
+
 	err := verifyHandshake(&handshake, p.infoHash)
 	if err != nil {
 		p.conn.Close()
@@ -472,6 +494,8 @@ func (p *Peer) Reader() {
 			// FIXME Are there any cases where we would not read length?
 			return
 		}
+		p.stats.addRead(n)
+
 		payload := make([]byte, binary.BigEndian.Uint32(length))
 		n, err = io.ReadFull(p.conn, payload)
 		if err != nil {
@@ -479,7 +503,9 @@ func (p *Peer) Reader() {
 			// definitely get a payload 
 			return
 		}
-		log.Printf("Read %d bytes of %x\n", n, payload)
+		p.stats.addRead(n)
+
+		log.Printf("Read %d bytes of %x\n", (n + 4), payload)
 		p.decodeMessage(payload)
 		//p.read <- buf
 	}
@@ -500,7 +526,8 @@ func (p *Peer) sendHandshake() {
 		// TODO: Handle errors
 		log.Fatal(err)
 	}
-	p.stats.write += int(reflect.TypeOf(&handshake).Size())
+
+	p.stats.addWrite(int(reflect.TypeOf(&handshake).Size()))
 }
 
 func (p *Peer) sendKeepalive() {
@@ -515,7 +542,7 @@ func (p *Peer) sendKeepalive() {
 		log.Fatal(err)
 	}
 
-	p.stats.write += 4
+	p.stats.addWrite(4)
 }
 
 // Sends any message besides a handshake or a keepalive, both of which 
@@ -550,7 +577,7 @@ func (p *Peer) sendMessage(ID int, payload interface{}) {
 	err = binary.Write(p.conn, binary.BigEndian, message)
 	if err != nil {log.Fatal(err)}
 
-	p.stats.write += len(message)
+	p.stats.addWrite(len(message))
 }
 
 
@@ -608,7 +635,7 @@ func (p *Peer) Run() {
 	//initialBitfieldSentToPeer := false
 
 
-	go p.sendHandshake()
+	p.sendHandshake()
 	go p.Reader()
 
 	for {
