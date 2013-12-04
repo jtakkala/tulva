@@ -486,8 +486,7 @@ func (p *Peer) Reader() {
 }
 
 func (p *Peer) sendHandshake() {
-	log.Println("Peer : sendHandshake : Started")
-	defer log.Println("Peer : sendHandshake : Completed")
+	log.Printf("Peer : sendHandshake : Sending handshake to %s", p.peerName)
 
 	handshake := Handshake{
 		Len: uint8(len(Protocol)),
@@ -495,32 +494,72 @@ func (p *Peer) sendHandshake() {
 		PeerID: PeerID,
 	}
 	copy(handshake.InfoHash[:], p.infoHash)
+
 	err := binary.Write(p.conn, binary.BigEndian, &handshake)
 	if err != nil {
 		// TODO: Handle errors
 		log.Fatal(err)
 	}
-	p.stats.write += int(reflect.TypeOf(handshake).Size())
+	p.stats.write += int(reflect.TypeOf(&handshake).Size())
 }
 
 func (p *Peer) sendKeepalive() {
-	// IMPLEMENT ME
+	log.Printf("Peer : sendKeepalive : Sending keepalive to %s", p.peerName)
+
+	message := make([]byte, 4)
+
+	// Untested
+	err := binary.Write(p.conn, binary.BigEndian, &message)
+	if err != nil {
+		// TODO: Handle errors
+		log.Fatal(err)
+	}
+
+	p.stats.write += 4
 }
 
+// Sends any message besides a handshake or a keepalive, both of which 
+// don't have a beginning LEN-ID structure. The length is automatically calculated.
+func (p *Peer) sendMessage(ID int, payload interface{}) {
+	
+	message := make([]byte, 0)
+
+	payloadSize := int(reflect.TypeOf(payload).Size())
+	
+	//lengthField := uint32(payloadSize + 1) // plus 1 to account for the ID
+
+	// UNFINISHED -- need to construct. Should we write the individual fields to 
+	// a temporary bytes.Buffer object, and then write the buffer to the TCP connection?
+	// Or is there another way to do it?
+
+	err := binary.Write(p.conn, binary.BigEndian, message)
+	if err != nil {
+		// TODO: Handle errors
+		log.Fatal(err)
+	}
+	p.stats.write += payloadSize + 5
+}
+
+
+
 func (p *Peer) sendChoke() {
-	// IMPLEMENT ME
+	log.Printf("Peer : sendChoke : Sending choke to %s", p.peerName)
+	p.sendMessage(1, make([]byte, 0))
 }
 
 func (p *Peer) sendUnchoke() {
-	// IMPLEMENT ME
+	log.Printf("Peer : sendUnchoke : Sending unchoke to %s", p.peerName)
+	p.sendMessage(2, make([]byte, 0))
 }
 
 func (p *Peer) sendInterested() {
-	// IMPLEMENT ME
+	log.Printf("Peer : sendInterested : Sending interested to %s", p.peerName)
+	p.sendMessage(3, make([]byte, 0))
 }
 
 func (p *Peer) sendNotInterested() {
-	// IMPLEMENT ME
+	log.Printf("Peer : sendNotInterested : Sending not-interested to %s", p.peerName)
+	p.sendMessage(4, make([]byte, 0))
 }
 
 func (p *Peer) sendHave(pieceNum int) {
@@ -531,7 +570,7 @@ func (p *Peer) sendBitfield() {
 	// IMPLEMENT ME
 }
 
-func (p *Peer) sendRequest(int pieceNum, begin int, length int) {
+func (p *Peer) sendRequest(pieceNum int, begin int, length int) {
 	// IMPLEMENT ME
 }
 
