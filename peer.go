@@ -789,7 +789,7 @@ func (p *Peer) Run() {
 	for {
 		select {
 		case t := <-p.keepalive:
-			if p.lastTxMessage.Add(time.Second * 120).Before(t) {
+			if p.lastTxMessage.Add(time.Second * 30).Before(t) {
 				log.Println("No txMessage for 120 seconds", p.peerName, p.lastTxMessage.Unix(), t.Unix())
 				p.sendKeepalive()
 			}
