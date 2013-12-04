@@ -64,6 +64,7 @@ type Peer struct {
 	infoHash         []byte
 	pieceLength		 int
 	currentDownload  *PieceDownload
+	nextDownload     *PieceDownload 
 	diskIOChans      diskIOPeerChans
 	peerManagerChans peerManagerChans
 	contRxChans      ControllerPeerChans
@@ -78,7 +79,7 @@ type PieceDownload struct {
 	piece []byte
 	numBlocksReceived int
 	numOutstandingBlocks int
-	totalNumBlocks int
+	numBlocksPerPiece int
 }
 
 func NewPieceDownload(requestPiece RequestPiece, pieceLength int) *PieceDownload {
@@ -86,7 +87,7 @@ func NewPieceDownload(requestPiece RequestPiece, pieceLength int) *PieceDownload
 	pd.pieceNum = requestPiece.pieceNum
 	pd.expectedHash = requestPiece.expectedHash
 	pd.piece = make([]byte, pieceLength)
-	pd.totalNumBlocks = pieceLength / downloadBlockSize
+	pd.numBlocksPerPiece = pieceLength / downloadBlockSize
 	return pd
 }
 
@@ -506,8 +507,8 @@ func (p *Peer) decodeMessage(payload []byte) {
 		begin := binary.BigEndian.Uint32(beginBytes)
 
 
-		if p.currentDownload == nil {
-			log.Fatalf("Received a Block (Piece) message from %s but there aren't any current downloads", p.peerName)
+		if p.currentDownload == nil && p.nextDownload == nil {
+			log.Fatalf("Received a Block (Piece) message from %s but there aren't any current or next downloads", p.peerName)
 		} else if begin % downloadBlockSize != 0 {
 			log.Fatalf("Received a Block (Piece) message from %s with an invalid begin value of %d", p.peerName, begin)
 		} else {
@@ -515,7 +516,26 @@ func (p *Peer) decodeMessage(payload []byte) {
 		}
 
 		// The block (piece) message is valid. Write the contents to the buffer. 
-		//p.currentDownload.piece
+		copy(p.currentDownload.piece[begin:], blockBytes)
+
+		p.currentDownload.numBlocksReceived += 1
+		p.currentDownload.numOutstandingBlocks -= 1
+
+		if p.currentDownload.numBlocksReceived == p.currentDownload.numBlocksPerPiece {
+			// SHA1 check the entire piece
+
+		} else if (p.currentDownload.numBlocksReceived + p.currentDownload.numOutstandingBlocks) == p.currentDownload.numBlocksPerPiece {
+			// There are no more requests to  
+
+		} else {
+
+
+		}
+
+
+		p.sendOneOrMoreRequests()
+
+
 
 
 		
@@ -726,22 +746,59 @@ func (p *Peer) sendRequest(pieceNum int, begin int, length int) {
 	p.sendMessage(MsgRequest, buffer.Bytes())
 }
 
-func (p *Peer) sendRequestByNum(pieceNum int, blockNum int) {
+func (p *Peer) sendRequestByBlockNum(pieceNum int, blockNum int) {
 	begin := downloadBlockSize * blockNum
 	p.sendRequest(pieceNum, begin, downloadBlockSize)
 }
 
-func (p *Peer) sendInitialRequests() {
-	for p.currentDownload.numOutstandingBlocks < maxSimultaneousBlockDownloads && 
-		(p.currentDownload.numOutstandingBlocks + p.currentDownload.numBlocksReceived) < p.currentDownload.totalNumBlocks {
+func (p *Peer) sendOneOrMoreRequests() {
+	for {
 
-		// We haven't yet hit the max simultaneous request limit.
-		// We also haven't yet requested every block.
+		numOutstandingBlocks := p.currentDownload.numOutstandingBlocks
+		if p.nextDownload != nil {
+			numOutstandingBlocks += p.nextDownload.numOutstandingBlocks
+		}
 
-		// Send a request for another block. 
-		blockNum := p.currentDownload.numBlocksReceived + p.currentDownload.numOutstandingBlocks
-		p.sendRequestByNum(p.currentDownload.pieceNum, blockNum)
-		p.currentDownload.numOutstandingBlocks += 1
+		if numOutstandingBlocks > maxSimultaneousBlockDownloads {
+			log.Fatalf("Peer : sendOneOrMoreRequests : State Error: Somehow there are %d outstanding blocks, which is more than %d", numOutstandingBlocks, maxSimultaneousBlockDownloads)
+		} else if numOutstandingBlocks == maxSimultaneousBlockDownloads {
+			// We're maxxed out on the number of outstanding blocks to this peer.
+			// Wait until blocks are received before sending more requests. 
+			break
+		} else {
+			// We need to send more requests now. First check if we need to send 
+			// any more requests in the currentDownload piece, which has higher 
+			// priority than nextDownload
+			var piece *PieceDownload
+			piece = p.currentDownload
+
+			currentDLRemainingRequests := piece.numBlocksPerPiece - (piece.numBlocksReceived + piece.numOutstandingBlocks)
+			if currentDLRemainingRequests > 0 {
+				blockNum := piece.numBlocksReceived + piece.numOutstandingBlocks
+				go p.sendRequestByBlockNum(piece.pieceNum, blockNum)
+				piece.numOutstandingBlocks += 1
+				continue // We may want to send more
+
+			} else {
+				// There are no more requests to send for the currentDownload piece
+				if p.nextDownload == nil {
+					break // we don't have a nextDownload set yet, so we can't send any more at the moment. 
+				
+				} else {
+					piece = p.nextDownload
+					nextDLRemainingRequests := piece.numBlocksPerPiece - (piece.numBlocksReceived + piece.numOutstandingBlocks)
+					if nextDLRemainingRequests > 0 {
+						blockNum := piece.numBlocksReceived + piece.numOutstandingBlocks
+						go p.sendRequestByBlockNum(piece.pieceNum, blockNum)
+						piece.numOutstandingBlocks += 1
+						continue // We may want to send more
+					} else {
+						// We can't send any more at the moment. 
+						break
+					}
+				}
+			}
+		}
 	}
 }
 
@@ -802,16 +859,21 @@ func (p *Peer) Run() {
 
 			// check to see if we're currently downloading another piece. If so, then there's a 
 			// bug because the controller should only ask us to download one at a time. 
-			if p.currentDownload != nil {
-				log.Fatal("Peer : Run : %s was told to download piece %d, but it's still downloading piece %d", p.peerName, requestPiece.pieceNum, p.currentDownload.pieceNum)
+			if p.nextDownload != nil {
+				log.Fatalf("Peer : Run : %s was told to download piece %d, but we're already downloading two pieces", p.peerName, requestPiece.pieceNum)
 			}
 
 			// Create a new PieceDownload struct for the piece that we're told to download
-			p.currentDownload = NewPieceDownload(requestPiece, p.pieceLength)
+			pd := NewPieceDownload(requestPiece, p.pieceLength)
+			if p.currentDownload == nil {
+				p.currentDownload = pd 
+			} else {
+				p.nextDownload = pd
+			}
 
 			// Send the first set of block requests all at once. When we get response (piece) messages,
 			// we'll then determine if more need to be set. 
-			go p.sendInitialRequests()
+			p.sendOneOrMoreRequests()
 
 		/*
 		case cancelPiece := <-p.contRxChans.cancelPiece:
