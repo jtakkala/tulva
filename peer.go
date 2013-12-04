@@ -379,6 +379,10 @@ func (p *Peer) decodeMessage(payload []byte) {
 		} else {
 			log.Printf("Received an Interested message from %s", p.peerName)
 		}
+		p.peerInterested = true
+
+		// FIXME -- Send an unchoke to the peer
+
 		break
 	case 3:
 		// Not Interested Message
@@ -387,6 +391,8 @@ func (p *Peer) decodeMessage(payload []byte) {
 		} else {
 			log.Printf("Received a Not Interested message from %s", p.peerName)
 		}
+		p.peerInterested = false
+
 		break
 	case 4:
 		// Have Message
@@ -421,18 +427,21 @@ func (p *Peer) decodeMessage(payload []byte) {
 		break
 	case 6:
 		// Request Message
+		// IMPLEMENT ME
 		pieceNum := 0 // FIXME
 
 		log.Printf("Received a Request message for piece %d from %s", pieceNum, p.peerName)
 		break
 	case 7:
 		// Piece Message
-		pieceNum := 0 // FIXME
+		pieceNum := 0 // FIX
+		// IMPLEMENT ME
 
 		log.Printf("Received a Piece message for piece %d from %s", pieceNum, p.peerName)
 		break
 	case 8:
 		// Cancel Message
+		// IMPLEMENT ME
 		pieceNum := 0 // FIXME
 
 		log.Printf("Received a Cancel message for piece %d from %s", pieceNum, p.peerName)
@@ -492,6 +501,46 @@ func (p *Peer) sendHandshake() {
 		log.Fatal(err)
 	}
 	p.stats.write += int(reflect.TypeOf(handshake).Size())
+}
+
+func (p *Peer) sendKeepalive() {
+	// IMPLEMENT ME
+}
+
+func (p *Peer) sendChoke() {
+	// IMPLEMENT ME
+}
+
+func (p *Peer) sendUnchoke() {
+	// IMPLEMENT ME
+}
+
+func (p *Peer) sendInterested() {
+	// IMPLEMENT ME
+}
+
+func (p *Peer) sendNotInterested() {
+	// IMPLEMENT ME
+}
+
+func (p *Peer) sendHave(pieceNum int) {
+	// IMPLEMENT ME
+}
+
+func (p *Peer) sendBitfield() {
+	// IMPLEMENT ME
+}
+
+func (p *Peer) sendRequest(int pieceNum, begin int, length int) {
+	// IMPLEMENT ME
+}
+
+func (p *Peer) sendBlock(pieceNum int, begin int, block []byte) {
+	// IMPLEMENT ME
+}
+
+func (p *Peer) sendCancel(pieceNum int, begin int, length int) {
+	// IMPLEMENT ME
 }
 
 func (p *Peer) Stop() error {
