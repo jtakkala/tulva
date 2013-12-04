@@ -37,6 +37,11 @@ const (
 	MsgPort
 )
 
+const (
+	downloadBlockSize = 16384
+	maxSimultaneousBlockDownloads = 5
+)
+
 // PeerTuple represents a single IP+port pair of a peer
 type PeerTuple struct {
 	IP   net.IP
@@ -57,12 +62,32 @@ type Peer struct {
 	lastTxKeepalive  time.Time
 	lastRxKeepalive  time.Time
 	infoHash         []byte
+	pieceLength		 int
+	currentDownload  *PieceDownload
 	diskIOChans      diskIOPeerChans
 	peerManagerChans peerManagerChans
 	contRxChans      ControllerPeerChans
 	contTxChans      PeerControllerChans
 	stats            PeerStats
 	t                tomb.Tomb
+}
+
+type PieceDownload struct {
+	pieceNum int
+	expectedHash []byte
+	piece []byte
+	numBlocksReceived int
+	numOutstandingBlocks int
+	totalNumBlocks int
+}
+
+func NewPieceDownload(requestPiece RequestPiece, pieceLength int) *PieceDownload {
+	pd := new(PieceDownload)
+	pd.pieceNum = requestPiece.pieceNum
+	pd.expectedHash = requestPiece.expectedHash
+	pd.piece = make([]byte, pieceLength)
+	pd.totalNumBlocks = pieceLength / downloadBlockSize
+	return pd
 }
 
 type PeerStats struct {
@@ -94,6 +119,7 @@ type PeerManager struct {
 	peers         map[string]*Peer
 	infoHash      []byte
 	numPieces     int
+	pieceLength     int
 	peerChans     peerManagerChans
 	serverChans   serverPeerChans
 	trackerChans  trackerPeerChans
@@ -183,10 +209,11 @@ func sortedPeersByQtyPiecesNeeded(peers map[string]*PeerInfo) SortedPeers {
 	return peerInfoSlice
 }
 
-func NewPeerManager(infoHash []byte, numPieces int, diskIOChans diskIOPeerChans, serverChans serverPeerChans, trackerChans trackerPeerChans) *PeerManager {
+func NewPeerManager(infoHash []byte, numPieces int, pieceLength int, diskIOChans diskIOPeerChans, serverChans serverPeerChans, trackerChans trackerPeerChans) *PeerManager {
 	pm := new(PeerManager)
 	pm.infoHash = infoHash
 	pm.numPieces = numPieces
+	pm.pieceLength = pieceLength
 	pm.diskIOChans = diskIOChans
 	pm.serverChans = serverChans
 	pm.trackerChans = trackerChans
@@ -220,12 +247,14 @@ func NewPeer(
 	peerName string,
 	infoHash []byte,
 	numPieces int,
+	pieceLength int,
 	diskIOChans diskIOPeerChans,
 	contRxChans ControllerPeerChans,
 	contTxChans PeerControllerChans) *Peer {
 	p := &Peer{
 		peerName:       peerName,
 		infoHash:       infoHash,
+		pieceLength:    pieceLength,
 		peerBitfield:   make([]bool, numPieces),
 		ourBitfield:    make([]bool, numPieces),
 		amChoking:      true,
@@ -299,17 +328,6 @@ func (p *Peer) sendHaveMessagesToController(pieces []HavePiece) {
 	// sending HavePiece messages.
 	close(innerChan)
 }
-
-/*
-func (p *Peer) readBytesFromConn(numBytes int) []byte {
-	result := make([]byte, numBytes)
-	_, err := io.ReadFull(p.conn, result)
-	if err != nil {
-		log.Fatalf("Encountered an error when attempting to read %d bytes from %s", numBytes, p.peerName)
-	}
-	return result
-}
-*/
 
 // Need to send targetSize because the byte slice will potentially have padding
 // bits at the end if the bitfield size is not divisible by 8.
@@ -628,6 +646,7 @@ func (p *Peer) sendNotInterested() {
 }
 
 func (p *Peer) sendHave(pieceNum int) {
+	log.Printf("Peer : sendHave : Sending have to %s for piece %d", p.peerName, pieceNum)
 	payloadBuffer := new(bytes.Buffer)
 	err := binary.Write(payloadBuffer, binary.BigEndian, uint32(pieceNum))
 	if err != nil {log.Fatal(err)}
@@ -635,11 +654,13 @@ func (p *Peer) sendHave(pieceNum int) {
 }
 
 func (p *Peer) sendBitfield() {
+	log.Printf("Peer : sendBitfield : Sending bitfield to %s", p.peerName)
 	compacted := convertBoolSliceToByteSlice(p.ourBitfield)
 	p.sendMessage(MsgBitfield, compacted)
 }
 
 func (p *Peer) sendRequest(pieceNum int, begin int, length int) {
+	log.Printf("Peer : sendBitfield : Sending Request to %s for piece %d with begin %d and offset %d", p.peerName, pieceNum, begin, length)
 	buffer := new(bytes.Buffer)
 
 	ints := []uint32{uint32(pieceNum), uint32(begin), uint32(length)}
@@ -648,6 +669,22 @@ func (p *Peer) sendRequest(pieceNum int, begin int, length int) {
 	if err != nil {log.Fatal(err)}
 
 	p.sendMessage(MsgRequest, buffer.Bytes())
+}
+
+func (p *Peer) sendRequestByNum(pieceNum int, blockNum int) {
+	begin := downloadBlockSize * blockNum
+	p.sendRequest(pieceNum, begin, downloadBlockSize)
+}
+
+func (p *Peer) sendInitialRequests() {
+	log.Printf("TEMP: NOR %d MSBD %d", p.currentDownload.numOutstandingBlocks, maxSimultaneousBlockDownloads)
+	for p.currentDownload.numOutstandingBlocks < maxSimultaneousBlockDownloads && 
+		(p.currentDownload.numOutstandingBlocks + p.currentDownload.numBlocksReceived) < p.currentDownload.totalNumBlocks {
+
+		blockNum := p.currentDownload.numBlocksReceived + p.currentDownload.numOutstandingBlocks
+		p.sendRequestByNum(p.currentDownload.pieceNum, blockNum)
+		p.currentDownload.numOutstandingBlocks += 1
+	}
 }
 
 func (p *Peer) sendBlock(pieceNum int, begin int, block []byte) {
@@ -693,31 +730,51 @@ func (p *Peer) Run() {
 	for {
 		select {
 		case <-p.keepalive:
+		
+		
+		case requestPiece := <-p.contRxChans.requestPiece:
+			log.Printf("Peer : Run : Controller told %s to get piece number %d", p.peerName, requestPiece.pieceNum)
+
+			// check to see if we're currently downloading another piece. If so, then there's a 
+			// bug because the controller should only ask us to download one at a time. 
+			if p.currentDownload != nil {
+				log.Fatal("Peer : Run : %s was told to download piece %d, but it's still downloading piece %d", p.peerName, requestPiece.pieceNum, p.currentDownload.pieceNum)
+			}
+
+			// Create a new PieceDownload struct for the piece that we're told to download
+			p.currentDownload = NewPieceDownload(requestPiece, p.pieceLength)
+
+			// Send the first set of block requests all at once. When we get response (piece) messages,
+			// we'll then determine if more need to be set. 
+			go p.sendInitialRequests()
+
 		/*
-			case requestPiece := <-p.contRxChans.requestPiece:
-			case cancelPiece := <-p.contRxChans.cancelPiece:
-			case innerChan := <-p.contRxChans.havePiece:
-				// Create a slice of HaveMessage structs from all individual
-				// Have messages received from the controller
-				//haveMessages := p.receiveHaveMessagesFromController(innerChan)
+		case cancelPiece := <-p.contRxChans.cancelPiece:
+		case innerChan := <-p.contRxChans.havePiece:
+			// Create a slice of HaveMessage structs from all individual
+			// Have messages received from the controller
+			//haveMessages := p.receiveHaveMessagesFromController(innerChan)
 
+			
+			// update our local bitfield based on the Have messages received from the controller.
 
-				// update our local bitfield based on the Have messages received from the controller.
+			if !initialBitfieldSentToPeer {
+				// Send the entire bitfield to the peer
 
-				if !initialBitfieldSentToPeer {
-					// Send the entire bitfield to the peer
+			} else {
+				// Send a single have message to the peer
 
-				} else {
-					// Send a single have message to the peer
+			}
 
-				}
-
-				// situation #2: The controller sends us
+			// situation #2: The controller sends us
 		*/
+
+
 		case <-p.t.Dying():
 			p.peerManagerChans.deadPeer <- p.conn.RemoteAddr().String()
 			return
 		}
+
 	}
 }
 
@@ -748,6 +805,7 @@ func (pm *PeerManager) Run() {
 					peerName,
 					pm.infoHash,
 					pm.numPieces,
+					pm.pieceLength,
 					pm.diskIOChans,
 					contTxChans,
 					pm.peerContChans)
@@ -774,6 +832,7 @@ func (pm *PeerManager) Run() {
 					peerName,
 					pm.infoHash,
 					pm.numPieces,
+					pm.pieceLength,
 					pm.diskIOChans,
 					contTxChans,
 					pm.peerContChans)
