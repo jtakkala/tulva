@@ -347,14 +347,13 @@ func (p *Peer) decodeMessage(payload []byte) {
 		return
 	}
 
-	messageID := payload[0]
+	messageID := int(payload[0])
 
 	// Remove the messageID
 	payload = payload[1:]
 
 	switch messageID {
-	case 0:
-		// Choke Message
+	case MsgChoke:
 		if len(payload) != 0 {
 			log.Fatalf("Received a Choke from %s with invalid payload size of %d", p.peerName, len(payload))
 		} else {
@@ -373,8 +372,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 			// Ignore choke message because we're already choked.
 		}
 		break
-	case 1:
-		// Unchoke Message
+	case MsgUnchoke:
 		if len(payload) != 0 {
 			log.Fatalf("Received an Unchoke from %s with invalid payload size of %d", p.peerName, len(payload))
 		} else {
@@ -392,8 +390,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 			// Ignore unchoke message because we're already unchoked.
 		}
 		break
-	case 2:
-		// Interested Message
+	case MsgInterested:
 		if len(payload) != 0 {
 			log.Fatalf("Received an Interested from %s with invalid payload size of %d", p.peerName, len(payload))
 		} else {
@@ -404,7 +401,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 		// FIXME -- Send an unchoke to the peer
 
 		break
-	case 3:
+	case MsgNotInterested:
 		// Not Interested Message
 		if len(payload) != 0 {
 			log.Fatalf("Received a Not Interested from %s with invalid payload size of %d", p.peerName, len(payload))
@@ -414,8 +411,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 		p.peerInterested = false
 
 		break
-	case 4:
-		// Have Message
+	case MsgHave:
 		if len(payload) != 4 {
 			log.Fatalf("Received a Have from %s with invalid payload size of %d", p.peerName, len(payload))
 		}
@@ -434,8 +430,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 		go p.sendHaveMessagesToController(have)
 
 		break
-	case 5:
-		// Bitfield Message
+	case MsgBitfield:
 		log.Printf("Received a Bitfield message from %s", p.peerName)
 
 		p.peerBitfield = convertByteSliceToBoolSlice(len(p.peerBitfield), payload)
@@ -445,29 +440,25 @@ func (p *Peer) decodeMessage(payload []byte) {
 		go p.sendBitfieldToController(p.peerBitfield)
 
 		break
-	case 6:
-		// Request Message
+	case MsgRequest:
 		// IMPLEMENT ME
 		pieceNum := 0 // FIXME
 
 		log.Printf("Received a Request message for piece %d from %s", pieceNum, p.peerName)
 		break
-	case 7:
-		// Piece Message
+	case MsgPiece:
 		pieceNum := 0 // FIX
 		// IMPLEMENT ME
 
 		log.Printf("Received a Piece message for piece %d from %s", pieceNum, p.peerName)
 		break
-	case 8:
-		// Cancel Message
+	case MsgCancel:
 		// IMPLEMENT ME
 		pieceNum := 0 // FIXME
 
 		log.Printf("Received a Cancel message for piece %d from %s", pieceNum, p.peerName)
 		break
-	case 9:
-		// Port Message
+	case MsgPort:
 		log.Printf("Ignoring a Port message that was received from %s", p.peerName)
 		break
 	}
