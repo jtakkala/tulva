@@ -433,7 +433,6 @@ func (p *Peer) decodeMessage(payload []byte) {
 		p.peerInterested = false
 		p.sendChoke()
 
-
 		break
 	case MsgHave:
 		if len(payload) != 4 {
