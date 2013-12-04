@@ -59,8 +59,8 @@ type Peer struct {
 	peerBitfield     []bool
 	peerID           []byte
 	keepalive        <-chan time.Time // channel for sending keepalives
-	lastTxKeepalive  time.Time
-	lastRxKeepalive  time.Time
+	lastTxMessage    time.Time
+	lastRxMessage    time.Time
 	infoHash         []byte
 	pieceLength		 int
 	currentDownload  *PieceDownload
@@ -233,13 +233,17 @@ func connectToPeer(peerTuple PeerTuple, connCh chan *net.TCPConn) {
 	if err != nil {
 		if e, ok := err.(*net.OpError); ok {
 			if e.Err == syscall.ECONNREFUSED {
-				log.Println("connectToPeer : Connection Refused:", raddr)
+				log.Println("Peer : connectToPeer : ", raddr, err)
+				return
+			}
+			if e.Err == syscall.ETIMEDOUT {
+				log.Println("Peer : connectToPeer : ", raddr, err)
 				return
 			}
 		}
-		log.Fatal(err)
+		log.Fatal("Peer : connectToPeer : ", raddr, err)
 	}
-	log.Println("connectToPeer : Connected:", raddr)
+	log.Println("Peer : connectToPeer : Connected:", raddr)
 	connCh <- conn
 }
 
@@ -257,6 +261,7 @@ func NewPeer(
 		pieceLength:    pieceLength,
 		peerBitfield:   make([]bool, numPieces),
 		ourBitfield:    make([]bool, numPieces),
+		keepalive:	make(chan time.Time),
 		amChoking:      true,
 		amInterested:   false,
 		peerChoking:    true,
@@ -529,12 +534,23 @@ func (p *Peer) decodeMessage(payload []byte) {
 
 func (p *Peer) reader() {
 	log.Println("Peer : reader : Started")
+	defer log.Println("Peer : reader : Completed")
 
 	var handshake Handshake
-	binary.Read(p.conn, binary.BigEndian, &handshake)
+	err := binary.Read(p.conn, binary.BigEndian, &handshake)
+	if err != nil {
+		if err == io.EOF {
+			log.Println("Peer : reader : binary.Read :", p.peerName, err)
+			p.Stop()
+			return
+		}
+		log.Fatal("Peer : reader : binary.Read :", p.peerName, err)
+	}
+
+	p.lastRxMessage = time.Now()
 	p.stats.addRead(int(reflect.TypeOf(handshake).Size()))
 
-	err := verifyHandshake(&handshake, p.infoHash)
+	err = verifyHandshake(&handshake, p.infoHash)
 	if err != nil {
 		p.conn.Close()
 		return
@@ -545,9 +561,14 @@ func (p *Peer) reader() {
 		length := make([]byte, 4)
 		n, err := io.ReadFull(p.conn, length)
 		if err != nil {
-			// FIXME Are there any cases where we would not read length?
-			return
+			if err == io.EOF {
+				log.Println("Peer : reader : io.ReadFull :", p.peerName, err)
+				p.Stop()
+				return
+			}
+			log.Fatal("Peer : reader : io.ReadFull :", p.peerName, err)
 		}
+		p.lastRxMessage = time.Now()
 		p.stats.addRead(n)
 
 		payload := make([]byte, binary.BigEndian.Uint32(length))
@@ -555,8 +576,14 @@ func (p *Peer) reader() {
 		if err != nil {
 			// FIXME if this is not a keepalive, we should
 			// definitely get a payload
-			return
+			if err == io.EOF {
+				log.Println("Peer : reader : io.ReadFull :", p.peerName, err)
+				p.Stop()
+				return
+			}
+			log.Fatal("Peer : reader : io.ReadFull :", p.peerName, err)
 		}
+		p.lastRxMessage = time.Now()
 		p.stats.addRead(n)
 
 		log.Printf("Read %d bytes of %x\n", (n + 4), payload)
@@ -580,6 +607,7 @@ func (p *Peer) sendHandshake() {
 		log.Fatal(err)
 	}
 
+	p.lastTxMessage = time.Now()
 	p.stats.addWrite(int(reflect.TypeOf(&handshake).Size()))
 }
 
@@ -591,10 +619,15 @@ func (p *Peer) sendKeepalive() {
 	// Untested
 	err := binary.Write(p.conn, binary.BigEndian, &message)
 	if err != nil {
-		// TODO: Handle errors
-		log.Fatal(err)
+		if err.Error() == "use of closed network connection" {
+			log.Println(err)
+		} else {
+			log.Fatal(err)
+		}
+		return
 	}
 
+	p.lastTxMessage = time.Now()
 	p.stats.addWrite(4)
 }
 
@@ -639,7 +672,7 @@ func (p *Peer) sendMessage(ID int, payload interface{}) {
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	p.lastTxMessage = time.Now()
 	p.stats.addWrite(len(message))
 }
 
@@ -738,7 +771,7 @@ func (p *Peer) sendCancel(pieceNum int, begin int, length int) {
 }
 
 func (p *Peer) Stop() error {
-	log.Println("Peer : Stop : Stopping")
+	log.Println("Peer : Stop : Stopping:", p.peerName)
 	p.t.Kill(nil)
 	return p.t.Wait()
 }
@@ -748,15 +781,22 @@ func (p *Peer) Run() {
 	defer log.Println("Peer : Run : Completed")
 
 	//initialBitfieldSentToPeer := false
+	p.keepalive = time.Tick(time.Second * 1)
 
 	p.sendHandshake()
 	go p.reader()
 
 	for {
 		select {
-		case <-p.keepalive:
-		
-		
+		case t := <-p.keepalive:
+			if p.lastTxMessage.Add(time.Second * 120).Before(t) {
+				log.Println("No txMessage for 120 seconds", p.peerName, p.lastTxMessage.Unix(), t.Unix())
+				p.sendKeepalive()
+			}
+			if p.lastRxMessage.Add(time.Second * 120).Before(t) {
+				log.Println("No RxMessage for 120 seconds", p.peerName, p.lastRxMessage.Unix(), t.Unix())
+				p.Stop()
+			}
 		case requestPiece := <-p.contRxChans.requestPiece:
 			log.Printf("Peer : Run : Controller told %s to get piece number %d", p.peerName, requestPiece.pieceNum)
 
@@ -801,7 +841,7 @@ func (p *Peer) Run() {
 		}
 
 	}
-}
+} 
 
 func (pm *PeerManager) Stop() error {
 	log.Println("PeerManager : Stop : Stopping")
