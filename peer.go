@@ -250,6 +250,18 @@ func verifyHandshake(handshake *Handshake, infoHash []byte) error {
 	return nil
 }
 
+func (p *Peer) sendBitfieldToController(bitfield []bool) {
+	haveSlice := make([]HavePiece, 0)
+
+	for pieceNum, hasPiece := range bitfield {
+		if hasPiece {
+			haveSlice = append(haveSlice, HavePiece{pieceNum, p.peerName})
+		}
+	}
+
+	p.sendHaveMessagesToController(haveSlice)
+}
+
 // Send one or more HavePiece messages to the controller. 
 // NOTE: This function will potentially block and should be run
 // as a separate goroutine. 
@@ -273,12 +285,38 @@ func (p *Peer) sendHaveMessagesToController(pieces []HavePiece) {
 	close(innerChan)
 }
 
+/*
 func (p *Peer) readBytesFromConn(numBytes int) []byte {
 	result := make([]byte, numBytes)
 	_, err := io.ReadFull(p.conn, result)
 	if err != nil {
 		log.Fatalf("Encountered an error when attempting to read %d bytes from %s", numBytes, p.peerName)
 	}
+	return result
+}
+*/
+
+// Need to send targetSize because the byte slice will potentially have padding
+// bits at the end if the bitfield size is not divisible by 8. 
+func convertByteSliceToBoolSlice(targetSize int, original []byte) []bool {
+	result := make([]bool, targetSize)
+	if ((len(original) * 8) - targetSize) > 7 {
+		log.Fatalf("Expected original slice to be roughly 8 times smaller than the target size")
+	}
+
+	for i := 0; i < len(original); i++ {
+		for j := 0; j < 8; j++ {
+			resultIndex := (i * 8) + j
+			if resultIndex >= targetSize {
+				// We've hit bit padding at the end of the byte slice. 
+				break
+			} 
+
+			currentByte := original[i]
+			currentBit := (currentByte >> uint32(7 - j)) & 1
+			result[resultIndex] = currentBit == 1
+		}
+	} 
 	return result
 }
 
@@ -329,16 +367,18 @@ func (p *Peer) decodeMessage(payload []byte) {
 		have := make([]HavePiece, 1)
 		have[0] = HavePiece{pieceNum: pieceNum, peerName: p.peerName} 
 		go p.sendHaveMessagesToController(have)
+
 		break
 	case 5:
 		// Bitfield Message
 		log.Printf("Received a Bitfield message from %s", p.peerName)
 
-		// Record the peer bitfield locally
-
+		p.peerBitfield = convertByteSliceToBoolSlice(len(p.peerBitfield), payload)
 
 		// Break the bitfield into a slice of HavePiece structs and send them 
 		// to the controller  
+		go p.sendBitfieldToController(p.peerBitfield)
+
 		break
 	case 6:
 		// Request Message
