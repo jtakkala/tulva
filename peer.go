@@ -52,12 +52,10 @@ type Peer struct {
 	peerInterested   bool
 	ourBitfield      []bool
 	peerBitfield     []bool
-	initiator        bool
 	peerID           []byte
 	keepalive        <-chan time.Time // channel for sending keepalives
 	lastTxKeepalive  time.Time
 	lastRxKeepalive  time.Time
-	read             chan []byte
 	infoHash         []byte
 	diskIOChans      diskIOPeerChans
 	peerManagerChans peerManagerChans
@@ -201,27 +199,26 @@ func NewPeerManager(infoHash []byte, numPieces int, diskIOChans diskIOPeerChans,
 	return pm
 }
 
-func ConnectToPeer(peerTuple PeerTuple, connCh chan *net.TCPConn) {
+func connectToPeer(peerTuple PeerTuple, connCh chan *net.TCPConn) {
 	raddr := net.TCPAddr{peerTuple.IP, int(peerTuple.Port), ""}
 	log.Println("Connecting to", raddr)
 	conn, err := net.DialTCP("tcp4", nil, &raddr)
 	if err != nil {
 		if e, ok := err.(*net.OpError); ok {
 			if e.Err == syscall.ECONNREFUSED {
-				log.Println("ConnectToPeer : Connection Refused:", raddr)
+				log.Println("connectToPeer : Connection Refused:", raddr)
 				return
 			}
 		}
 		log.Fatal(err)
 	}
-	log.Println("ConnectToPeer : Connected:", raddr)
+	log.Println("connectToPeer : Connected:", raddr)
 	connCh <- conn
 }
 
 func NewPeer(
 	peerName string,
 	infoHash []byte,
-	initiator bool,
 	numPieces int,
 	diskIOChans diskIOPeerChans,
 	contRxChans ControllerPeerChans,
@@ -235,11 +232,9 @@ func NewPeer(
 		amInterested:   false,
 		peerChoking:    true,
 		peerInterested: false,
-		initiator:      initiator,
 		diskIOChans:    diskIOChans,
 		contRxChans:    contRxChans,
 		contTxChans:    contTxChans}
-	p.read = make(chan []byte)
 	return p
 }
 
@@ -375,14 +370,13 @@ func (p *Peer) decodeMessage(payload []byte) {
 		return
 	}
 
-	messageID := payload[0]
+	messageID := int(payload[0])
 
 	// Remove the messageID
 	payload = payload[1:]
 
 	switch messageID {
-	case 0:
-		// Choke Message
+	case MsgChoke:
 		if len(payload) != 0 {
 			log.Fatalf("Received a Choke from %s with invalid payload size of %d", p.peerName, len(payload))
 		} else {
@@ -401,8 +395,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 			// Ignore choke message because we're already choked.
 		}
 		break
-	case 1:
-		// Unchoke Message
+	case MsgUnchoke:
 		if len(payload) != 0 {
 			log.Fatalf("Received an Unchoke from %s with invalid payload size of %d", p.peerName, len(payload))
 		} else {
@@ -420,8 +413,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 			// Ignore unchoke message because we're already unchoked.
 		}
 		break
-	case 2:
-		// Interested Message
+	case MsgInterested:
 		if len(payload) != 0 {
 			log.Fatalf("Received an Interested from %s with invalid payload size of %d", p.peerName, len(payload))
 		} else {
@@ -431,7 +423,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 		p.sendUnchoke()
 
 		break
-	case 3:
+	case MsgNotInterested:
 		// Not Interested Message
 		if len(payload) != 0 {
 			log.Fatalf("Received a Not Interested from %s with invalid payload size of %d", p.peerName, len(payload))
@@ -443,8 +435,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 
 
 		break
-	case 4:
-		// Have Message
+	case MsgHave:
 		if len(payload) != 4 {
 			log.Fatalf("Received a Have from %s with invalid payload size of %d", p.peerName, len(payload))
 		}
@@ -463,8 +454,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 		go p.sendHaveMessagesToController(have)
 
 		break
-	case 5:
-		// Bitfield Message
+	case MsgBitfield:
 		log.Printf("Received a Bitfield message from %s", p.peerName)
 
 		p.peerBitfield = convertByteSliceToBoolSlice(len(p.peerBitfield), payload)
@@ -474,36 +464,32 @@ func (p *Peer) decodeMessage(payload []byte) {
 		go p.sendBitfieldToController(p.peerBitfield)
 
 		break
-	case 6:
-		// Request Message
+	case MsgRequest:
 		// IMPLEMENT ME
 		pieceNum := 0 // FIXME
 
 		log.Printf("Received a Request message for piece %d from %s", pieceNum, p.peerName)
 		break
-	case 7:
-		// Piece Message
+	case MsgPiece:
 		pieceNum := 0 // FIX
 		// IMPLEMENT ME
 
 		log.Printf("Received a Piece message for piece %d from %s", pieceNum, p.peerName)
 		break
-	case 8:
-		// Cancel Message
+	case MsgCancel:
 		// IMPLEMENT ME
 		pieceNum := 0 // FIXME
 
 		log.Printf("Received a Cancel message for piece %d from %s", pieceNum, p.peerName)
 		break
-	case 9:
-		// Port Message
+	case MsgPort:
 		log.Printf("Ignoring a Port message that was received from %s", p.peerName)
 		break
 	}
 }
 
-func (p *Peer) Reader() {
-	log.Println("Peer : Reader : Started")
+func (p *Peer) reader() {
+	log.Println("Peer : reader : Started")
 
 	var handshake Handshake
 	binary.Read(p.conn, binary.BigEndian, &handshake)
@@ -536,7 +522,6 @@ func (p *Peer) Reader() {
 
 		log.Printf("Read %d bytes of %x\n", (n + 4), payload)
 		p.decodeMessage(payload)
-		//p.read <- buf
 	}
 }
 
@@ -697,16 +682,11 @@ func (p *Peer) Run() {
 	//initialBitfieldSentToPeer := false
 
 	p.sendHandshake()
-	go p.Reader()
+	go p.reader()
 
 	for {
 		select {
 		case <-p.keepalive:
-		case <-p.read:
-			fmt.Println("p.read")
-		//case buf := <-p.read:
-		//fmt.Println("Read from peer:", buf)
-
 		/*
 			case requestPiece := <-p.contRxChans.requestPiece:
 			case cancelPiece := <-p.contRxChans.cancelPiece:
@@ -761,7 +741,6 @@ func (pm *PeerManager) Run() {
 				pm.peers[peerName] = NewPeer(
 					peerName,
 					pm.infoHash,
-					true,
 					pm.numPieces,
 					pm.diskIOChans,
 					contTxChans,
@@ -775,7 +754,7 @@ func (pm *PeerManager) Run() {
 
 				// Have the 'peer' routine create an outbound
 				// TCP connection to the remote peer
-				go ConnectToPeer(peer, pm.serverChans.conns)
+				go connectToPeer(peer, pm.serverChans.conns)
 			}
 		case conn := <-pm.serverChans.conns:
 			_, ok := pm.peers[conn.RemoteAddr().String()]
@@ -788,7 +767,6 @@ func (pm *PeerManager) Run() {
 				pm.peers[peerName] = NewPeer(
 					peerName,
 					pm.infoHash,
-					false,
 					pm.numPieces,
 					pm.diskIOChans,
 					contTxChans,
