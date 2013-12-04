@@ -44,6 +44,7 @@ type PeerTuple struct {
 
 type Peer struct {
 	conn           *net.TCPConn
+	peerName       string
 	amChoking      bool
 	amInterested   bool
 	peerChoking    bool
@@ -196,12 +197,14 @@ func ConnectToPeer(peerTuple PeerTuple, connCh chan *net.TCPConn) {
 }
 
 func NewPeer(
+			peerName string,
 			infoHash []byte, 
 			initiator bool, 
 			diskIOChans diskIOPeerChans,
 			contRxChans ControllerPeerChans,
 			contTxChans PeerControllerChans) *Peer {
 	p := &Peer{
+			peerName: peerName,
 			infoHash: infoHash, 
 			amChoking: true, 
 			amInterested: false, 
@@ -242,42 +245,72 @@ func verifyHandshake(handshake *Handshake, infoHash []byte) error {
 	return nil
 }
 
+func (p *Peer) sendHaveToController(pieces []HavePiece) {
+
+}
+
+func (p *Peer) readBytesFromConn(numBytes int) []byte {
+	result := make([]byte, numBytes)
+	_, err := io.ReadFull(p.conn, result)
+	if err != nil {
+		log.Fatalf("Encountered an error when attempting to read %d bytes from %s", numBytes, p.peerName)
+	}
+	return result
+}
+
 func (p *Peer) decodeMessage(payload []byte) {
 	if len(payload) == 0 {
 		// keepalive
 		return
 	}
 
-	switch payload[0] {
+	messageID := binary.BigEndian.Uint32(p.readBytesFromConn(1))
+
+	switch messageID {
 	case 0:
-		// choke
+		// Choke Message
 		break
 	case 1:
-		// unchoke
+		// Unchoke Message
 		break
 	case 2:
-		// interested
+		// Interested Message
 		break
 	case 3:
-		// not interested
+		// Not Interested Message
 		break
 	case 4:
-		// have
+		// Have Message
+
+		// Determine the piece number
+		pieceNum := int(binary.BigEndian.Uint32(p.readBytesFromConn(4)))
+
+		// Update the local peer bitfield
+		p.peerBitfield[pieceNum] = true
+
+		// Send a single HavePiece struct to the controller 
+		have := make([]HavePiece, 1)
+		have[1] = HavePiece{pieceNum: pieceNum, peerName: p.peerName} 
 		break
 	case 5:
-		// bitfield
+		// Bitfield Message
+
+		// Record the peer bitfield locally
+
+		// Break the bitfield into a slice of HavePiece structs and send them 
+		// to the controller  
 		break
 	case 6:
-		// request
+		// Request Message
 		break
 	case 7:
-		// piece
+		// Piece Message
 		break
 	case 8:
-		// cancel
+		// Cancel Message
 		break
 	case 9:
-		// port
+		// Port Message
 		break
 	}
 }
@@ -298,11 +331,14 @@ func (p *Peer) Reader() {
 		length := make([]byte, 4)
 		n, err := io.ReadFull(p.conn, length)
 		if err != nil {
+			// FIXME Are there any cases where we would not read length?
 			return
 		}
 		payload := make([]byte, binary.BigEndian.Uint32(length))
 		n, err = io.ReadFull(p.conn, payload)
 		if err != nil {
+			// FIXME if this is not a keepalive, we should
+			// definitely get a payload 
 			return
 		}
 		log.Printf("Read %d bytes of %x\n", n, payload)
@@ -380,6 +416,7 @@ func (pm *PeerManager) Run() {
 
 				// Construct the Peer object
 				pm.peers[peerName] = NewPeer(
+					peerName,
 					pm.infoHash, 
 					true, 
 					pm.diskIOChans,
@@ -405,6 +442,7 @@ func (pm *PeerManager) Run() {
 				// Construct the Peer object
 				peerName := conn.RemoteAddr().String()
 				pm.peers[peerName] = NewPeer(
+					peerName,
 					pm.infoHash, 
 					false, 
 					pm.diskIOChans,
