@@ -584,26 +584,29 @@ func (p *Peer) sendMessage(ID int, payload interface{}) {
 
 func (p *Peer) sendChoke() {
 	log.Printf("Peer : sendChoke : Sending choke to %s", p.peerName)
-	p.sendMessage(1, make([]byte, 0))
+	p.sendMessage(0, make([]byte, 0))
 }
 
 func (p *Peer) sendUnchoke() {
 	log.Printf("Peer : sendUnchoke : Sending unchoke to %s", p.peerName)
-	p.sendMessage(2, make([]byte, 0))
+	p.sendMessage(1, make([]byte, 0))
 }
 
 func (p *Peer) sendInterested() {
 	log.Printf("Peer : sendInterested : Sending interested to %s", p.peerName)
-	p.sendMessage(3, make([]byte, 0))
+	p.sendMessage(2, make([]byte, 0))
 }
 
 func (p *Peer) sendNotInterested() {
 	log.Printf("Peer : sendNotInterested : Sending not-interested to %s", p.peerName)
-	p.sendMessage(4, make([]byte, 0))
+	p.sendMessage(3, make([]byte, 0))
 }
 
 func (p *Peer) sendHave(pieceNum int) {
-	// IMPLEMENT ME
+	payloadBuffer := new(bytes.Buffer)
+	err := binary.Write(payloadBuffer, binary.BigEndian, uint64(pieceNum))
+	if err != nil {log.Fatal(err)}
+	p.sendMessage(4, payloadBuffer.Bytes())
 }
 
 func (p *Peer) sendBitfield() {
@@ -633,7 +636,6 @@ func (p *Peer) Run() {
 	defer log.Println("Peer : Run : Completed")
 
 	//initialBitfieldSentToPeer := false
-
 
 	p.sendHandshake()
 	go p.Reader()
