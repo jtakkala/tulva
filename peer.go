@@ -32,7 +32,7 @@ const (
 	MsgHave
 	MsgBitfield
 	MsgRequest
-	MsgPiece
+	MsgBlock // This is defined in the spec as piece, but in reality it's a block
 	MsgCancel
 	MsgPort
 )
@@ -470,7 +470,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 
 		log.Printf("Received a Request message for piece %d from %s", pieceNum, p.peerName)
 		break
-	case MsgPiece:
+	case MsgBlock:
 		pieceNum := 0 // FIX
 		// IMPLEMENT ME
 
@@ -659,14 +659,21 @@ func (p *Peer) sendBlock(pieceNum int, begin int, block []byte) {
 	err := binary.Write(buffer, binary.BigEndian, ints)
 	if err != nil {log.Fatal(err)}
 
-	err := binary.Write(buffer, binary.BigEndian, block)
+	err = binary.Write(buffer, binary.BigEndian, block)
 	if err != nil {log.Fatal(err)}
 
-	p.sendMessage(MsgPiece, buffer.Bytes())
+	p.sendMessage(MsgBlock, buffer.Bytes())
 }
 
 func (p *Peer) sendCancel(pieceNum int, begin int, length int) {
-	// IMPLEMENT ME
+	buffer := new(bytes.Buffer)
+
+	ints := []uint32{uint32(pieceNum), uint32(begin), uint32(length)}
+
+	err := binary.Write(buffer, binary.BigEndian, ints)
+	if err != nil {log.Fatal(err)}
+
+	p.sendMessage(MsgCancel, buffer.Bytes())
 }
 
 func (p *Peer) Stop() error {
