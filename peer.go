@@ -245,8 +245,24 @@ func verifyHandshake(handshake *Handshake, infoHash []byte) error {
 	return nil
 }
 
-func (p *Peer) sendHaveToController(pieces []HavePiece) {
+// Send zero or more HavePiece messages to the controller. To send zero HavePiece
+// messages (like when sending an empty bitfield), the pieces argument should 
+// just be an empty slice. 
+// NOTE: This function will potentially block and should be run
+// as a separate goroutine. 
+func (p *Peer) sendHaveMessagesToController(pieces []HavePiece) {
+	// make an inner channel that will be used to send the individual HavePiece
+	// messages to the controller. 
+	innerChan := make(chan HavePiece)
+	p.contTxChans.havePiece <- innerChan
 
+	for _, havePiece := range pieces {
+		innerChan <- havePiece
+	}
+
+	// close the inner channel to signal to the controller that we're finished
+	// sending HavePiece messages. 
+	close(innerChan)
 }
 
 func (p *Peer) readBytesFromConn(numBytes int) []byte {
@@ -291,6 +307,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 		// Send a single HavePiece struct to the controller 
 		have := make([]HavePiece, 1)
 		have[1] = HavePiece{pieceNum: pieceNum, peerName: p.peerName} 
+		go p.sendHaveMessagesToController(have)
 		break
 	case 5:
 		// Bitfield Message
