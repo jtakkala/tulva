@@ -488,10 +488,32 @@ func (p *Peer) decodeMessage(payload []byte) {
 		log.Printf("Received a Request message for piece %d from %s", pieceNum, p.peerName)
 		break
 	case MsgBlock:
-		pieceNum := 0 // FIX
-		// IMPLEMENT ME
+		expectedPayloadSize := 8 + downloadBlockSize
+		if len(payload) != expectedPayloadSize {
+			log.Fatalf("Received a Block (Piece) message from %s with invalid payload size of %d. Expected %d", p.peerName, len(payload), expectedPayloadSize)
+		}
 
-		log.Printf("Received a Piece message for piece %d from %s", pieceNum, p.peerName)
+		pieceNumBytes := payload[0:4]
+		beginBytes := payload[4:8]
+		blockBytes := payload[8:]
+
+		pieceNum := binary.BigEndian.Uint32(pieceNumBytes)
+		begin := binary.BigEndian.Uint32(beginBytes)
+
+
+		if p.currentDownload == nil {
+			log.Fatalf("Received a Block (Piece) message from %s but there aren't any current downloads", p.peerName)
+		} else if begin % downloadBlockSize != 0 {
+			log.Fatalf("Received a Block (Piece) message from %s with an invalid begin value of %d", p.peerName, begin)
+		} else {
+			log.Printf("Received a Block (Piece) message from %s for piece %d begin %d with %d bytes of block data", p.peerName, pieceNum, begin, len(blockBytes))
+		}
+
+		// The block (piece) message is valid. Write the contents to the buffer. 
+		//p.currentDownload.piece
+
+
+		
 		break
 	case MsgCancel:
 		// IMPLEMENT ME
@@ -677,10 +699,13 @@ func (p *Peer) sendRequestByNum(pieceNum int, blockNum int) {
 }
 
 func (p *Peer) sendInitialRequests() {
-	log.Printf("TEMP: NOR %d MSBD %d", p.currentDownload.numOutstandingBlocks, maxSimultaneousBlockDownloads)
 	for p.currentDownload.numOutstandingBlocks < maxSimultaneousBlockDownloads && 
 		(p.currentDownload.numOutstandingBlocks + p.currentDownload.numBlocksReceived) < p.currentDownload.totalNumBlocks {
 
+		// We haven't yet hit the max simultaneous request limit.
+		// We also haven't yet requested every block.
+
+		// Send a request for another block. 
 		blockNum := p.currentDownload.numBlocksReceived + p.currentDownload.numOutstandingBlocks
 		p.sendRequestByNum(p.currentDownload.pieceNum, blockNum)
 		p.currentDownload.numOutstandingBlocks += 1
