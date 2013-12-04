@@ -117,6 +117,15 @@ func NewController(finishedPieces []bool, pieceHashes [][]byte, diskIOChans Cont
 	peerManagerChans ControllerPeerManagerChans, peerChans PeerControllerChans) *Controller {
 
 	cont := new(Controller)
+
+	if len(finishedPieces) == 0 {
+		log.Fatalf("ERROR: can't construct controller with an empty finishedPieces slice")
+	}
+
+	if len(pieceHashes) != len(finishedPieces) {
+		log.Fatalf("ERROR: can't construct controller with finishedPieces size of %d and pieceHahses size of %d", len(finishedPieces), len(pieceHashes))
+	}
+
 	cont.finishedPieces = finishedPieces
 	cont.pieceHashes = pieceHashes
 	cont.rxChans = &ControllerRxChans{diskIOChans, peerManagerChans, peerChans}
@@ -441,6 +450,8 @@ func (cont *Controller) Run() {
 		// === START OF MESSAGES FROM PEER_MANAGER === 
 		case peerComms := <- cont.rxChans.peerManager.newPeer:
 
+			log.Printf("len(finishedPieces): %d", cont.finishedPieces)
+
 			peerInfo := NewPeerInfo(len(cont.finishedPieces), peerComms)
 
 			// Throw an error if the peer is duplicate (same IP/Port. should never happen)
@@ -520,8 +531,10 @@ func (cont *Controller) Run() {
 				// Update the peers availability slice. 
 				peerInfo, exists = cont.peers[piece.peerName]; 
 				if !exists {
-					log.Fatalf("Controller : Run (Have Piece) : Unable to process HavePiece for %s because it doesn't exist in the peers mapping", piece.peerName)
+					log.Fatalf("Controller : Run (Have Piece) : Unable to process HavePiece for %s because the peer doesn't exist in the peers mapping", piece.peerName)
 				} 
+
+				log.Printf("len(availablePieces): %d", len(peerInfo.availablePieces))
 
 				if peerInfo.availablePieces[piece.pieceNum] {
 					log.Fatalf("Controller : Run (Have Piece) : Received duplicate HavePiece from %s for piece number %d", peerInfo.peerName, piece.pieceNum)
