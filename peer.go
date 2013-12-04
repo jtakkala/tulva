@@ -340,6 +340,34 @@ func convertByteSliceToBoolSlice(targetSize int, original []byte) []bool {
 	return result
 }
 
+func convertBoolSliceToByteSlice(bitfield []bool) []byte {
+	sliceLen := len(bitfield)/8 // 8 bits per byte
+	if len(bitfield) % 8 != 0 {
+		// add one more byte because the bitfield doesn't fit evenly into a byte slice
+		sliceLen += 1 
+	}
+	result := make([]byte, sliceLen)
+
+	for i := 0; i < len(result); i++ {
+		orValue := byte(128)
+		for j := 0; j < 8; j++ {
+			bitfieldIndex := ((i * 8) + j)
+			if bitfieldIndex > len(bitfield) {
+				// we've hit the end of the bitfield
+				break
+			}
+
+			if bitfield[bitfieldIndex] {
+				// We have this piece. Set the binary bit
+				result[i] = result[i] | orValue
+			}
+
+			orValue = orValue >> 1
+		}
+	}
+	return result
+}
+
 func (p *Peer) decodeMessage(payload []byte) {
 	if len(payload) == 0 {
 		// keepalive
@@ -400,8 +428,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 			log.Printf("Received an Interested message from %s", p.peerName)
 		}
 		p.peerInterested = true
-
-		// FIXME -- Send an unchoke to the peer
+		p.sendUnchoke()
 
 		break
 	case 3:
@@ -412,6 +439,8 @@ func (p *Peer) decodeMessage(payload []byte) {
 			log.Printf("Received a Not Interested message from %s", p.peerName)
 		}
 		p.peerInterested = false
+		p.sendChoke()
+
 
 		break
 	case 4:
@@ -592,43 +621,63 @@ func (p *Peer) sendMessage(ID int, payload interface{}) {
 
 func (p *Peer) sendChoke() {
 	log.Printf("Peer : sendChoke : Sending choke to %s", p.peerName)
-	p.sendMessage(0, make([]byte, 0))
+	go p.sendMessage(MsgChoke, make([]byte, 0))
+	p.amChoking = true
 }
 
 func (p *Peer) sendUnchoke() {
 	log.Printf("Peer : sendUnchoke : Sending unchoke to %s", p.peerName)
-	p.sendMessage(1, make([]byte, 0))
+	go p.sendMessage(MsgUnchoke, make([]byte, 0))
+	p.amChoking = false
 }
 
 func (p *Peer) sendInterested() {
 	log.Printf("Peer : sendInterested : Sending interested to %s", p.peerName)
-	p.sendMessage(2, make([]byte, 0))
+	p.sendMessage(MsgInterested, make([]byte, 0))
+	p.amInterested = true
 }
 
 func (p *Peer) sendNotInterested() {
 	log.Printf("Peer : sendNotInterested : Sending not-interested to %s", p.peerName)
-	p.sendMessage(3, make([]byte, 0))
+	p.sendMessage(MsgNotInterested, make([]byte, 0))
+	p.amInterested = false
 }
 
 func (p *Peer) sendHave(pieceNum int) {
 	payloadBuffer := new(bytes.Buffer)
-	err := binary.Write(payloadBuffer, binary.BigEndian, uint64(pieceNum))
-	if err != nil {
-		log.Fatal(err)
-	}
-	p.sendMessage(4, payloadBuffer.Bytes())
+	err := binary.Write(payloadBuffer, binary.BigEndian, uint32(pieceNum))
+	if err != nil {log.Fatal(err)}
+	p.sendMessage(MsgHave, payloadBuffer.Bytes())
 }
 
 func (p *Peer) sendBitfield() {
-	// IMPLEMENT ME
+	compacted := convertBoolSliceToByteSlice(p.ourBitfield)
+	p.sendMessage(MsgBitfield, compacted)
 }
 
 func (p *Peer) sendRequest(pieceNum int, begin int, length int) {
-	// IMPLEMENT ME
+	buffer := new(bytes.Buffer)
+
+	ints := []uint32{uint32(pieceNum), uint32(begin), uint32(length)}
+
+	err := binary.Write(buffer, binary.BigEndian, ints)
+	if err != nil {log.Fatal(err)}
+
+	p.sendMessage(MsgRequest, buffer.Bytes())
 }
 
 func (p *Peer) sendBlock(pieceNum int, begin int, block []byte) {
-	// IMPLEMENT ME
+	buffer := new(bytes.Buffer)
+
+	ints := []uint32{uint32(pieceNum), uint32(begin)}
+
+	err := binary.Write(buffer, binary.BigEndian, ints)
+	if err != nil {log.Fatal(err)}
+
+	err := binary.Write(buffer, binary.BigEndian, block)
+	if err != nil {log.Fatal(err)}
+
+	p.sendMessage(MsgPiece, buffer.Bytes())
 }
 
 func (p *Peer) sendCancel(pieceNum int, begin int, length int) {
