@@ -327,15 +327,20 @@ func (p *Peer) decodeMessage(payload []byte) {
 		return
 	}
 
-
 	messageID := payload[0]
 
+	// Remove the messageID 
 	payload = payload[1:]
 
 	switch messageID {
 	case 0:
 		// Choke Message
-		log.Printf("Received a Choke message from %s", p.peerName)
+		if len(payload) != 0 {
+			log.Fatalf("Received a Choke from %s with invalid payload size of %d", p.peerName, len(payload))
+		} else {
+			log.Printf("Received a Choke message from %s", p.peerName)
+		}
+
 		if !p.peerChoking {
 			// We're changing from being unchoked to choked
 			p.peerChoking = true
@@ -350,7 +355,11 @@ func (p *Peer) decodeMessage(payload []byte) {
 		break
 	case 1:
 		// Unchoke Message
-		log.Printf("Received an Unchoke message from %s", p.peerName)
+		if len(payload) != 0 {
+			log.Fatalf("Received an Unchoke from %s with invalid payload size of %d", p.peerName, len(payload))
+		} else {
+			log.Printf("Received a Unchoke message from %s", p.peerName)
+		}
 		if p.peerChoking {
 			// We're changing from being choked to unchoked
 			p.peerChoking = false
@@ -365,11 +374,19 @@ func (p *Peer) decodeMessage(payload []byte) {
 		break
 	case 2:
 		// Interested Message
-		log.Printf("Received an Interested message from %s", p.peerName)
+		if len(payload) != 0 {
+			log.Fatalf("Received an Interested from %s with invalid payload size of %d", p.peerName, len(payload))
+		} else {
+			log.Printf("Received an Interested message from %s", p.peerName)
+		}
 		break
 	case 3:
 		// Not Interested Message
-		log.Printf("Received a Not Interested message from %s", p.peerName)
+		if len(payload) != 0 {
+			log.Fatalf("Received a Not Interested from %s with invalid payload size of %d", p.peerName, len(payload))
+		} else {
+			log.Printf("Received a Not Interested message from %s", p.peerName)
+		}
 		break
 	case 4:
 		// Have Message
@@ -422,7 +439,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 		break
 	case 9:
 		// Port Message
-		log.Printf("Received a Port message from %s", p.peerName)
+		log.Printf("Ignoring a Port message that was received from %s", p.peerName)
 		break
 	}
 }
@@ -487,6 +504,8 @@ func (p *Peer) Run() {
 	log.Println("Peer : Run : Started")
 	defer log.Println("Peer : Run : Completed")
 
+	//initialBitfieldSentToPeer := false
+
 	go p.sendHandshake()
 	go p.Reader()
 
@@ -497,6 +516,28 @@ func (p *Peer) Run() {
 			fmt.Println("p.read")
 		//case buf := <-p.read:
 			//fmt.Println("Read from peer:", buf)
+
+			/*
+		case requestPiece := <-p.contRxChans.requestPiece:
+		case cancelPiece := <-p.contRxChans.cancelPiece:
+		case innerChan := <-p.contRxChans.havePiece:
+			// Create a slice of HaveMessage structs from all individual 
+			// Have messages received from the controller
+			//haveMessages := p.receiveHaveMessagesFromController(innerChan)
+
+
+			// update our local bitfield based on the Have messages received from the controller. 
+
+			if !initialBitfieldSentToPeer {
+				// Send the entire bitfield to the peer
+
+			} else {
+				// Send a single have message to the peer 
+
+			}
+
+			// situation #2: The controller sends us  
+			*/ 
 		case <-p.t.Dying():
 			p.peerManagerChans.deadPeer <- p.conn.RemoteAddr().String()
 			return
