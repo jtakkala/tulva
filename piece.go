@@ -13,9 +13,9 @@ type Piece struct {
 
 // BlockInfo describe a request for a block from Peer to DiskIO
 type BlockInfo struct {
-	pieceIndex  uint32
-	begin       uint32
-	length      uint32
+	pieceIndex uint32
+	begin      uint32
+	length     uint32
 }
 
 // BlockResponse contains a block of a piece returned from DiskIO to Peer
