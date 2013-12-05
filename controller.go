@@ -63,6 +63,7 @@ type Controller struct {
 	activeRequestsTotals            []int
 	peers                           map[string]*PeerInfo
 	maxSimultaneousDownloadsPerPeer int
+	downloadComplete				bool
 	rxChans                         *ControllerRxChans
 	t                               tomb.Tomb
 }
@@ -132,7 +133,20 @@ func NewController(finishedPieces []bool, pieceHashes [][]byte, diskIOChans Cont
 	cont.peers = make(map[string]*PeerInfo)
 	cont.activeRequestsTotals = make([]int, len(finishedPieces))
 	cont.maxSimultaneousDownloadsPerPeer = 2 // only 2 pieces at a time
+
+	cont.updateCompletedFlagIfFinished()
+
 	return cont
+}
+
+func (cont *Controller) updateCompletedFlagIfFinished() {
+	for _, hasPiece := range cont.finishedPieces {
+		if !hasPiece {
+			// There is at least one piece that we haven't finished downloading
+			return
+		}
+	}
+	cont.downloadComplete = true
 }
 
 func (cont *Controller) Stop() error {
@@ -326,32 +340,41 @@ func (cont *Controller) createDownloadPriorityForPeer(peerInfo *PeerInfo, rarity
 
 func (cont *Controller) sendRequestsToPeer(peerInfo *PeerInfo, raritySlice []int) {
 
-	// Create the slice of pieces that this peer should work on next. It will not
-	// include pieces that have already been written to disk, or pieces that the
-	// peer is already working on.
-	downloadPriority := cont.createDownloadPriorityForPeer(peerInfo, raritySlice)
+	if cont.downloadComplete {
+		log.Printf("Controller : SendRequestsToPeer : We're finished downloading. Requests will not be sent to %s", peerInfo.peerName)
 
-	log.Printf("Controller : SendRequestsToPeer : Built downloadPriority with %d pieces for peer %s", len(downloadPriority), peerInfo.peerName)
+	} else {
+		// Create the slice of pieces that this peer should work on next. It will not
+		// include pieces that have already been written to disk, or pieces that the
+		// peer is already working on.
+		downloadPriority := cont.createDownloadPriorityForPeer(peerInfo, raritySlice)
+		log.Printf("Controller : SendRequestsToPeer : Built downloadPriority with %d pieces for peer %s", len(downloadPriority), peerInfo.peerName)
 
-	for _, pieceNum := range downloadPriority {
-		if len(peerInfo.activeRequests) >= cont.maxSimultaneousDownloadsPerPeer {
-			// We've sent enough requests
-			break
+		if len(downloadPriority) == 0 {
+			log.Printf("Controller : SendRequestsToPeer : We aren't finished downloading, but %s doesn't have more pieces that we need", peerInfo.peerName)
+
+		} else {
+			for _, pieceNum := range downloadPriority {
+				if len(peerInfo.activeRequests) >= cont.maxSimultaneousDownloadsPerPeer {
+					// We've sent enough requests
+					break
+				}
+
+				// Create a new RequestPiece message and send it to the peer
+				requestMessage := new(RequestPiece)
+				requestMessage.pieceNum = pieceNum
+				requestMessage.expectedHash = cont.pieceHashes[pieceNum]
+				log.Printf("Controller : SendRequestsToPeer : Requesting %s to get pieceNum %d", peerInfo.peerName, pieceNum)
+				go func() { peerInfo.chans.requestPiece <- *requestMessage }()
+
+				// Add this pieceNum to the set of pieces that this peer is working on
+				peerInfo.activeRequests[pieceNum] = struct{}{}
+
+				// Increment the number of peers that are working on this piece.
+				cont.activeRequestsTotals[pieceNum]++
+
+			}
 		}
-
-		// Create a new RequestPiece message and send it to the peer
-		requestMessage := new(RequestPiece)
-		requestMessage.pieceNum = pieceNum
-		requestMessage.expectedHash = cont.pieceHashes[pieceNum]
-		log.Printf("Controller : SendRequestsToPeer : Requesting %s to get pieceNum %d", peerInfo.peerName, pieceNum)
-		go func() { peerInfo.chans.requestPiece <- *requestMessage }()
-
-		// Add this pieceNum to the set of pieces that this peer is working on
-		peerInfo.activeRequests[pieceNum] = struct{}{}
-
-		// Increment the number of peers that are working on this piece.
-		cont.activeRequestsTotals[pieceNum]++
-
 	}
 }
 
@@ -410,6 +433,9 @@ func (cont *Controller) Run() {
 
 			// Update our bitfield to show that we now have that piece
 			cont.finishedPieces[piece.pieceNum] = true
+
+			// If this is the last piece that we needed, update the complete flag. 
+			cont.updateCompletedFlagIfFinished()
 
 			// For every peer that doesn't already have this piece, send them a HAVE message
 			cont.sendHaveToPeersWhoNeedPiece(piece.pieceNum)
