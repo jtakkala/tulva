@@ -563,7 +563,9 @@ func (p *Peer) decodeMessage(payload []byte) {
 			log.Fatalf("Received a Block (Piece) message from %s but there aren't any current or next downloads", p.peerName)
 		} else if begin % downloadBlockSize != 0 {
 			log.Fatalf("Received a Block (Piece) message from %s with an invalid begin value of %d", p.peerName, begin)
-		} else {
+		} else if len(blockBytes) != downloadBlockSize {
+			log.Fatalf("Received a Block (Piece) message from %s with an invalid block size of %d. Expected %d", p.peerName, len(blockBytes), downloadBlockSize)
+		} else {			
 			log.Printf("Received a Block (Piece) message from %s for piece %d begin %d with %d bytes of block data", p.peerName, pieceNum, begin, len(blockBytes))
 		}
 
@@ -590,7 +592,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 			log.Printf("Finished downloading all blocks for piece %d from %s", pieceNum, p.peerName)
 			
 			// SHA1 check the entire piece
-			if !checkHash(blockBytes, piece.expectedHash) {
+			if !checkHash(piece.piece, piece.expectedHash) {
 				// The piece received from this peer didn't pass the checksum. 
 				log.Printf("ERROR: Checksum for piece %d received from %s did NOT match what's expected. Disconnecting.", pieceNum, p.peerName)
 				p.Stop()
