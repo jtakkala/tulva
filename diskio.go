@@ -18,7 +18,7 @@ import (
 type diskIOPeerChans struct {
 	// Channels to peers
 	writePiece   chan Piece
-	blockRequest chan DiskBlockRequest
+	blockRequest chan BlockRequest
 }
 
 type DiskIO struct {
@@ -139,7 +139,7 @@ func NewDiskIO(metaInfo MetaInfo) *DiskIO {
 	diskio := new(DiskIO)
 	diskio.metaInfo = metaInfo
 	diskio.peerChans.writePiece = make(chan Piece)
-	diskio.peerChans.blockRequest = make(chan DiskBlockRequest)
+	diskio.peerChans.blockRequest = make(chan BlockRequest)
 	diskio.contChans.receivedPiece = make(chan ReceivedPiece)
 	return diskio
 }
@@ -197,6 +197,9 @@ func (diskio *DiskIO) Init() {
 		// Single File Mode
 		diskio.files = append(diskio.files, openOrCreateFile(diskio.metaInfo.Info.Name))
 	}
+}
+
+func (diskio *DiskIO) readBlock(request BlockRequest) {
 }
 
 func (diskio *DiskIO) Stop() error {
