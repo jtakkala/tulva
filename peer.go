@@ -402,6 +402,19 @@ func (p *Peer) sendFinishedPieceToDiskIO(pieceNum int, data []byte) {
 	p.diskIOChans.writePiece <- *piece
 }
 
+func (p *Peer) weShouldBeInterested() bool {
+	// Loop through our bitfield to check if there are any pieces we don't have
+	// that the peer does have
+	for pieceNum, hasPiece := range p.ourBitfield {
+		if !hasPiece && p.peerBitfield[pieceNum] {
+			// We don't have this piece, but the peer does
+			return true
+		}
+	}
+	// We didn't find any pieces that the peer has but we don't have. 
+	return false
+}
+
 func (p *Peer) decodeMessage(payload []byte) {
 	if len(payload) == 0 {
 		// keepalive
@@ -491,6 +504,13 @@ func (p *Peer) decodeMessage(payload []byte) {
 		have[0] = HavePiece{pieceNum: pieceNum, peerName: p.peerName}
 		go p.sendHaveMessagesToController(have)
 
+		if !p.amInterested {
+			// Determine if we should switch from not interested to interested
+			if p.weShouldBeInterested() {
+				p.sendInterested()
+			}
+		}
+
 		break
 	case MsgBitfield:
 		log.Printf("Received a Bitfield message from %s with payload %x", p.peerName, payload)
@@ -500,6 +520,13 @@ func (p *Peer) decodeMessage(payload []byte) {
 		// Break the bitfield into a slice of HavePiece structs and send them
 		// to the controller
 		go p.sendBitfieldToController(p.peerBitfield)
+
+		if !p.amInterested {
+			// Determine if we should switch from not interested to interested
+			if p.weShouldBeInterested() {
+				p.sendInterested()
+			}
+		}
 
 		break
 	case MsgRequest:
@@ -755,13 +782,13 @@ func (p *Peer) sendUnchoke() {
 
 func (p *Peer) sendInterested() {
 	log.Printf("Peer : sendInterested : Sending interested to %s", p.peerName)
-	p.sendMessage(MsgInterested, make([]byte, 0))
+	go p.sendMessage(MsgInterested, make([]byte, 0))
 	p.amInterested = true
 }
 
 func (p *Peer) sendNotInterested() {
 	log.Printf("Peer : sendNotInterested : Sending not-interested to %s", p.peerName)
-	p.sendMessage(MsgNotInterested, make([]byte, 0))
+	go p.sendMessage(MsgNotInterested, make([]byte, 0))
 	p.amInterested = false
 }
 
@@ -908,7 +935,7 @@ func (p *Peer) Run() {
 	p.sendHandshake()
 
 	// Block on this because it simplifies the logic for
-	//  sending the initial bitfield to the peer 
+	// sending the initial bitfield to the peer 
 	havePieces := p.receiveHavesFromController(<-p.contRxChans.havePiece)
 	p.updateOurBitfield(havePieces)
 	go p.sendBitfield()
@@ -959,6 +986,10 @@ func (p *Peer) Run() {
 			// from the controller, there should only be one. 
 			for _, havePiece := range havePieces {
 				go p.sendHave(havePiece.pieceNum)
+			}
+
+			if p.amInterested && !p.weShouldBeInterested() {
+				p.sendNotInterested()
 			}
 
 		
