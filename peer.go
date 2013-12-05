@@ -16,7 +16,6 @@ import (
 	"net"
 	"reflect"
 	"sort"
-	//"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -911,10 +910,10 @@ func (p *Peer) sendOneOrMoreRequests() {
 	}
 }
 
-func (p *Peer) sendBlock(pieceNum int, begin int, block []byte) {
+func (p *Peer) sendBlock(pieceNum uint32, begin uint32, block []byte) {
 	buffer := new(bytes.Buffer)
 
-	ints := []uint32{uint32(pieceNum), uint32(begin)}
+	ints := []uint32{pieceNum, begin}
 
 	err := binary.Write(buffer, binary.BigEndian, ints)
 	if err != nil {
@@ -996,7 +995,7 @@ func (p *Peer) Run() {
 				p.Stop()
 			}
 		case blockResponse := <-p.blockResponse:
-			go p.sendBlock(int(blockResponse.info.pieceIndex), int(blockResponse.info.begin), blockResponse.data)
+			go p.sendBlock(blockResponse.info.pieceIndex, blockResponse.info.begin, blockResponse.data)
 		case requestPiece := <-p.contRxChans.requestPiece:
 			log.Printf("Peer : Run : Controller told %s to get piece number %d", p.peerName, requestPiece.pieceNum)
 
