@@ -139,10 +139,6 @@ func (t *Torrent) Run() {
 	diskIO := NewDiskIO(t.metaInfo)
 	diskIO.Init()
 	pieces := diskIO.Verify()
-	if len(pieces) == 0 {
-		// DiskIO wasn't able to read any files from disk. Initialize the pieces slice.
-		pieces = make([]bool, len(pieceHashes))
-	}
 
 	go diskIO.Run()
 

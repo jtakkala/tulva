@@ -78,7 +78,7 @@ type Peer struct {
 type PieceDownload struct {
 	pieceNum int
 	expectedHash []byte
-	piece []byte
+	data []byte
 	numBlocksReceived int
 	numOutstandingBlocks int
 	numBlocksPerPiece int
@@ -88,7 +88,7 @@ func NewPieceDownload(requestPiece RequestPiece, pieceLength int) *PieceDownload
 	pd := new(PieceDownload)
 	pd.pieceNum = requestPiece.pieceNum
 	pd.expectedHash = requestPiece.expectedHash
-	pd.piece = make([]byte, pieceLength)
+	pd.data = make([]byte, pieceLength)
 	pd.numBlocksPerPiece = pieceLength / downloadBlockSize
 	return pd
 }
@@ -583,7 +583,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 		}
 
 		// The block (piece) message is valid. Write the contents to the buffer. 
-		copy(piece.piece[begin:], blockBytes)
+		copy(piece.data[begin:], blockBytes)
 
 		piece.numBlocksReceived += 1
 		piece.numOutstandingBlocks -= 1
@@ -592,7 +592,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 			log.Printf("Finished downloading all blocks for piece %d from %s", pieceNum, p.peerName)
 			
 			// SHA1 check the entire piece
-			if !checkHash(piece.piece, piece.expectedHash) {
+			if !checkHash(piece.data, piece.expectedHash) {
 				// The piece received from this peer didn't pass the checksum. 
 				log.Printf("ERROR: Checksum for piece %d received from %s did NOT match what's expected. Disconnecting.", pieceNum, p.peerName)
 				p.Stop()
@@ -608,7 +608,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 			// the reference of nextDownload 
 			p.nextDownload = nil
 
-			go p.sendFinishedPieceToDiskIO(pieceNum, piece.piece)
+			go p.sendFinishedPieceToDiskIO(pieceNum, piece.data)
 
 			// if nextDownload was previosly nil, then currentDownload will now be nil, because we
 			// copied the reference from nextDownload to currentDownload. 

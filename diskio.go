@@ -42,9 +42,12 @@ func (diskio *DiskIO) checkHash(buf []byte, pieceIndex int) bool {
 
 // Verify reads in each file and verifies the SHA-1 checksum of each piece.
 // Return the boolean list pieces that are correct.
-func (diskio *DiskIO) Verify() (finishedPieces []bool) {
+func (diskio *DiskIO) Verify() []bool {
 	log.Println("DiskIO : Verify : Started")
 	defer log.Println("DiskIO : Verify : Completed")
+
+	numPieces := len(diskio.metaInfo.Info.Pieces) / 20
+	finishedPieces := make([]bool, numPieces)
 
 	buf := make([]byte, diskio.metaInfo.Info.PieceLength)
 	var pieceIndex, n int
@@ -71,7 +74,8 @@ func (diskio *DiskIO) Verify() (finishedPieces []bool) {
 				}
 				// We have a full buf, check the hash of buf and
 				// append the result to the finished pieces
-				finishedPieces = append(finishedPieces, diskio.checkHash(buf, pieceIndex))
+				finishedPieces[(pieceIndex/20)] = diskio.checkHash(buf, pieceIndex)
+
 				// Reset partial read counter
 				m = 0
 				// Increment piece by the length of a SHA-1 hash (20 bytes)
@@ -81,7 +85,8 @@ func (diskio *DiskIO) Verify() (finishedPieces []bool) {
 		// If the final iteration resulted in a partial read, then
 		// check the hash of it and append the result
 		if m > 0 {
-			finishedPieces = append(finishedPieces, diskio.checkHash(buf[:m], pieceIndex))
+			//finishedPieces = append(finishedPieces, diskio.checkHash(buf[:m], pieceIndex))
+			finishedPieces[(pieceIndex/20)] = diskio.checkHash(buf[:m], pieceIndex)
 		}
 	} else {
 		// Single File Mode
@@ -99,13 +104,16 @@ func (diskio *DiskIO) Verify() (finishedPieces []bool) {
 			}
 			// We have a full buf, check the hash of buf and
 			// append the result to the finished pieces
-			finishedPieces = append(finishedPieces, diskio.checkHash(buf, pieceIndex))
+			//finishedPieces = append(finishedPieces, diskio.checkHash(buf, pieceIndex))
+			finishedPieces[(pieceIndex/20)] = diskio.checkHash(buf, pieceIndex)
+
 			// Increment piece by the length of a SHA-1 hash (20 bytes)
 			pieceIndex += 20
 		}
 		// If the final iteration resulted in a partial read, then compute a hash
 		if n > 0 {
-			finishedPieces = append(finishedPieces, diskio.checkHash(buf[:n], pieceIndex))
+			//finishedPieces = append(finishedPieces, diskio.checkHash(buf[:n], pieceIndex))
+			finishedPieces[(pieceIndex/20)] = diskio.checkHash(buf[:n], pieceIndex)
 		}
 	}
 	fmt.Println()
@@ -147,23 +155,51 @@ func NewDiskIO(metaInfo MetaInfo) *DiskIO {
 func (diskio *DiskIO) writePiece(piece Piece) {
 	offset := piece.index * diskio.metaInfo.Info.PieceLength
 
-	for i := 0; i <= len(diskio.metaInfo.Info.Files); i++ {
-		if offset > diskio.metaInfo.Info.Files[i].Length {
-			offset -= diskio.metaInfo.Info.Files[i].Length
-		} else {
-			max := diskio.metaInfo.Info.Files[i].Length - offset
-			n, err := diskio.files[i].WriteAt(piece.data[:max], int64(offset))
-			if err != nil {
-				log.Fatal(err)
-			}
-			log.Printf("Wrote %d bytes for piece %x at offset %x, file %s\n", n, piece.index, offset, diskio.metaInfo.Info.Files[i].Path)
-			piece.data = piece.data[max:]
-			offset = 0
-			if len(piece.data) == 0 {
-				break
+	if len(diskio.metaInfo.Info.Files) == 0 {
+		// Single file mode
+		n, err := diskio.files[0].WriteAt(piece.data, int64(offset))
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("Wrote %d bytes for piece %x at offset %x, file %s\n", n, piece.index, offset, diskio.metaInfo.Info.Name)
+		
+	} else {
+		// Multiple file mode
+		for i := 0; i < len(diskio.metaInfo.Info.Files); i++ {
+			if offset > diskio.metaInfo.Info.Files[i].Length {
+				offset -= diskio.metaInfo.Info.Files[i].Length
+			} else {
+
+				var maxWriteCurrentFile int
+				if len(piece.data) < (diskio.metaInfo.Info.Files[i].Length - offset) {
+					maxWriteCurrentFile = len(piece.data)
+				} else {
+					maxWriteCurrentFile = diskio.metaInfo.Info.Files[i].Length - offset
+				}
+
+
+				//log.Printf("TEMP: len(files): %d, i: %d", len(diskio.files), i)
+				//log.Printf("TEMP: len(data): %d, maxWriteCurrentFile: %d", len(piece.data), maxWriteCurrentFile)
+				//log.Printf("TEMP: offset: %d", offset)
+				//log.Printf("TEMP: file.Length: %d", diskio.metaInfo.Info.Files[i].Length)
+
+
+				n, err := diskio.files[i].WriteAt(piece.data[:maxWriteCurrentFile], int64(offset))
+				if err != nil {
+					log.Fatal(err)
+				}
+				log.Printf("Wrote %d bytes for piece %x at offset %x, file %s\n", n, piece.index, offset, diskio.metaInfo.Info.Files[i].Path)
+				
+
+				piece.data = piece.data[maxWriteCurrentFile:]
+				offset = 0
+				if len(piece.data) == 0 {
+					break
+				}
 			}
 		}
 	}
+	
 }
 
 func (diskio *DiskIO) Init() {
