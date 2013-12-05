@@ -137,7 +137,7 @@ func openOrCreateFile(name string) (file *os.File) {
 		checkError(err)
 	} else {
 		// Open the file and return a handle
-		file, err = os.Open(name)
+		file, err = os.OpenFile(name, os.O_RDWR, os.ModePerm)
 		checkError(err)
 	}
 	return
