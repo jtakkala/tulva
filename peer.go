@@ -645,7 +645,7 @@ func (p *Peer) reader() {
 	var handshake Handshake
 	err := binary.Read(p.conn, binary.BigEndian, &handshake)
 	if err != nil {
-		if err == io.EOF {
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
 			log.Println("Peer : reader : binary.Read :", p.peerName, err)
 			p.Stop()
 			return
@@ -674,14 +674,14 @@ func (p *Peer) reader() {
 		length := make([]byte, 4)
 		n, err := io.ReadFull(p.conn, length)
 		if err != nil {
-			if err == io.EOF {
+			if err == io.EOF || err == io.ErrUnexpectedEOF {
 				log.Println("Peer : reader : io.ReadFull :", p.peerName, err)
 				p.Stop()
 				return
 			}
 			if e, ok := err.(*net.OpError); ok {
 				if e.Err == syscall.ECONNRESET {
-					log.Println("Peer : reader : binary.Read :", p.peerName, e.Err)
+					log.Println("Peer : reader : io.ReadFull :", p.peerName, e.Err)
 				}
 				p.Stop()
 				return
@@ -696,14 +696,14 @@ func (p *Peer) reader() {
 		if err != nil {
 			// FIXME if this is not a keepalive, we should
 			// definitely get a payload
-			if err == io.EOF {
+			if err == io.EOF || err == io.ErrUnexpectedEOF {
 				log.Println("Peer : reader : io.ReadFull :", p.peerName, err)
 				p.Stop()
 				return
 			}
 			if e, ok := err.(*net.OpError); ok {
 				if e.Err == syscall.ECONNRESET {
-					log.Println("Peer : reader : binary.Read :", p.peerName, e.Err)
+					log.Println("Peer : reader : io.ReadFull :", p.peerName, e.Err)
 				}
 				p.Stop()
 				return
