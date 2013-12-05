@@ -641,6 +641,8 @@ func (p *Peer) reader() {
 		if e, ok := err.(*net.OpError); ok {
 			if e.Err == syscall.ECONNRESET {
 				log.Println("Peer : reader : binary.Read :", p.peerName, e.Err)
+				p.Stop()
+				return
 			}
 		}
 		log.Fatal("Peer : reader : binary.Read :", p.peerName, err)
@@ -669,6 +671,8 @@ func (p *Peer) reader() {
 				if e.Err == syscall.ECONNRESET {
 					log.Println("Peer : reader : binary.Read :", p.peerName, e.Err)
 				}
+				p.Stop()
+				return
 			}
 			log.Fatal("Peer : reader : io.ReadFull :", p.peerName, err)
 		}
@@ -689,6 +693,8 @@ func (p *Peer) reader() {
 				if e.Err == syscall.ECONNRESET {
 					log.Println("Peer : reader : binary.Read :", p.peerName, e.Err)
 				}
+				p.Stop()
+				return
 			}
 			log.Fatal("Peer : reader : io.ReadFull :", p.peerName, err)
 		}
