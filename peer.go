@@ -14,6 +14,7 @@ import (
 	"log"
 	"net"
 	"reflect"
+	"crypto/sha1"
 	"sort"
 	//"strconv"
 	"sync"
@@ -387,6 +388,20 @@ func convertBoolSliceToByteSlice(bitfield []bool) []byte {
 	return result
 }
 
+func checkHash(block []byte, expectedHash []byte) bool {
+	h := sha1.New()
+	h.Write(block)
+	return bytes.Equal(h.Sum(nil), expectedHash)
+}
+
+func (p *Peer) sendFinishedPieceToDiskIO(pieceNum int, data []byte) {
+	piece := new(Piece)
+	piece.index = pieceNum
+	piece.data = data
+	piece.peerName = p.peerName
+	p.diskIOChans.writePiece <- *piece
+}
+
 func (p *Peer) decodeMessage(payload []byte) {
 	if len(payload) == 0 {
 		// keepalive
@@ -503,7 +518,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 		beginBytes := payload[4:8]
 		blockBytes := payload[8:]
 
-		pieceNum := binary.BigEndian.Uint32(pieceNumBytes)
+		pieceNum := int(binary.BigEndian.Uint32(pieceNumBytes))
 		begin := binary.BigEndian.Uint32(beginBytes)
 
 
@@ -515,30 +530,58 @@ func (p *Peer) decodeMessage(payload []byte) {
 			log.Printf("Received a Block (Piece) message from %s for piece %d begin %d with %d bytes of block data", p.peerName, pieceNum, begin, len(blockBytes))
 		}
 
-		// The block (piece) message is valid. Write the contents to the buffer. 
-		copy(p.currentDownload.piece[begin:], blockBytes)
 
-		p.currentDownload.numBlocksReceived += 1
-		p.currentDownload.numOutstandingBlocks -= 1
+		var piece *PieceDownload
+		if p.currentDownload.pieceNum == pieceNum {
+			piece = p.currentDownload
 
-		if p.currentDownload.numBlocksReceived == p.currentDownload.numBlocksPerPiece {
-			// SHA1 check the entire piece
-
-		} else if (p.currentDownload.numBlocksReceived + p.currentDownload.numOutstandingBlocks) == p.currentDownload.numBlocksPerPiece {
-			// There are no more requests to  
+		} else if p.nextDownload != nil && p.nextDownload.pieceNum == pieceNum {
+			piece = p.nextDownload
 
 		} else {
-
+			log.Fatalf("The block from %s for piece %d doesn't match the current or next download pieces", p.peerName, pieceNum)
 
 		}
 
+		// The block (piece) message is valid. Write the contents to the buffer. 
+		copy(piece.piece[begin:], blockBytes)
+
+		piece.numBlocksReceived += 1
+		piece.numOutstandingBlocks -= 1
+
+		if piece.numBlocksReceived == piece.numBlocksPerPiece {
+			log.Printf("Finished downloading all blocks for piece %d from %s", pieceNum, p.peerName)
+			
+			// SHA1 check the entire piece
+			if !checkHash(blockBytes, piece.expectedHash) {
+				// The piece received from this peer didn't pass the checksum. 
+				log.Printf("ERROR: Checksum for piece %d received from %s did NOT match what's expected. Disconnecting.", pieceNum, p.peerName)
+				p.Stop()
+				return			
+			}
+
+			log.Printf("Checksum for piece %d received from %s matches what's expected", pieceNum, p.peerName)
+			// If this is currentDownload (likely), move nextDownload to currentDownload
+			p.currentDownload = p.nextDownload
+
+			// We've either finished the currentDownload and copied the reference of nextDownload
+			// to currentDownload, or we finished nextDownload. In either case, we want to nil out
+			// the reference of nextDownload 
+			p.nextDownload = nil
+
+			go p.sendFinishedPieceToDiskIO(pieceNum, piece.piece)
+
+			// if nextDownload was previosly nil, then currentDownload will now be nil, because we
+			// copied the reference from nextDownload to currentDownload. 
+			if p.currentDownload == nil {
+				log.Printf("Peer %s has no active or next pieces. It will be idle until given more pieces to download", p.peerName)
+				return
+			}
+		} 
 
 		p.sendOneOrMoreRequests()
+			
 
-
-
-
-		
 		break
 	case MsgCancel:
 		// IMPLEMENT ME
@@ -606,7 +649,8 @@ func (p *Peer) reader() {
 		p.lastRxMessage = time.Now()
 		p.stats.addRead(n)
 
-		log.Printf("Read %d bytes of %x\n", (n + 4), payload)
+		//log.Printf("Read %d bytes of %x\n", (n + 4), payload)
+		log.Printf("Read %d bytes from a received message", (n + 4))
 		p.decodeMessage(payload)
 	}
 }
@@ -687,7 +731,7 @@ func (p *Peer) sendMessage(ID int, payload interface{}) {
 
 	// Write the message over TCP to the peer
 	message := messageBuffer.Bytes()
-	log.Printf("TEMP: Sending over TCP: %v", message)
+	//log.Printf("TEMP: Sending over TCP: %v", message)
 	err = binary.Write(p.conn, binary.BigEndian, message)
 	if err != nil {
 		log.Fatal(err)
@@ -898,10 +942,9 @@ func (p *Peer) Run() {
 
 
 		case <-p.t.Dying():
-			p.peerManagerChans.deadPeer <- p.conn.RemoteAddr().String()
+			p.peerManagerChans.deadPeer <- p.peerName
 			return
 		}
-
 	}
 } 
 
@@ -975,6 +1018,10 @@ func (pm *PeerManager) Run() {
 			go pm.peers[conn.RemoteAddr().String()].Run()
 		case peer := <-pm.peerChans.deadPeer:
 			log.Printf("PeerManager : Deleting peer %s\n", peer)
+			// Tell the controller that this peer is dead
+			go func() {
+				pm.contChans.deadPeer <- peer
+			}()
 			delete(pm.peers, peer)
 		case <-pm.t.Dying():
 			for _, peer := range pm.peers {
