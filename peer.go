@@ -559,7 +559,8 @@ func (p *Peer) decodeMessage(payload []byte) {
 		begin := binary.BigEndian.Uint32(beginBytes)
 
 		if p.currentDownload == nil && p.nextDownload == nil {
-			log.Fatalf("Received a Block (Piece) message from %s but there aren't any current or next downloads", p.peerName)
+			log.Printf("WARNING: Received a Block (Piece) message from %s but there aren't any current or next downloads", p.peerName)
+			return
 		} else if begin%downloadBlockSize != 0 {
 			log.Fatalf("Received a Block (Piece) message from %s with an invalid begin value of %d", p.peerName, begin)
 		} else if len(blockBytes) != downloadBlockSize {
@@ -576,8 +577,8 @@ func (p *Peer) decodeMessage(payload []byte) {
 			piece = p.nextDownload
 
 		} else {
-			log.Fatalf("The block from %s for piece %d doesn't match the current or next download pieces", p.peerName, pieceNum)
-
+			log.Printf("WARNING: The block from %s for piece %d doesn't match the current or next download pieces", p.peerName, pieceNum)
+			return
 		}
 
 		// The block (piece) message is valid. Write the contents to the buffer.
@@ -969,6 +970,27 @@ func (p *Peer) Stop() error {
 	return p.t.Wait()
 }
 
+func (p *Peer) processCancelFromController(cancelPiece CancelPiece) {
+	if p.currentDownload == nil {
+		log.Printf("Peer : Run : WARNING - Controller told %s to cancel pieceNum %d, but this peer isn't working on anything", p.peerName, cancelPiece.pieceNum)
+	} else if p.currentDownload.pieceNum == cancelPiece.pieceNum {
+		log.Printf("Peer : Run : Controller told %s to cancel pieceNum %d, which is our higher priority download", p.peerName, cancelPiece.pieceNum)
+		// we aren't currently sending actual cancel messages to the peer at this time, so 
+		// we may receive extra blocks for any requests that are outstanding.  
+		p.currentDownload = p.nextDownload
+		p.nextDownload = nil
+
+	} else if p.nextDownload != nil && p.nextDownload.pieceNum == cancelPiece.pieceNum {
+		log.Printf("Peer : Run : Controller told %s to cancel pieceNum %d, which is our lower priority download", p.peerName, cancelPiece.pieceNum)
+		// we aren't currently sending actual cancel messages to the peer at this time, so 
+		// we may receive extra blocks for any requests that are outstanding.  
+		p.nextDownload = nil
+
+	} else {
+		log.Printf("Peer : Run : WARNING - Controller told %s to cancel pieceNum %d, but this peer isn't working on that piece", p.peerName, cancelPiece.pieceNum)
+	}
+}
+
 func (p *Peer) Run() {
 	log.Println("Peer : Run : Started:", p.peerName)
 	defer log.Println("Peer : Run : Completed:", p.peerName)
@@ -1003,7 +1025,12 @@ func (p *Peer) Run() {
 			// check to see if we're currently downloading another piece. If so, then there's a
 			// bug because the controller should only ask us to download one at a time.
 			if p.nextDownload != nil {
-				log.Fatalf("Peer : Run : %s was told to download piece %d, but we're already downloading two pieces", p.peerName, requestPiece.pieceNum)
+				select {
+				case cancelPiece := <-p.contRxChans.cancelPiece:
+					p.processCancelFromController(cancelPiece)
+				default:
+					log.Fatalf("Peer : Run : %s was told to download piece %d, but we're already downloading two pieces", p.peerName, requestPiece.pieceNum)
+				}
 			}
 
 			// Create a new PieceDownload struct for the piece that we're told to download
@@ -1019,7 +1046,7 @@ func (p *Peer) Run() {
 			p.sendOneOrMoreRequests()
 
 		case cancelPiece := <-p.contRxChans.cancelPiece:
-			log.Fatalf("Still haven't implemented cancelPiece in peer %v", cancelPiece)
+			p.processCancelFromController(cancelPiece)
 
 		case innerChan := <-p.contRxChans.havePiece:
 
