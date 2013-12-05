@@ -603,7 +603,7 @@ func (p *Peer) reader() {
 	var handshake Handshake
 	err := binary.Read(p.conn, binary.BigEndian, &handshake)
 	if err != nil {
-		if err == io.EOF {
+		if err == io.EOF || err == syscall.ECONNRESET {
 			log.Println("Peer : reader : binary.Read :", p.peerName, err)
 			p.Stop()
 			return
@@ -900,8 +900,8 @@ func (p *Peer) Stop() error {
 }
 
 func (p *Peer) Run() {
-	log.Println("Peer : Run : Started")
-	defer log.Println("Peer : Run : Completed")
+	log.Println("Peer : Run : Started:", p.peerName)
+	defer log.Println("Peer : Run : Completed:", p.peerName)
 
 	p.keepalive = time.Tick(time.Second * 1)
 
@@ -963,7 +963,7 @@ func (p *Peer) Run() {
 
 		
 		case <-p.t.Dying():
-			p.peerManagerChans.deadPeer <- p.peerName
+			//p.peerManagerChans.deadPeer <- p.peerName
 			return
 		}
 	}
@@ -1046,7 +1046,7 @@ func (pm *PeerManager) Run() {
 			delete(pm.peers, peer)
 		case <-pm.t.Dying():
 			for _, peer := range pm.peers {
-				peer.Stop()
+				go peer.Stop()
 			}
 			return
 		}
