@@ -774,8 +774,8 @@ func (p *Peer) sendHave(pieceNum int) {
 }
 
 func (p *Peer) sendBitfield() {
-	log.Printf("Peer : sendBitfield : Sending bitfield to %s", p.peerName)
 	compacted := convertBoolSliceToByteSlice(p.ourBitfield)
+	log.Printf("Peer : sendBitfield : Sending bitfield to %s with payload %x", p.peerName, compacted)
 	p.sendMessage(MsgBitfield, compacted)
 }
 
