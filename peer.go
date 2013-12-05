@@ -534,8 +534,8 @@ func (p *Peer) decodeMessage(payload []byte) {
 		break
 	case MsgRequest:
 		var blockInfo BlockInfo
-		blockInfo.index = binary.BigEndian.Uint32(payload[0:3])
-		blockInfo.begin = binary.BigEndian.Uint32(payload[3:7])
+		blockInfo.index = binary.BigEndian.Uint32(payload[0:4])
+		blockInfo.begin = binary.BigEndian.Uint32(payload[4:8])
 		blockInfo.length = binary.BigEndian.Uint32(payload[8:12])
 		log.Printf("\033[31mReceived a Request message for %v from %s\033[0m", blockInfo, p.peerName)
 		break
