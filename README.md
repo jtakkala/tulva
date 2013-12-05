@@ -14,14 +14,15 @@ Tulva is BitTorrent client written entirely in Go as a project for Hacker School
 - Initalizes a server process and accepts connections from peers
 - Completes peer handshake
 - Controller logic and tests 90% complete
-
-### To-do
-- Handle multiple trackers and backup trackers
 - Initialize local bitfield
 - Send bitfield to peers
 - Peer wire protocol
 - Verify received pieces and write to disk
 - Read pieces from disk and write to peer
+
+### To-do
+- Signal handler for CTRL-C and to initiate clean shutdown
+- Handle multiple trackers and backup trackers
 - Track torrent and peer statistics and report back to tracker
 - Distributed Hash Table (DHT) support
 - Web interface for managing torrents
