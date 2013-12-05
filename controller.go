@@ -134,12 +134,12 @@ func NewController(finishedPieces []bool, pieceHashes [][]byte, diskIOChans Cont
 	cont.activeRequestsTotals = make([]int, len(finishedPieces))
 	cont.maxSimultaneousDownloadsPerPeer = 2 // only 2 pieces at a time
 
-	cont.updateCompletedFlagIfFinished()
+	cont.updateCompletedFlagIfFinished(true)
 
 	return cont
 }
 
-func (cont *Controller) updateCompletedFlagIfFinished() {
+func (cont *Controller) updateCompletedFlagIfFinished(initializing bool) {
 	for _, hasPiece := range cont.finishedPieces {
 		if !hasPiece {
 			// There is at least one piece that we haven't finished downloading
@@ -147,6 +147,11 @@ func (cont *Controller) updateCompletedFlagIfFinished() {
 		}
 	}
 	cont.downloadComplete = true
+	if initializing {
+		log.Printf("The full file was previously downloaded. The file will be seeded.")
+	} else {
+		log.Printf("The last piece just finished downloading. The file will be seeded.")
+	}
 }
 
 func (cont *Controller) Stop() error {
@@ -341,7 +346,7 @@ func (cont *Controller) createDownloadPriorityForPeer(peerInfo *PeerInfo, rarity
 func (cont *Controller) sendRequestsToPeer(peerInfo *PeerInfo, raritySlice []int) {
 
 	if cont.downloadComplete {
-		log.Printf("Controller : SendRequestsToPeer : We're finished downloading. Requests will not be sent to %s", peerInfo.peerName)
+		log.Printf("Controller : SendRequestsToPeer : Not sending requests to %s because we've finished downloading the file.", peerInfo.peerName)
 
 	} else {
 		// Create the slice of pieces that this peer should work on next. It will not
@@ -435,7 +440,7 @@ func (cont *Controller) Run() {
 			cont.finishedPieces[piece.pieceNum] = true
 
 			// If this is the last piece that we needed, update the complete flag. 
-			cont.updateCompletedFlagIfFinished()
+			cont.updateCompletedFlagIfFinished(false)
 
 			// For every peer that doesn't already have this piece, send them a HAVE message
 			cont.sendHaveToPeersWhoNeedPiece(piece.pieceNum)
