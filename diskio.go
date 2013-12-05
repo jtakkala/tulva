@@ -18,7 +18,7 @@ import (
 type diskIOPeerChans struct {
 	// Channels to peers
 	writePiece   chan Piece
-	blockRequest chan DiskBlockRequest
+	blockRequest chan BlockRequest
 }
 
 type DiskIO struct {
@@ -139,7 +139,7 @@ func NewDiskIO(metaInfo MetaInfo) *DiskIO {
 	diskio := new(DiskIO)
 	diskio.metaInfo = metaInfo
 	diskio.peerChans.writePiece = make(chan Piece)
-	diskio.peerChans.blockRequest = make(chan DiskBlockRequest)
+	diskio.peerChans.blockRequest = make(chan BlockRequest)
 	diskio.contChans.receivedPiece = make(chan ReceivedPiece)
 	return diskio
 }
@@ -227,6 +227,31 @@ func (diskio *DiskIO) Init() {
 	}
 }
 
+func (diskio *DiskIO) readBlock(file *os.File, block BlockInfo) []byte {
+	blockData := make([]byte, block.length)
+	n, err := io.ReadFull(file, blockData)
+	if err != nil { log.Fatal(err) }
+	log.Printf("Read %d bytes of: %x\n", n, blockData)
+	return blockData
+}
+
+func (diskio *DiskIO) requestBlock(block BlockInfo) {
+	offset := int(block.pieceIndex) * diskio.metaInfo.Info.PieceLength
+	if len(diskio.metaInfo.Info.Files) == 0 {
+		// Single File Mode
+		diskio.readBlock(diskio.files[0], block)
+	} else {
+		// Multiple File Mode
+		for i := 0; i <= len(diskio.metaInfo.Info.Files); i++ {
+			if offset > diskio.metaInfo.Info.Files[i].Length {
+				offset -= diskio.metaInfo.Info.Files[i].Length
+			} else {
+				diskio.readBlock(diskio.files[i], block)
+			}
+		}
+	}
+}
+
 func (diskio *DiskIO) Stop() error {
 	log.Println("DiskIO : Stop : Stopping")
 	diskio.t.Kill(nil)
@@ -245,8 +270,9 @@ func (diskio *DiskIO) Run() {
 				diskio.writePiece(piece)
 				diskio.contChans.receivedPiece <- ReceivedPiece{pieceNum: piece.index, peerName: piece.peerName}
 			}()
-		case request := <-diskio.peerChans.blockRequest:
-			fmt.Println("Received block request:", request)
+		case blockRequest := <-diskio.peerChans.blockRequest:
+			fmt.Println("Received block request:", blockRequest)
+			diskio.requestBlock(blockRequest.request)
 		case <-diskio.t.Dying():
 			return
 		}

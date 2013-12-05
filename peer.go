@@ -67,6 +67,7 @@ type Peer struct {
 	currentDownload  *PieceDownload
 	nextDownload     *PieceDownload 
 	diskIOChans      diskIOPeerChans
+	blockResponse    chan BlockResponse
 	peerManagerChans peerManagerChans
 	contRxChans      ControllerPeerChans
 	contTxChans      PeerControllerChans
@@ -271,6 +272,7 @@ func NewPeer(
 		peerChoking:    true,
 		peerInterested: false,
 		diskIOChans:    diskIOChans,
+		blockResponse:  make(chan BlockResponse),
 		contRxChans:    contRxChans,
 		contTxChans:    contTxChans}
 	return p
@@ -536,9 +538,11 @@ func (p *Peer) decodeMessage(payload []byte) {
 		break
 	case MsgRequest:
 		var blockInfo BlockInfo
-		blockInfo.index = binary.BigEndian.Uint32(payload[0:4])
+		blockInfo.pieceIndex = binary.BigEndian.Uint32(payload[0:4])
 		blockInfo.begin = binary.BigEndian.Uint32(payload[4:8])
 		blockInfo.length = binary.BigEndian.Uint32(payload[8:12])
+		blockRequest := BlockRequest{request: blockInfo, response: p.blockResponse}
+		p.diskIOChans.blockRequest <- blockRequest
 		log.Printf("\033[31mReceived a Request message for %v from %s\033[0m", blockInfo, p.peerName)
 		break
 	case MsgBlock:
@@ -980,6 +984,8 @@ func (p *Peer) Run() {
 				log.Println("No RxMessage for 120 seconds", p.peerName, p.lastRxMessage.Unix(), t.Unix())
 				p.Stop()
 			}
+		case blockResponse := <-p.blockResponse:
+			fmt.Println("Received blockResponse:", blockResponse)
 		case requestPiece := <-p.contRxChans.requestPiece:
 			log.Printf("Peer : Run : Controller told %s to get piece number %d", p.peerName, requestPiece.pieceNum)
 
