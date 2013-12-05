@@ -11,16 +11,23 @@ type Piece struct {
 	peerName string
 }
 
-type Request struct {
-	index  int
-	begin  int
-	length int
+// BlockInfo describe a request for a block from Peer to DiskIO
+type BlockInfo struct {
+	index  uint32
+	begin  uint32
+	length uint32
 }
 
-// RequestPieceDisk used by peer for requsting pieces from DiskIO
-type RequestPieceDisk struct {
-	request      Request
-	responseChan chan Piece // channel that diskIO should send the response on
+// BlockResponse contains a block of a piece returned from DiskIO to Peer
+type BlockResponse struct {
+	info  BlockInfo
+	data  []byte
+}
+
+// DiskBlockRequest is used by Peer for requesting blocks from DiskIO
+type DiskBlockRequest struct {
+	request  BlockInfo
+	response chan BlockResponse // channel to send the response on
 }
 
 // Sent from the controller to the peer to request a particular piece

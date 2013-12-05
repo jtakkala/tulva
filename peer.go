@@ -456,7 +456,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 		if len(payload) != 0 {
 			log.Fatalf("Received an Interested from %s with invalid payload size of %d", p.peerName, len(payload))
 		} else {
-			log.Printf("Received an Interested message from %s", p.peerName)
+			log.Printf("\033[31mReceived an Interested message from %s\033[0m", p.peerName)
 		}
 		p.peerInterested = true
 		p.sendUnchoke()
@@ -503,10 +503,11 @@ func (p *Peer) decodeMessage(payload []byte) {
 
 		break
 	case MsgRequest:
-		// IMPLEMENT ME
-		pieceNum := 0 // FIXME
-
-		log.Printf("Received a Request message for piece %d from %s", pieceNum, p.peerName)
+		var blockInfo BlockInfo
+		blockInfo.index = binary.BigEndian.Uint32(payload[0:3])
+		blockInfo.begin = binary.BigEndian.Uint32(payload[3:7])
+		blockInfo.length = binary.BigEndian.Uint32(payload[8:12])
+		log.Printf("\033[31mReceived a Request message for %v from %s\033[0m", blockInfo, p.peerName)
 		break
 	case MsgBlock:
 		expectedPayloadSize := 8 + downloadBlockSize
@@ -890,8 +891,8 @@ func (p *Peer) Run() {
 	for {
 		select {
 		case t := <-p.keepalive:
-			if p.lastTxMessage.Add(time.Second * 120).Before(t) {
-				log.Println("No txMessage for 120 seconds", p.peerName, p.lastTxMessage.Unix(), t.Unix())
+			if p.lastTxMessage.Add(time.Second * 30).Before(t) {
+				log.Println("No txMessage for 30 seconds", p.peerName, p.lastTxMessage.Unix(), t.Unix())
 				p.sendKeepalive()
 			}
 			if p.lastRxMessage.Add(time.Second * 120).Before(t) {
