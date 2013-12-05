@@ -872,6 +872,27 @@ func (p *Peer) sendCancel(pieceNum int, begin int, length int) {
 	p.sendMessage(MsgCancel, buffer.Bytes())
 }
 
+func (p *Peer) receiveHavesFromController(innerChan chan HavePiece) []HavePiece {
+	// Create a slice of HaveMessage structs from all individual
+	// Have messages received from the controller
+	havePieces := make([]HavePiece, 0)
+	for havePiece := range innerChan {
+		havePieces = append(havePieces, havePiece)
+	}
+
+	log.Printf("Peer : Run : %s received %d HavePiece messages from Controller", p.peerName, len(havePieces))
+
+	return havePieces
+
+}
+
+func (p *Peer) updateOurBitfield(havePieces []HavePiece) {
+	// update our local bitfield based on the Have messages received from the controller.
+	for _, havePiece := range havePieces {
+		p.ourBitfield[havePiece.pieceNum] = true
+	} 
+}
+
 func (p *Peer) Stop() error {
 	log.Println("Peer : Stop : Stopping:", p.peerName)
 	p.t.Kill(nil)
@@ -882,10 +903,15 @@ func (p *Peer) Run() {
 	log.Println("Peer : Run : Started")
 	defer log.Println("Peer : Run : Completed")
 
-	initialBitfieldSentToPeer := false
 	p.keepalive = time.Tick(time.Second * 1)
 
 	p.sendHandshake()
+
+	// Block on this because it simplifies the logic for
+	//  sending the initial bitfield to the peer 
+	havePieces := p.receiveHavesFromController(<-p.contRxChans.havePiece)
+	p.updateOurBitfield(havePieces)
+	go p.sendBitfield()
 	go p.reader()
 
 	for {
@@ -925,35 +951,17 @@ func (p *Peer) Run() {
 			log.Fatalf("Still haven't implemented cancelPiece in peer %v", cancelPiece)
 
 		case innerChan := <-p.contRxChans.havePiece:
-			// Create a slice of HaveMessage structs from all individual
-			// Have messages received from the controller
-			havePieces := make([]HavePiece, 0)
-			for havePiece := range innerChan {
-				havePieces = append(havePieces, havePiece)
-			}
 
-			log.Printf("Peer : Run : %s received %d HavePiece messages from Controller", p.peerName, len(havePieces))
-			
-			// update our local bitfield based on the Have messages received from the controller.
+			havePieces := p.receiveHavesFromController(innerChan)
+			p.updateOurBitfield(havePieces)
+
+			// Send have messages to the peer. Since this is not the initial bitfield
+			// from the controller, there should only be one. 
 			for _, havePiece := range havePieces {
-				p.ourBitfield[havePiece.pieceNum] = true
-			} 
-
-			if !initialBitfieldSentToPeer {
-				// Send the entire bitfield to the peer
-				go p.sendBitfield()
-				initialBitfieldSentToPeer = true
-
-			} else {
-				// Send a single have message to the peer
-				for _, havePiece := range havePieces {
-					go p.sendHave(havePiece.pieceNum)
-				}
-
+				go p.sendHave(havePiece.pieceNum)
 			}
+
 		
-
-
 		case <-p.t.Dying():
 			p.peerManagerChans.deadPeer <- p.peerName
 			return
