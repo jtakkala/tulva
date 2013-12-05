@@ -310,7 +310,10 @@ func (p *Peer) sendBitfieldToController(bitfield []bool) {
 		}
 	}
 
-	p.sendHaveMessagesToController(haveSlice)
+	if len(haveSlice) > 0 {
+		p.sendHaveMessagesToController(haveSlice)
+	}
+	
 }
 
 // Send one or more HavePiece messages to the controller.
