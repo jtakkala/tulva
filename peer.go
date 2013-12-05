@@ -264,6 +264,8 @@ func NewPeer(
 		peerBitfield:   make([]bool, numPieces),
 		ourBitfield:    make([]bool, numPieces),
 		keepalive:	make(chan time.Time),
+		lastTxMessage:  time.Now(),
+		lastRxMessage:  time.Now(),
 		amChoking:      true,
 		amInterested:   false,
 		peerChoking:    true,
