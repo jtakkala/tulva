@@ -372,7 +372,7 @@ func convertBoolSliceToByteSlice(bitfield []bool) []byte {
 		orValue := byte(128)
 		for j := 0; j < 8; j++ {
 			bitfieldIndex := ((i * 8) + j)
-			if bitfieldIndex > len(bitfield) {
+			if bitfieldIndex >= len(bitfield) {
 				// we've hit the end of the bitfield
 				break
 			}
@@ -493,7 +493,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 
 		break
 	case MsgBitfield:
-		log.Printf("Received a Bitfield message from %s", p.peerName)
+		log.Printf("Received a Bitfield message from %s with payload %x", p.peerName, payload)
 
 		p.peerBitfield = convertByteSliceToBoolSlice(len(p.peerBitfield), payload)
 
@@ -882,7 +882,7 @@ func (p *Peer) Run() {
 	log.Println("Peer : Run : Started")
 	defer log.Println("Peer : Run : Completed")
 
-	//initialBitfieldSentToPeer := false
+	initialBitfieldSentToPeer := false
 	p.keepalive = time.Tick(time.Second * 1)
 
 	p.sendHandshake()
@@ -920,26 +920,38 @@ func (p *Peer) Run() {
 			// we'll then determine if more need to be set. 
 			p.sendOneOrMoreRequests()
 
-		/*
+		
 		case cancelPiece := <-p.contRxChans.cancelPiece:
+			log.Fatalf("Still haven't implemented cancelPiece in peer %v", cancelPiece)
+
 		case innerChan := <-p.contRxChans.havePiece:
 			// Create a slice of HaveMessage structs from all individual
 			// Have messages received from the controller
-			//haveMessages := p.receiveHaveMessagesFromController(innerChan)
+			havePieces := make([]HavePiece, 0)
+			for havePiece := range innerChan {
+				havePieces = append(havePieces, havePiece)
+			}
 
+			log.Printf("Peer : Run : %s received %d HavePiece messages from Controller", p.peerName, len(havePieces))
 			
 			// update our local bitfield based on the Have messages received from the controller.
+			for _, havePiece := range havePieces {
+				p.ourBitfield[havePiece.pieceNum] = true
+			} 
 
 			if !initialBitfieldSentToPeer {
 				// Send the entire bitfield to the peer
+				go p.sendBitfield()
+				initialBitfieldSentToPeer = true
 
 			} else {
 				// Send a single have message to the peer
+				for _, havePiece := range havePieces {
+					go p.sendHave(havePiece.pieceNum)
+				}
 
 			}
-
-			// situation #2: The controller sends us
-		*/
+		
 
 
 		case <-p.t.Dying():
