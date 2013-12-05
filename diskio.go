@@ -199,16 +199,27 @@ func (diskio *DiskIO) Init() {
 	}
 }
 
-func (diskio *DiskIO) readBlock(block BlockInfo) {
-	offset := int(block.pieceIndex) * diskio.metaInfo.Info.PieceLength
+func (diskio *DiskIO) readBlock(file *os.File, block BlockInfo) []byte {
 	blockData := make([]byte, block.length)
-	for i := 0; i <= len(diskio.metaInfo.Info.Files); i++ {
-		if offset > diskio.metaInfo.Info.Files[i].Length {
-			offset -= diskio.metaInfo.Info.Files[i].Length
-		} else {
-			n, err := io.ReadFull(diskio.files[i], blockData)
-			if err != nil { log.Fatal(err) }
-			log.Printf("Read %d bytes of: %x\n", n, blockData)
+	n, err := io.ReadFull(file, blockData)
+	if err != nil { log.Fatal(err) }
+	log.Printf("Read %d bytes of: %x\n", n, blockData)
+	return blockData
+}
+
+func (diskio *DiskIO) requestBlock(block BlockInfo) {
+	offset := int(block.pieceIndex) * diskio.metaInfo.Info.PieceLength
+	if len(diskio.metaInfo.Info.Files) == 0 {
+		// Single File Mode
+		diskio.readBlock(diskio.files[0], block)
+	} else {
+		// Multiple File Mode
+		for i := 0; i <= len(diskio.metaInfo.Info.Files); i++ {
+			if offset > diskio.metaInfo.Info.Files[i].Length {
+				offset -= diskio.metaInfo.Info.Files[i].Length
+			} else {
+				diskio.readBlock(diskio.files[i], block)
+			}
 		}
 	}
 }
@@ -233,7 +244,7 @@ func (diskio *DiskIO) Run() {
 			}()
 		case blockRequest := <-diskio.peerChans.blockRequest:
 			fmt.Println("Received block request:", blockRequest)
-			diskio.readBlock(blockRequest.request)
+			diskio.requestBlock(blockRequest.request)
 		case <-diskio.t.Dying():
 			return
 		}
