@@ -601,7 +601,11 @@ func (p *Peer) decodeMessage(payload []byte) {
 
 			log.Printf("Checksum for piece %d received from %s matches what's expected", pieceNum, p.peerName)
 			// If this is currentDownload (likely), move nextDownload to currentDownload
-			p.currentDownload = p.nextDownload
+			if piece.pieceNum == p.currentDownload.pieceNum {
+				// since currentDownload is finished, overwrite the reference of currentDownload
+				// with nextDownload
+				p.currentDownload = p.nextDownload
+			}
 
 			// We've either finished the currentDownload and copied the reference of nextDownload
 			// to currentDownload, or we finished nextDownload. In either case, we want to nil out
