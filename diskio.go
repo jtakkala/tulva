@@ -239,7 +239,7 @@ func (diskio *DiskIO) readBlock(file *os.File, block BlockInfo) []byte {
 	blockData := make([]byte, block.length)
 	n, err := io.ReadFull(file, blockData)
 	if err != nil { log.Fatal(err) }
-	log.Printf("Read %d bytes of: %x\n", n, blockData)
+	log.Printf("Read %d bytes of block %x:%x\n", n, block.pieceIndex, block.begin)
 	return blockData
 }
 
