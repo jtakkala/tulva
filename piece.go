@@ -20,8 +20,8 @@ type BlockInfo struct {
 
 // BlockResponse contains a block of a piece returned from DiskIO to Peer
 type BlockResponse struct {
-	info  BlockInfo
-	data  []byte
+	info BlockInfo
+	data []byte
 }
 
 // BlockRequest is used by Peer for requesting blocks from DiskIO

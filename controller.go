@@ -63,7 +63,7 @@ type Controller struct {
 	activeRequestsTotals            []int
 	peers                           map[string]*PeerInfo
 	maxSimultaneousDownloadsPerPeer int
-	downloadComplete				bool
+	downloadComplete                bool
 	rxChans                         *ControllerRxChans
 	t                               tomb.Tomb
 }
@@ -439,7 +439,7 @@ func (cont *Controller) Run() {
 			// Update our bitfield to show that we now have that piece
 			cont.finishedPieces[piece.pieceNum] = true
 
-			// If this is the last piece that we needed, update the complete flag. 
+			// If this is the last piece that we needed, update the complete flag.
 			cont.updateCompletedFlagIfFinished(false)
 
 			// For every peer that doesn't already have this piece, send them a HAVE message

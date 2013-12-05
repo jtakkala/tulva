@@ -6,6 +6,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha1"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -14,7 +15,6 @@ import (
 	"log"
 	"net"
 	"reflect"
-	"crypto/sha1"
 	"sort"
 	//"strconv"
 	"sync"
@@ -39,7 +39,7 @@ const (
 )
 
 const (
-	downloadBlockSize = 16384
+	downloadBlockSize             = 16384
 	maxSimultaneousBlockDownloads = 5
 )
 
@@ -63,9 +63,9 @@ type Peer struct {
 	lastTxMessage    time.Time
 	lastRxMessage    time.Time
 	infoHash         []byte
-	pieceLength		 int
+	pieceLength      int
 	currentDownload  *PieceDownload
-	nextDownload     *PieceDownload 
+	nextDownload     *PieceDownload
 	diskIOChans      diskIOPeerChans
 	blockResponse    chan BlockResponse
 	peerManagerChans peerManagerChans
@@ -76,12 +76,12 @@ type Peer struct {
 }
 
 type PieceDownload struct {
-	pieceNum int
-	expectedHash []byte
-	data []byte
-	numBlocksReceived int
+	pieceNum             int
+	expectedHash         []byte
+	data                 []byte
+	numBlocksReceived    int
 	numOutstandingBlocks int
-	numBlocksPerPiece int
+	numBlocksPerPiece    int
 }
 
 func NewPieceDownload(requestPiece RequestPiece, pieceLength int) *PieceDownload {
@@ -122,7 +122,7 @@ type PeerManager struct {
 	peers         map[string]*Peer
 	infoHash      []byte
 	numPieces     int
-	pieceLength     int
+	pieceLength   int
 	peerChans     peerManagerChans
 	serverChans   serverPeerChans
 	trackerChans  trackerPeerChans
@@ -264,7 +264,7 @@ func NewPeer(
 		pieceLength:    pieceLength,
 		peerBitfield:   make([]bool, numPieces),
 		ourBitfield:    make([]bool, numPieces),
-		keepalive:	make(chan time.Time),
+		keepalive:      make(chan time.Time),
 		lastTxMessage:  time.Now(),
 		lastRxMessage:  time.Now(),
 		amChoking:      true,
@@ -317,7 +317,7 @@ func (p *Peer) sendBitfieldToController(bitfield []bool) {
 	if len(haveSlice) > 0 {
 		p.sendHaveMessagesToController(haveSlice)
 	}
-	
+
 }
 
 // Send one or more HavePiece messages to the controller.
@@ -368,10 +368,10 @@ func convertByteSliceToBoolSlice(targetSize int, original []byte) []bool {
 }
 
 func convertBoolSliceToByteSlice(bitfield []bool) []byte {
-	sliceLen := len(bitfield)/8 // 8 bits per byte
-	if len(bitfield) % 8 != 0 {
+	sliceLen := len(bitfield) / 8 // 8 bits per byte
+	if len(bitfield)%8 != 0 {
 		// add one more byte because the bitfield doesn't fit evenly into a byte slice
-		sliceLen += 1 
+		sliceLen += 1
 	}
 	result := make([]byte, sliceLen)
 
@@ -418,7 +418,7 @@ func (p *Peer) weShouldBeInterested() bool {
 			return true
 		}
 	}
-	// We didn't find any pieces that the peer has but we don't have. 
+	// We didn't find any pieces that the peer has but we don't have.
 	return false
 }
 
@@ -558,17 +558,15 @@ func (p *Peer) decodeMessage(payload []byte) {
 		pieceNum := int(binary.BigEndian.Uint32(pieceNumBytes))
 		begin := binary.BigEndian.Uint32(beginBytes)
 
-
 		if p.currentDownload == nil && p.nextDownload == nil {
 			log.Fatalf("Received a Block (Piece) message from %s but there aren't any current or next downloads", p.peerName)
-		} else if begin % downloadBlockSize != 0 {
+		} else if begin%downloadBlockSize != 0 {
 			log.Fatalf("Received a Block (Piece) message from %s with an invalid begin value of %d", p.peerName, begin)
 		} else if len(blockBytes) != downloadBlockSize {
 			log.Fatalf("Received a Block (Piece) message from %s with an invalid block size of %d. Expected %d", p.peerName, len(blockBytes), downloadBlockSize)
-		} else {			
+		} else {
 			log.Printf("Received a Block (Piece) message from %s for piece %d begin %d with %d bytes of block data", p.peerName, pieceNum, begin, len(blockBytes))
 		}
-
 
 		var piece *PieceDownload
 		if p.currentDownload.pieceNum == pieceNum {
@@ -582,7 +580,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 
 		}
 
-		// The block (piece) message is valid. Write the contents to the buffer. 
+		// The block (piece) message is valid. Write the contents to the buffer.
 		copy(piece.data[begin:], blockBytes)
 
 		piece.numBlocksReceived += 1
@@ -590,13 +588,13 @@ func (p *Peer) decodeMessage(payload []byte) {
 
 		if piece.numBlocksReceived == piece.numBlocksPerPiece {
 			log.Printf("Finished downloading all blocks for piece %d from %s", pieceNum, p.peerName)
-			
+
 			// SHA1 check the entire piece
 			if !checkHash(piece.data, piece.expectedHash) {
-				// The piece received from this peer didn't pass the checksum. 
+				// The piece received from this peer didn't pass the checksum.
 				log.Printf("ERROR: Checksum for piece %d received from %s did NOT match what's expected. Disconnecting.", pieceNum, p.peerName)
 				p.Stop()
-				return			
+				return
 			}
 
 			log.Printf("Checksum for piece %d received from %s matches what's expected", pieceNum, p.peerName)
@@ -609,21 +607,20 @@ func (p *Peer) decodeMessage(payload []byte) {
 
 			// We've either finished the currentDownload and copied the reference of nextDownload
 			// to currentDownload, or we finished nextDownload. In either case, we want to nil out
-			// the reference of nextDownload 
+			// the reference of nextDownload
 			p.nextDownload = nil
 
 			go p.sendFinishedPieceToDiskIO(pieceNum, piece.data)
 
 			// if nextDownload was previosly nil, then currentDownload will now be nil, because we
-			// copied the reference from nextDownload to currentDownload. 
+			// copied the reference from nextDownload to currentDownload.
 			if p.currentDownload == nil {
 				log.Printf("Peer %s has no active or next pieces. It will be idle until given more pieces to download", p.peerName)
 				return
 			}
-		} 
+		}
 
 		p.sendOneOrMoreRequests()
-			
 
 		break
 	case MsgCancel:
@@ -832,7 +829,9 @@ func (p *Peer) sendHave(pieceNum int) {
 	log.Printf("Peer : sendHave : Sending have to %s for piece %d", p.peerName, pieceNum)
 	payloadBuffer := new(bytes.Buffer)
 	err := binary.Write(payloadBuffer, binary.BigEndian, uint32(pieceNum))
-	if err != nil {log.Fatal(err)}
+	if err != nil {
+		log.Fatal(err)
+	}
 	p.sendMessage(MsgHave, payloadBuffer.Bytes())
 }
 
@@ -849,7 +848,9 @@ func (p *Peer) sendRequest(pieceNum int, begin int, length int) {
 	ints := []uint32{uint32(pieceNum), uint32(begin), uint32(length)}
 
 	err := binary.Write(buffer, binary.BigEndian, ints)
-	if err != nil {log.Fatal(err)}
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	p.sendMessage(MsgRequest, buffer.Bytes())
 }
@@ -871,11 +872,11 @@ func (p *Peer) sendOneOrMoreRequests() {
 			log.Fatalf("Peer : sendOneOrMoreRequests : State Error: Somehow there are %d outstanding blocks, which is more than %d", numOutstandingBlocks, maxSimultaneousBlockDownloads)
 		} else if numOutstandingBlocks == maxSimultaneousBlockDownloads {
 			// We're maxxed out on the number of outstanding blocks to this peer.
-			// Wait until blocks are received before sending more requests. 
+			// Wait until blocks are received before sending more requests.
 			break
 		} else {
-			// We need to send more requests now. First check if we need to send 
-			// any more requests in the currentDownload piece, which has higher 
+			// We need to send more requests now. First check if we need to send
+			// any more requests in the currentDownload piece, which has higher
 			// priority than nextDownload
 			var piece *PieceDownload
 			piece = p.currentDownload
@@ -890,8 +891,8 @@ func (p *Peer) sendOneOrMoreRequests() {
 			} else {
 				// There are no more requests to send for the currentDownload piece
 				if p.nextDownload == nil {
-					break // we don't have a nextDownload set yet, so we can't send any more at the moment. 
-				
+					break // we don't have a nextDownload set yet, so we can't send any more at the moment.
+
 				} else {
 					piece = p.nextDownload
 					nextDLRemainingRequests := piece.numBlocksPerPiece - (piece.numBlocksReceived + piece.numOutstandingBlocks)
@@ -901,7 +902,7 @@ func (p *Peer) sendOneOrMoreRequests() {
 						piece.numOutstandingBlocks += 1
 						continue // We may want to send more
 					} else {
-						// We can't send any more at the moment. 
+						// We can't send any more at the moment.
 						break
 					}
 				}
@@ -916,10 +917,14 @@ func (p *Peer) sendBlock(pieceNum int, begin int, block []byte) {
 	ints := []uint32{uint32(pieceNum), uint32(begin)}
 
 	err := binary.Write(buffer, binary.BigEndian, ints)
-	if err != nil {log.Fatal(err)}
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	err = binary.Write(buffer, binary.BigEndian, block)
-	if err != nil {log.Fatal(err)}
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	p.sendMessage(MsgBlock, buffer.Bytes())
 }
@@ -930,7 +935,9 @@ func (p *Peer) sendCancel(pieceNum int, begin int, length int) {
 	ints := []uint32{uint32(pieceNum), uint32(begin), uint32(length)}
 
 	err := binary.Write(buffer, binary.BigEndian, ints)
-	if err != nil {log.Fatal(err)}
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	p.sendMessage(MsgCancel, buffer.Bytes())
 }
@@ -953,7 +960,7 @@ func (p *Peer) updateOurBitfield(havePieces []HavePiece) {
 	// update our local bitfield based on the Have messages received from the controller.
 	for _, havePiece := range havePieces {
 		p.ourBitfield[havePiece.pieceNum] = true
-	} 
+	}
 }
 
 func (p *Peer) Stop() error {
@@ -971,7 +978,7 @@ func (p *Peer) Run() {
 	p.sendHandshake()
 
 	// Block on this because it simplifies the logic for
-	// sending the initial bitfield to the peer 
+	// sending the initial bitfield to the peer
 	havePieces := p.receiveHavesFromController(<-p.contRxChans.havePiece)
 	p.updateOurBitfield(havePieces)
 	go p.sendBitfield()
@@ -993,8 +1000,8 @@ func (p *Peer) Run() {
 		case requestPiece := <-p.contRxChans.requestPiece:
 			log.Printf("Peer : Run : Controller told %s to get piece number %d", p.peerName, requestPiece.pieceNum)
 
-			// check to see if we're currently downloading another piece. If so, then there's a 
-			// bug because the controller should only ask us to download one at a time. 
+			// check to see if we're currently downloading another piece. If so, then there's a
+			// bug because the controller should only ask us to download one at a time.
 			if p.nextDownload != nil {
 				log.Fatalf("Peer : Run : %s was told to download piece %d, but we're already downloading two pieces", p.peerName, requestPiece.pieceNum)
 			}
@@ -1002,16 +1009,15 @@ func (p *Peer) Run() {
 			// Create a new PieceDownload struct for the piece that we're told to download
 			pd := NewPieceDownload(requestPiece, p.pieceLength)
 			if p.currentDownload == nil {
-				p.currentDownload = pd 
+				p.currentDownload = pd
 			} else {
 				p.nextDownload = pd
 			}
 
 			// Send the first set of block requests all at once. When we get response (piece) messages,
-			// we'll then determine if more need to be set. 
+			// we'll then determine if more need to be set.
 			p.sendOneOrMoreRequests()
 
-		
 		case cancelPiece := <-p.contRxChans.cancelPiece:
 			log.Fatalf("Still haven't implemented cancelPiece in peer %v", cancelPiece)
 
@@ -1021,7 +1027,7 @@ func (p *Peer) Run() {
 			p.updateOurBitfield(havePieces)
 
 			// Send have messages to the peer. Since this is not the initial bitfield
-			// from the controller, there should only be one. 
+			// from the controller, there should only be one.
 			for _, havePiece := range havePieces {
 				go p.sendHave(havePiece.pieceNum)
 			}
@@ -1030,13 +1036,12 @@ func (p *Peer) Run() {
 				p.sendNotInterested()
 			}
 
-		
 		case <-p.t.Dying():
 			//p.peerManagerChans.deadPeer <- p.peerName
 			return
 		}
 	}
-} 
+}
 
 func (pm *PeerManager) Stop() error {
 	log.Println("PeerManager : Stop : Stopping")
