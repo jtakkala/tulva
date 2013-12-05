@@ -63,6 +63,7 @@ type Peer struct {
 	lastRxMessage    time.Time
 	infoHash         []byte
 	pieceLength      int
+	sendChan         chan []byte
 	currentDownload  *PieceDownload
 	nextDownload     *PieceDownload
 	diskIOChans      diskIOPeerChans
@@ -270,6 +271,7 @@ func NewPeer(
 		amInterested:   false,
 		peerChoking:    true,
 		peerInterested: false,
+		sendChan:       make(chan []byte),
 		diskIOChans:    diskIOChans,
 		blockResponse:  make(chan BlockResponse),
 		contRxChans:    contRxChans,
@@ -755,10 +757,28 @@ func (p *Peer) sendKeepalive() {
 	p.stats.addWrite(4)
 }
 
+func (p *Peer) writer() {
+	log.Println("Peer : writer : Started:", p.peerName)
+	defer log.Println("Peer : writer : Completed:", p.peerName)
+
+	for {
+		select {
+		case message := <-p.sendChan:
+			err := binary.Write(p.conn, binary.BigEndian, message)
+			if err != nil {
+				log.Fatal(err)
+			}
+			p.lastTxMessage = time.Now()
+			p.stats.addWrite(len(message))
+			log.Printf("Peer : writer : wrote %d bytes to peer %s\n", len(message), p.peerName)
+		}
+	}
+}
+
 // Sends any message besides a handshake or a keepalive, both of which
 // don't have a beginning LEN-ID structure. The length is automatically calculated.
-func (p *Peer) sendMessage(ID int, payload interface{}) {
-
+func (p *Peer) constructMessage(ID int, payload interface{}) {
+	// FIXME: We should write over a channel to synchronize writes, otherwise they could get coalesced
 	// Write the payload to a slice of bytes so the length can be computed
 	payloadBuffer := new(bytes.Buffer)
 	err := binary.Write(payloadBuffer, binary.BigEndian, payload)
@@ -789,38 +809,31 @@ func (p *Peer) sendMessage(ID int, payload interface{}) {
 		log.Fatal(err)
 	}
 
-	// Write the message over TCP to the peer
-	message := messageBuffer.Bytes()
-	//log.Printf("TEMP: Sending over TCP: %v", message)
-	err = binary.Write(p.conn, binary.BigEndian, message)
-	if err != nil {
-		log.Fatal(err)
-	}
-	p.lastTxMessage = time.Now()
-	p.stats.addWrite(len(message))
+	// Send the message to the peer
+	p.sendChan <- messageBuffer.Bytes()
 }
 
 func (p *Peer) sendChoke() {
 	log.Printf("Peer : sendChoke : Sending choke to %s", p.peerName)
-	go p.sendMessage(MsgChoke, make([]byte, 0))
+	go p.constructMessage(MsgChoke, make([]byte, 0))
 	p.amChoking = true
 }
 
 func (p *Peer) sendUnchoke() {
 	log.Printf("Peer : sendUnchoke : Sending unchoke to %s", p.peerName)
-	go p.sendMessage(MsgUnchoke, make([]byte, 0))
+	go p.constructMessage(MsgUnchoke, make([]byte, 0))
 	p.amChoking = false
 }
 
 func (p *Peer) sendInterested() {
 	log.Printf("Peer : sendInterested : Sending interested to %s", p.peerName)
-	go p.sendMessage(MsgInterested, make([]byte, 0))
+	go p.constructMessage(MsgInterested, make([]byte, 0))
 	p.amInterested = true
 }
 
 func (p *Peer) sendNotInterested() {
 	log.Printf("Peer : sendNotInterested : Sending not-interested to %s", p.peerName)
-	go p.sendMessage(MsgNotInterested, make([]byte, 0))
+	go p.constructMessage(MsgNotInterested, make([]byte, 0))
 	p.amInterested = false
 }
 
@@ -831,13 +844,13 @@ func (p *Peer) sendHave(pieceNum int) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	p.sendMessage(MsgHave, payloadBuffer.Bytes())
+	p.constructMessage(MsgHave, payloadBuffer.Bytes())
 }
 
 func (p *Peer) sendBitfield() {
 	compacted := convertBoolSliceToByteSlice(p.ourBitfield)
 	log.Printf("Peer : sendBitfield : Sending bitfield to %s with payload %x", p.peerName, compacted)
-	p.sendMessage(MsgBitfield, compacted)
+	p.constructMessage(MsgBitfield, compacted)
 }
 
 func (p *Peer) sendRequest(pieceNum int, begin int, length int) {
@@ -851,7 +864,7 @@ func (p *Peer) sendRequest(pieceNum int, begin int, length int) {
 		log.Fatal(err)
 	}
 
-	p.sendMessage(MsgRequest, buffer.Bytes())
+	p.constructMessage(MsgRequest, buffer.Bytes())
 }
 
 func (p *Peer) sendRequestByBlockNum(pieceNum int, blockNum int) {
@@ -925,7 +938,7 @@ func (p *Peer) sendBlock(pieceNum uint32, begin uint32, block []byte) {
 		log.Fatal(err)
 	}
 
-	p.sendMessage(MsgBlock, buffer.Bytes())
+	p.constructMessage(MsgBlock, buffer.Bytes())
 }
 
 func (p *Peer) sendCancel(pieceNum int, begin int, length int) {
@@ -938,7 +951,7 @@ func (p *Peer) sendCancel(pieceNum int, begin int, length int) {
 		log.Fatal(err)
 	}
 
-	p.sendMessage(MsgCancel, buffer.Bytes())
+	p.constructMessage(MsgCancel, buffer.Bytes())
 }
 
 func (p *Peer) receiveHavesFromController(innerChan chan HavePiece) []HavePiece {
@@ -981,6 +994,7 @@ func (p *Peer) Run() {
 	havePieces := p.receiveHavesFromController(<-p.contRxChans.havePiece)
 	p.updateOurBitfield(havePieces)
 	go p.sendBitfield()
+	go p.writer()
 	go p.reader()
 
 	for {
