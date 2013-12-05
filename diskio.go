@@ -42,9 +42,12 @@ func (diskio *DiskIO) checkHash(buf []byte, pieceIndex int) bool {
 
 // Verify reads in each file and verifies the SHA-1 checksum of each piece.
 // Return the boolean list pieces that are correct.
-func (diskio *DiskIO) Verify() (finishedPieces []bool) {
+func (diskio *DiskIO) Verify() []bool {
 	log.Println("DiskIO : Verify : Started")
 	defer log.Println("DiskIO : Verify : Completed")
+
+	numPieces := len(diskio.metaInfo.Info.Pieces) / 20
+	finishedPieces := make([]bool, numPieces)
 
 	buf := make([]byte, diskio.metaInfo.Info.PieceLength)
 	var pieceIndex, n int
@@ -71,7 +74,8 @@ func (diskio *DiskIO) Verify() (finishedPieces []bool) {
 				}
 				// We have a full buf, check the hash of buf and
 				// append the result to the finished pieces
-				finishedPieces = append(finishedPieces, diskio.checkHash(buf, pieceIndex))
+				finishedPieces[(pieceIndex/20)] = diskio.checkHash(buf, pieceIndex)
+
 				// Reset partial read counter
 				m = 0
 				// Increment piece by the length of a SHA-1 hash (20 bytes)
@@ -81,7 +85,8 @@ func (diskio *DiskIO) Verify() (finishedPieces []bool) {
 		// If the final iteration resulted in a partial read, then
 		// check the hash of it and append the result
 		if m > 0 {
-			finishedPieces = append(finishedPieces, diskio.checkHash(buf[:m], pieceIndex))
+			//finishedPieces = append(finishedPieces, diskio.checkHash(buf[:m], pieceIndex))
+			finishedPieces[(pieceIndex/20)] = diskio.checkHash(buf[:m], pieceIndex)
 		}
 	} else {
 		// Single File Mode
@@ -99,13 +104,16 @@ func (diskio *DiskIO) Verify() (finishedPieces []bool) {
 			}
 			// We have a full buf, check the hash of buf and
 			// append the result to the finished pieces
-			finishedPieces = append(finishedPieces, diskio.checkHash(buf, pieceIndex))
+			//finishedPieces = append(finishedPieces, diskio.checkHash(buf, pieceIndex))
+			finishedPieces[(pieceIndex/20)] = diskio.checkHash(buf, pieceIndex)
+
 			// Increment piece by the length of a SHA-1 hash (20 bytes)
 			pieceIndex += 20
 		}
 		// If the final iteration resulted in a partial read, then compute a hash
 		if n > 0 {
-			finishedPieces = append(finishedPieces, diskio.checkHash(buf[:n], pieceIndex))
+			//finishedPieces = append(finishedPieces, diskio.checkHash(buf[:n], pieceIndex))
+			finishedPieces[(pieceIndex/20)] = diskio.checkHash(buf[:n], pieceIndex)
 		}
 	}
 	fmt.Println()
