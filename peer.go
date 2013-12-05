@@ -985,7 +985,7 @@ func (p *Peer) Run() {
 				p.Stop()
 			}
 		case blockResponse := <-p.blockResponse:
-			fmt.Println("Received blockResponse:", blockResponse)
+			go p.sendBlock(int(blockResponse.info.pieceIndex), int(blockResponse.info.begin), blockResponse.data)
 		case requestPiece := <-p.contRxChans.requestPiece:
 			log.Printf("Peer : Run : Controller told %s to get piece number %d", p.peerName, requestPiece.pieceNum)
 
