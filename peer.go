@@ -612,25 +612,15 @@ func (p *Peer) decodeMessage(payload []byte) {
 }
 
 func (p *Peer) reader() {
-	log.Println("Peer : reader : Started")
-	defer log.Println("Peer : reader : Completed")
+	log.Printf("Peer (%s) : reader : Started", p.peerName)
+	defer log.Printf("Peer (%s) : reader : Completed", p.peerName)
 
 	var handshake Handshake
 	err := binary.Read(p.conn, binary.BigEndian, &handshake)
 	if err != nil {
-		if err == io.EOF || err == io.ErrUnexpectedEOF {
-			log.Println("Peer : reader : binary.Read :", p.peerName, err)
-			p.Stop()
-			return
-		}
-		if e, ok := err.(*net.OpError); ok {
-			if e.Err == syscall.ECONNRESET {
-				log.Println("Peer : reader : binary.Read :", p.peerName, e.Err)
-				p.Stop()
-				return
-			}
-		}
-		log.Fatal("Peer : reader : binary.Read :", p.peerName, err)
+		log.Printf("Peer (%s) error in reader() doing binary.Read(): %s", p.peerName, err)
+		p.Stop()
+		return
 	}
 
 	p.lastRxMessage = time.Now()
@@ -647,19 +637,9 @@ func (p *Peer) reader() {
 		length := make([]byte, 4)
 		n, err := io.ReadFull(p.conn, length)
 		if err != nil {
-			if err == io.EOF || err == io.ErrUnexpectedEOF {
-				log.Println("Peer : reader : io.ReadFull :", p.peerName, err)
-				p.Stop()
-				return
-			}
-			if e, ok := err.(*net.OpError); ok {
-				if e.Err == syscall.ECONNRESET {
-					log.Println("Peer : reader : io.ReadFull :", p.peerName, e.Err)
-				}
-				p.Stop()
-				return
-			}
-			log.Fatal("Peer : reader : io.ReadFull :", p.peerName, err)
+			log.Printf("Peer (%s) error in reader() doing io.ReadFull(): %s", p.peerName, err)
+			p.Stop()
+			return
 		}
 		p.lastRxMessage = time.Now()
 		p.stats.addRead(n)
@@ -667,27 +647,14 @@ func (p *Peer) reader() {
 		payload := make([]byte, binary.BigEndian.Uint32(length))
 		n, err = io.ReadFull(p.conn, payload)
 		if err != nil {
-			// FIXME if this is not a keepalive, we should
-			// definitely get a payload
-			if err == io.EOF || err == io.ErrUnexpectedEOF {
-				log.Println("Peer : reader : io.ReadFull :", p.peerName, err)
-				p.Stop()
-				return
-			}
-			if e, ok := err.(*net.OpError); ok {
-				if e.Err == syscall.ECONNRESET {
-					log.Println("Peer : reader : io.ReadFull :", p.peerName, e.Err)
-				}
-				p.Stop()
-				return
-			}
-			log.Fatal("Peer : reader : io.ReadFull :", p.peerName, err)
+			log.Printf("Peer (%s) error in reader() doing io.ReadFull(): %s", p.peerName, err)
+			p.Stop()
+			return
 		}
 		p.lastRxMessage = time.Now()
 		p.stats.addRead(n)
 
-		//log.Printf("Read %d bytes of %x\n", (n + 4), payload)
-		log.Printf("Read %d bytes from a received message", (n + 4))
+		log.Printf("Peer (%s) read %d bytes", p.peerName, n + 4)
 		p.decodeMessage(payload)
 	}
 }
@@ -720,11 +687,8 @@ func (p *Peer) sendKeepalive() {
 	// Untested
 	err := binary.Write(p.conn, binary.BigEndian, &message)
 	if err != nil {
-		if err.Error() == "use of closed network connection" {
-			log.Println(err)
-		} else {
-			log.Fatal(err)
-		}
+		log.Printf("Peer (%s) error in sendKeepalive() doing binary.Write(): %s", p.peerName, err)
+		p.Stop()
 		return
 	}
 
@@ -741,11 +705,13 @@ func (p *Peer) writer() {
 		case message := <-p.sendChan:
 			err := binary.Write(p.conn, binary.BigEndian, message)
 			if err != nil {
-				log.Fatal(err)
+				log.Printf("Peer (%s) error in writer() doing binary.Write(): %s", p.peerName, err)
+				p.Stop()
+				return
 			}
 			p.lastTxMessage = time.Now()
 			p.stats.addWrite(len(message))
-			log.Printf("Peer : writer : wrote %d bytes to peer %s\n", len(message), p.peerName)
+			log.Printf("Peer (%s) wrote %d bytes", p.peerName, len(message))
 		}
 	}
 }
