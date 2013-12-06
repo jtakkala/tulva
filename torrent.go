@@ -142,9 +142,20 @@ func (t *Torrent) Run() {
 
 	go diskIO.Run()
 
+	var totalLength int
+	if t.metaInfo.Info.Length != 0 {
+		// There is a single file
+		totalLength = t.metaInfo.Info.Length
+	} else {
+		// There are multiple files
+		for i := 0; i < len(t.metaInfo.Info.Files); i++ {
+			totalLength += t.metaInfo.Info.Files[i].Length
+		}
+	}
+
 	server := NewServer()
 	trackerManager := NewTrackerManager(server.Port)
-	peerManager := NewPeerManager(t.infoHash, len(pieceHashes), t.metaInfo.Info.PieceLength, diskIO.peerChans, server.peerChans, trackerManager.peerChans)
+	peerManager := NewPeerManager(t.infoHash, len(pieceHashes), t.metaInfo.Info.PieceLength, totalLength, diskIO.peerChans, server.peerChans, trackerManager.peerChans)
 
 	controller := NewController(pieces, pieceHashes, diskIO.contChans, peerManager.contChans, peerManager.peerContChans)
 

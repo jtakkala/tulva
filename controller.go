@@ -150,7 +150,17 @@ func (cont *Controller) updateCompletedFlagIfFinished(initializing bool) {
 	if initializing {
 		log.Printf("The full file was previously downloaded. The file will be seeded.")
 	} else {
-		log.Printf("The last piece just finished downloading. The file will be seeded.")
+		log.Printf("")
+		log.Printf("")
+		log.Printf("**********************************************************************")
+		log.Printf("*--------------------------------------------------------------------*")
+		log.Printf("*------------ The last piece just finished downloading. -------------*")
+		log.Printf("*--------------------------------------------------------------------*")
+		log.Printf("*-------------------- The file will be seeded. ----------------------*")
+		log.Printf("*--------------------------------------------------------------------*")
+		log.Printf("**********************************************************************")
+		log.Printf("")
+		log.Printf("")
 	}
 }
 
@@ -216,7 +226,8 @@ func (cont *Controller) removePieceFromActiveRequests(piece ReceivedPiece) {
 				cancelMessage.pieceNum = piece.pieceNum
 
 				// Tell this peer to stop downloading this piece because it's already finished.
-				go func() { peerInfo.chans.cancelPiece <- *cancelMessage }()
+				//go func() { peerInfo.chans.cancelPiece <- *cancelMessage }()
+				peerInfo.chans.cancelPiece <- *cancelMessage
 			}
 		}
 
