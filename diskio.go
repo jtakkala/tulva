@@ -232,9 +232,9 @@ func (diskio *DiskIO) Init() {
 	}
 }
 
-func (diskio *DiskIO) readBlock(file *os.File, block BlockInfo) []byte {
+func (diskio *DiskIO) readBlock(file *os.File, block BlockInfo, offset int64) []byte {
 	blockData := make([]byte, block.length)
-	n, err := io.ReadFull(file, blockData)
+	n, err := file.ReadAt(blockData, offset)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -246,18 +246,19 @@ func (diskio *DiskIO) requestBlock(block BlockInfo) BlockResponse {
 	log.Println("DiskIO : requestBlock : Started")
 	defer log.Println("DiskIO : requestBlock : Completed")
 
-	offset := int(block.pieceIndex) * diskio.metaInfo.Info.PieceLength
+	offset := int64(int(block.pieceIndex) * diskio.metaInfo.Info.PieceLength + int(block.begin))
 	response := BlockResponse{info: block}
 	if len(diskio.metaInfo.Info.Files) == 0 {
 		// Single File Mode
-		response.data = diskio.readBlock(diskio.files[0], block)
+		response.data = diskio.readBlock(diskio.files[0], block, offset)
 	} else {
 		// Multiple File Mode
 		for i := 0; i <= len(diskio.metaInfo.Info.Files); i++ {
-			if offset > diskio.metaInfo.Info.Files[i].Length {
-				offset -= diskio.metaInfo.Info.Files[i].Length
+			if offset > int64(diskio.metaInfo.Info.Files[i].Length) {
+				offset -= int64(diskio.metaInfo.Info.Files[i].Length)
 			} else {
-				response.data = diskio.readBlock(diskio.files[i], block)
+				// FIXME: Handle offset with multiple files correctly
+				response.data = diskio.readBlock(diskio.files[i], block, offset)
 			}
 		}
 	}
