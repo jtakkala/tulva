@@ -64,7 +64,7 @@ type Peer struct {
 	infoHash         []byte
 	pieceLength      int
 	sendChan         chan []byte
-	totalLength		 int
+	totalLength	 int
 	currentDownload  *PieceDownload
 	nextDownload     *PieceDownload
 	diskIOChans      diskIOPeerChans
@@ -124,7 +124,7 @@ type PeerManager struct {
 	infoHash      []byte
 	numPieces     int
 	pieceLength   int
-	totalLength	  int
+	totalLength   int
 	peerChans     peerManagerChans
 	serverChans   serverPeerChans
 	trackerChans  trackerPeerChans
@@ -284,17 +284,6 @@ func NewPeer(
 	return p
 }
 
-func constructMessage(id int, payload []byte) (msg []byte, err error) {
-	msg = make([]byte, 4)
-
-	// Store the length of payload + id in network byte order
-	binary.BigEndian.PutUint32(msg, uint32(len(payload)+1))
-	msg = append(msg, byte(id))
-	msg = append(msg, payload...)
-
-	return
-}
-
 func verifyHandshake(handshake *Handshake, infoHash []byte) error {
 	if int(handshake.Len) != len(Protocol) {
 		err := fmt.Sprintf("Unexpected length for pstrlen (wanted %d, got %d)", len(Protocol), int(handshake.Len))
@@ -447,11 +436,9 @@ func (p *Peer) decodeMessage(payload []byte) {
 		} else {
 			log.Printf("Received a Choke message from %s", p.peerName)
 		}
-
 		if !p.peerChoking {
 			// We're changing from being unchoked to choked
 			p.peerChoking = true
-
 			// Tell the controller that we've switched from unchoked to choked
 			go func() {
 				p.contTxChans.chokeStatus <- PeerChokeStatus{peerName: p.peerName, isChoked: true}
@@ -459,7 +446,6 @@ func (p *Peer) decodeMessage(payload []byte) {
 		} else {
 			// Ignore choke message because we're already choked.
 		}
-		break
 	case MsgUnchoke:
 		if len(payload) != 0 {
 			log.Fatalf("Received an Unchoke from %s with invalid payload size of %d", p.peerName, len(payload))
@@ -469,7 +455,6 @@ func (p *Peer) decodeMessage(payload []byte) {
 		if p.peerChoking {
 			// We're changing from being choked to unchoked
 			p.peerChoking = false
-
 			// Tell the controller that we've switched from choked to unchoked
 			go func() {
 				p.contTxChans.chokeStatus <- PeerChokeStatus{peerName: p.peerName, isChoked: false}
@@ -477,7 +462,6 @@ func (p *Peer) decodeMessage(payload []byte) {
 		} else {
 			// Ignore unchoke message because we're already unchoked.
 		}
-		break
 	case MsgInterested:
 		if len(payload) != 0 {
 			log.Fatalf("Received an Interested from %s with invalid payload size of %d", p.peerName, len(payload))
@@ -486,8 +470,6 @@ func (p *Peer) decodeMessage(payload []byte) {
 		}
 		p.peerInterested = true
 		p.sendUnchoke()
-
-		break
 	case MsgNotInterested:
 		// Not Interested Message
 		if len(payload) != 0 {
@@ -497,8 +479,6 @@ func (p *Peer) decodeMessage(payload []byte) {
 		}
 		p.peerInterested = false
 		p.sendChoke()
-
-		break
 	case MsgHave:
 		if len(payload) != 4 {
 			log.Fatalf("Received a Have from %s with invalid payload size of %d", p.peerName, len(payload))
@@ -506,7 +486,6 @@ func (p *Peer) decodeMessage(payload []byte) {
 
 		// Determine the piece number
 		pieceNum := int(binary.BigEndian.Uint32(payload))
-
 		log.Printf("Received a Have message for piece %d from %s", pieceNum, p.peerName)
 
 		// Update the local peer bitfield
@@ -523,8 +502,6 @@ func (p *Peer) decodeMessage(payload []byte) {
 				p.sendInterested()
 			}
 		}
-
-		break
 	case MsgBitfield:
 		log.Printf("Received a Bitfield message from %s with payload %x", p.peerName, payload)
 
@@ -540,8 +517,6 @@ func (p *Peer) decodeMessage(payload []byte) {
 				p.sendInterested()
 			}
 		}
-
-		break
 	case MsgRequest:
 		var blockInfo BlockInfo
 		blockInfo.pieceIndex = binary.BigEndian.Uint32(payload[0:4])
@@ -550,7 +525,6 @@ func (p *Peer) decodeMessage(payload []byte) {
 		blockRequest := BlockRequest{request: blockInfo, response: p.blockResponse}
 		p.diskIOChans.blockRequest <- blockRequest
 		log.Printf("\033[31mReceived a Request message for %v from %s\033[0m", blockInfo, p.peerName)
-		break
 	case MsgBlock:
 		if len(payload) < 9 {
 			log.Fatalf("Received a Block (Piece) message from %s with invalid payload size of %d.", p.peerName, len(payload))
@@ -630,17 +604,14 @@ func (p *Peer) decodeMessage(payload []byte) {
 		}
 
 		p.sendOneOrMoreRequests()
-
-		break
 	case MsgCancel:
-		// IMPLEMENT ME
-		pieceNum := 0 // FIXME
-
-		log.Printf("Received a Cancel message for piece %d from %s", pieceNum, p.peerName)
-		break
+		// TODO: Implement cancel handling
+		pieceIndex := binary.BigEndian.Uint32(payload[0:4])
+		begin := binary.BigEndian.Uint32(payload[4:8])
+		length := binary.BigEndian.Uint32(payload[8:12])
+		log.Printf("Received a Cancel message for piece %d, begin %x, length %x from %s", pieceIndex, begin, length, p.peerName)
 	case MsgPort:
 		log.Printf("Ignoring a Port message that was received from %s", p.peerName)
-		break
 	}
 }
 
