@@ -628,7 +628,8 @@ func (p *Peer) reader() {
 
 	err = verifyHandshake(&handshake, p.infoHash)
 	if err != nil {
-		p.conn.Close()
+		log.Printf("Peer (%s) verifyandshake returned: %s", p.peerName, err)
+		p.Stop()
 		return
 	}
 	p.peerID = handshake.PeerID[:]
@@ -671,8 +672,9 @@ func (p *Peer) sendHandshake() {
 
 	err := binary.Write(p.conn, binary.BigEndian, &handshake)
 	if err != nil {
-		// TODO: Handle errors
-		log.Fatal(err)
+		log.Printf("Peer (%s) error in sendHandshake() doing binary.Write(): %s", p.peerName, err)
+		p.Stop()
+		return
 	}
 
 	p.lastTxMessage = time.Now()
@@ -719,7 +721,6 @@ func (p *Peer) writer() {
 // Sends any message besides a handshake or a keepalive, both of which
 // don't have a beginning LEN-ID structure. The length is automatically calculated.
 func (p *Peer) constructMessage(ID int, payload interface{}) {
-	// FIXME: We should write over a channel to synchronize writes, otherwise they could get coalesced
 	// Write the payload to a slice of bytes so the length can be computed
 	payloadBuffer := new(bytes.Buffer)
 	err := binary.Write(payloadBuffer, binary.BigEndian, payload)
@@ -1057,7 +1058,8 @@ func (p *Peer) Run() {
 			}
 
 		case <-p.t.Dying():
-			//p.peerManagerChans.deadPeer <- p.peerName
+			p.conn.Close()
+			p.peerManagerChans.deadPeer <- p.peerName
 			return
 		}
 	}
