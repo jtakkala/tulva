@@ -63,6 +63,7 @@ type Peer struct {
 	lastRxMessage    time.Time
 	infoHash         []byte
 	pieceLength      int
+	totalLength		 int
 	currentDownload  *PieceDownload
 	nextDownload     *PieceDownload
 	diskIOChans      diskIOPeerChans
@@ -80,15 +81,15 @@ type PieceDownload struct {
 	data                 []byte
 	numBlocksReceived    int
 	numOutstandingBlocks int
-	numBlocksPerPiece    int
+	numBlocksInPiece    int
 }
 
-func NewPieceDownload(requestPiece RequestPiece, pieceLength int) *PieceDownload {
+func (p *Peer) newPieceDownload(requestPiece RequestPiece) *PieceDownload {
 	pd := new(PieceDownload)
 	pd.pieceNum = requestPiece.pieceNum
 	pd.expectedHash = requestPiece.expectedHash
-	pd.data = make([]byte, pieceLength)
-	pd.numBlocksPerPiece = pieceLength / downloadBlockSize
+	pd.data = make([]byte, p.expectedLengthForPiece(requestPiece.pieceNum))
+	pd.numBlocksInPiece = p.expectedNumBlocksForPiece(requestPiece.pieceNum)
 	return pd
 }
 
@@ -122,6 +123,7 @@ type PeerManager struct {
 	infoHash      []byte
 	numPieces     int
 	pieceLength   int
+	totalLength	  int
 	peerChans     peerManagerChans
 	serverChans   serverPeerChans
 	trackerChans  trackerPeerChans
@@ -211,11 +213,12 @@ func sortedPeersByQtyPiecesNeeded(peers map[string]*PeerInfo) SortedPeers {
 	return peerInfoSlice
 }
 
-func NewPeerManager(infoHash []byte, numPieces int, pieceLength int, diskIOChans diskIOPeerChans, serverChans serverPeerChans, trackerChans trackerPeerChans) *PeerManager {
+func NewPeerManager(infoHash []byte, numPieces int, pieceLength int, totalLength int, diskIOChans diskIOPeerChans, serverChans serverPeerChans, trackerChans trackerPeerChans) *PeerManager {
 	pm := new(PeerManager)
 	pm.infoHash = infoHash
 	pm.numPieces = numPieces
 	pm.pieceLength = pieceLength
+	pm.totalLength = totalLength
 	pm.diskIOChans = diskIOChans
 	pm.serverChans = serverChans
 	pm.trackerChans = trackerChans
@@ -254,6 +257,7 @@ func NewPeer(
 	infoHash []byte,
 	numPieces int,
 	pieceLength int,
+	totalLength int,
 	diskIOChans diskIOPeerChans,
 	contRxChans ControllerPeerChans,
 	contTxChans PeerControllerChans) *Peer {
@@ -261,6 +265,7 @@ func NewPeer(
 		peerName:       peerName,
 		infoHash:       infoHash,
 		pieceLength:    pieceLength,
+		totalLength:    totalLength,
 		peerBitfield:   make([]bool, numPieces),
 		ourBitfield:    make([]bool, numPieces),
 		keepalive:      make(chan time.Time),
@@ -545,9 +550,8 @@ func (p *Peer) decodeMessage(payload []byte) {
 		log.Printf("\033[31mReceived a Request message for %v from %s\033[0m", blockInfo, p.peerName)
 		break
 	case MsgBlock:
-		expectedPayloadSize := 8 + downloadBlockSize
-		if len(payload) != expectedPayloadSize {
-			log.Fatalf("Received a Block (Piece) message from %s with invalid payload size of %d. Expected %d", p.peerName, len(payload), expectedPayloadSize)
+		if len(payload) < 9 {
+			log.Fatalf("Received a Block (Piece) message from %s with invalid payload size of %d.", p.peerName, len(payload))
 		}
 
 		pieceNumBytes := payload[0:4]
@@ -557,13 +561,16 @@ func (p *Peer) decodeMessage(payload []byte) {
 		pieceNum := int(binary.BigEndian.Uint32(pieceNumBytes))
 		begin := binary.BigEndian.Uint32(beginBytes)
 
+		blockNum := int(begin / downloadBlockSize)
+		expectedBlockSize := p.expectedLengthForBlock(pieceNum, blockNum)
+
 		if p.currentDownload == nil && p.nextDownload == nil {
 			log.Printf("WARNING: Received a Block (Piece) message from %s but there aren't any current or next downloads", p.peerName)
 			return
 		} else if begin%downloadBlockSize != 0 {
 			log.Fatalf("Received a Block (Piece) message from %s with an invalid begin value of %d", p.peerName, begin)
-		} else if len(blockBytes) != downloadBlockSize {
-			log.Fatalf("Received a Block (Piece) message from %s with an invalid block size of %d. Expected %d", p.peerName, len(blockBytes), downloadBlockSize)
+		} else if len(blockBytes) != expectedBlockSize {
+			log.Fatalf("Received a Block (Piece) message from %s with an invalid block size of %d. Expected %d", p.peerName, len(blockBytes), expectedBlockSize)
 		} else {
 			log.Printf("Received a Block (Piece) message from %s for piece %d begin %d with %d bytes of block data", p.peerName, pieceNum, begin, len(blockBytes))
 		}
@@ -586,7 +593,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 		piece.numBlocksReceived += 1
 		piece.numOutstandingBlocks -= 1
 
-		if piece.numBlocksReceived == piece.numBlocksPerPiece {
+		if piece.numBlocksReceived == piece.numBlocksInPiece {
 			log.Printf("Finished downloading all blocks for piece %d from %s", pieceNum, p.peerName)
 
 			// SHA1 check the entire piece
@@ -855,9 +862,49 @@ func (p *Peer) sendRequest(pieceNum int, begin int, length int) {
 	p.sendMessage(MsgRequest, buffer.Bytes())
 }
 
+func (p *Peer) expectedLengthForBlock(pieceNum int, blockNum int) int {
+	if pieceNum == (len(p.ourBitfield) - 1) {
+		// This is the last piece. Check to see if it's the last block
+		lastPieceLength := p.totalLength % p.pieceLength
+
+		if ((blockNum * downloadBlockSize) + downloadBlockSize) > lastPieceLength {
+			// This is the last block of the last piece
+			return (p.totalLength % p.pieceLength) % downloadBlockSize
+		} else {
+			// This is the last piece, but not the last block. 
+			return downloadBlockSize
+		}
+	} else {
+		// This is not the last piece. 
+		return downloadBlockSize
+	}
+}
+
+func (p *Peer) expectedLengthForPiece(pieceNum int) int {
+	if pieceNum == (len(p.ourBitfield) - 1) {
+		// This is the last piece
+		return p.totalLength % p.pieceLength
+	} else {
+		// this is not the last piece
+		return p.pieceLength
+	}
+}
+
+func (p *Peer) expectedNumBlocksForPiece(pieceNum int) int {
+	if pieceNum == (len(p.ourBitfield) - 1) {
+		// This is the last piece
+		lengthOfLastPiece := p.totalLength % p.pieceLength
+		return (lengthOfLastPiece / downloadBlockSize) + 1
+	} else {
+		// this is not the last piece
+		return p.pieceLength / downloadBlockSize
+	}
+}
+
 func (p *Peer) sendRequestByBlockNum(pieceNum int, blockNum int) {
 	begin := downloadBlockSize * blockNum
-	p.sendRequest(pieceNum, begin, downloadBlockSize)
+	length := p.expectedLengthForBlock(pieceNum, blockNum)
+	p.sendRequest(pieceNum, begin, length)
 }
 
 func (p *Peer) sendOneOrMoreRequests() {
@@ -881,7 +928,7 @@ func (p *Peer) sendOneOrMoreRequests() {
 			var piece *PieceDownload
 			piece = p.currentDownload
 
-			currentDLRemainingRequests := piece.numBlocksPerPiece - (piece.numBlocksReceived + piece.numOutstandingBlocks)
+			currentDLRemainingRequests := piece.numBlocksInPiece - (piece.numBlocksReceived + piece.numOutstandingBlocks)
 			if currentDLRemainingRequests > 0 {
 				blockNum := piece.numBlocksReceived + piece.numOutstandingBlocks
 				go p.sendRequestByBlockNum(piece.pieceNum, blockNum)
@@ -895,7 +942,7 @@ func (p *Peer) sendOneOrMoreRequests() {
 
 				} else {
 					piece = p.nextDownload
-					nextDLRemainingRequests := piece.numBlocksPerPiece - (piece.numBlocksReceived + piece.numOutstandingBlocks)
+					nextDLRemainingRequests := piece.numBlocksInPiece - (piece.numBlocksReceived + piece.numOutstandingBlocks)
 					if nextDLRemainingRequests > 0 {
 						blockNum := piece.numBlocksReceived + piece.numOutstandingBlocks
 						go p.sendRequestByBlockNum(piece.pieceNum, blockNum)
@@ -1033,7 +1080,7 @@ func (p *Peer) Run() {
 			}
 
 			// Create a new PieceDownload struct for the piece that we're told to download
-			pd := NewPieceDownload(requestPiece, p.pieceLength)
+			pd := p.newPieceDownload(requestPiece)
 			if p.currentDownload == nil {
 				p.currentDownload = pd
 			} else {
@@ -1097,6 +1144,7 @@ func (pm *PeerManager) Run() {
 					pm.infoHash,
 					pm.numPieces,
 					pm.pieceLength,
+					pm.totalLength,
 					pm.diskIOChans,
 					contTxChans,
 					pm.peerContChans)
@@ -1124,6 +1172,7 @@ func (pm *PeerManager) Run() {
 					pm.infoHash,
 					pm.numPieces,
 					pm.pieceLength,
+					pm.totalLength,
 					pm.diskIOChans,
 					contTxChans,
 					pm.peerContChans)
