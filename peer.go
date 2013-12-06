@@ -425,7 +425,6 @@ func (p *Peer) decodeMessage(payload []byte) {
 	}
 
 	messageID := int(payload[0])
-
 	// Remove the messageID
 	payload = payload[1:]
 
@@ -530,14 +529,11 @@ func (p *Peer) decodeMessage(payload []byte) {
 			log.Fatalf("Received a Block (Piece) message from %s with invalid payload size of %d.", p.peerName, len(payload))
 		}
 
-		pieceNumBytes := payload[0:4]
-		beginBytes := payload[4:8]
-		blockBytes := payload[8:]
+		pieceNum := int(binary.BigEndian.Uint32(payload[0:4]))
+		begin := int(binary.BigEndian.Uint32(payload[4:8]))
+		blockData := payload[8:]
 
-		pieceNum := int(binary.BigEndian.Uint32(pieceNumBytes))
-		begin := binary.BigEndian.Uint32(beginBytes)
-
-		blockNum := int(begin / downloadBlockSize)
+		blockNum := begin / downloadBlockSize
 		expectedBlockSize := p.expectedLengthForBlock(pieceNum, blockNum)
 
 		if p.currentDownload == nil && p.nextDownload == nil {
@@ -545,10 +541,10 @@ func (p *Peer) decodeMessage(payload []byte) {
 			return
 		} else if begin%downloadBlockSize != 0 {
 			log.Fatalf("Received a Block (Piece) message from %s with an invalid begin value of %d", p.peerName, begin)
-		} else if len(blockBytes) != expectedBlockSize {
-			log.Fatalf("Received a Block (Piece) message from %s with an invalid block size of %d. Expected %d", p.peerName, len(blockBytes), expectedBlockSize)
+		} else if len(blockData) != expectedBlockSize {
+			log.Fatalf("Received a Block (Piece) message from %s with an invalid block size of %d. Expected %d", p.peerName, len(blockData), expectedBlockSize)
 		} else {
-			log.Printf("Received a Block (Piece) message from %s for piece %d begin %d with %d bytes of block data", p.peerName, pieceNum, begin, len(blockBytes))
+			log.Printf("Received a Block (Piece) message from %s for piece %d begin %d with %d bytes of block data", p.peerName, pieceNum, begin, len(blockData))
 		}
 
 		var piece *PieceDownload
@@ -564,7 +560,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 		}
 
 		// The block (piece) message is valid. Write the contents to the buffer.
-		copy(piece.data[begin:], blockBytes)
+		copy(piece.data[begin:], blockData)
 
 		piece.numBlocksReceived += 1
 		piece.numOutstandingBlocks -= 1
