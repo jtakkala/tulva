@@ -63,7 +63,8 @@ type Peer struct {
 	lastRxMessage    time.Time
 	infoHash         []byte
 	pieceLength      int
-	totalLength		 int
+	sendChan         chan []byte
+	totalLength	 int
 	currentDownload  *PieceDownload
 	nextDownload     *PieceDownload
 	diskIOChans      diskIOPeerChans
@@ -123,7 +124,7 @@ type PeerManager struct {
 	infoHash      []byte
 	numPieces     int
 	pieceLength   int
-	totalLength	  int
+	totalLength   int
 	peerChans     peerManagerChans
 	serverChans   serverPeerChans
 	trackerChans  trackerPeerChans
@@ -275,22 +276,12 @@ func NewPeer(
 		amInterested:   false,
 		peerChoking:    true,
 		peerInterested: false,
+		sendChan:       make(chan []byte),
 		diskIOChans:    diskIOChans,
 		blockResponse:  make(chan BlockResponse),
 		contRxChans:    contRxChans,
 		contTxChans:    contTxChans}
 	return p
-}
-
-func constructMessage(id int, payload []byte) (msg []byte, err error) {
-	msg = make([]byte, 4)
-
-	// Store the length of payload + id in network byte order
-	binary.BigEndian.PutUint32(msg, uint32(len(payload)+1))
-	msg = append(msg, byte(id))
-	msg = append(msg, payload...)
-
-	return
 }
 
 func verifyHandshake(handshake *Handshake, infoHash []byte) error {
@@ -434,7 +425,6 @@ func (p *Peer) decodeMessage(payload []byte) {
 	}
 
 	messageID := int(payload[0])
-
 	// Remove the messageID
 	payload = payload[1:]
 
@@ -445,11 +435,9 @@ func (p *Peer) decodeMessage(payload []byte) {
 		} else {
 			log.Printf("Received a Choke message from %s", p.peerName)
 		}
-
 		if !p.peerChoking {
 			// We're changing from being unchoked to choked
 			p.peerChoking = true
-
 			// Tell the controller that we've switched from unchoked to choked
 			go func() {
 				p.contTxChans.chokeStatus <- PeerChokeStatus{peerName: p.peerName, isChoked: true}
@@ -457,7 +445,6 @@ func (p *Peer) decodeMessage(payload []byte) {
 		} else {
 			// Ignore choke message because we're already choked.
 		}
-		break
 	case MsgUnchoke:
 		if len(payload) != 0 {
 			log.Fatalf("Received an Unchoke from %s with invalid payload size of %d", p.peerName, len(payload))
@@ -467,7 +454,6 @@ func (p *Peer) decodeMessage(payload []byte) {
 		if p.peerChoking {
 			// We're changing from being choked to unchoked
 			p.peerChoking = false
-
 			// Tell the controller that we've switched from choked to unchoked
 			go func() {
 				p.contTxChans.chokeStatus <- PeerChokeStatus{peerName: p.peerName, isChoked: false}
@@ -475,7 +461,6 @@ func (p *Peer) decodeMessage(payload []byte) {
 		} else {
 			// Ignore unchoke message because we're already unchoked.
 		}
-		break
 	case MsgInterested:
 		if len(payload) != 0 {
 			log.Fatalf("Received an Interested from %s with invalid payload size of %d", p.peerName, len(payload))
@@ -484,8 +469,6 @@ func (p *Peer) decodeMessage(payload []byte) {
 		}
 		p.peerInterested = true
 		p.sendUnchoke()
-
-		break
 	case MsgNotInterested:
 		// Not Interested Message
 		if len(payload) != 0 {
@@ -495,8 +478,6 @@ func (p *Peer) decodeMessage(payload []byte) {
 		}
 		p.peerInterested = false
 		p.sendChoke()
-
-		break
 	case MsgHave:
 		if len(payload) != 4 {
 			log.Fatalf("Received a Have from %s with invalid payload size of %d", p.peerName, len(payload))
@@ -504,7 +485,6 @@ func (p *Peer) decodeMessage(payload []byte) {
 
 		// Determine the piece number
 		pieceNum := int(binary.BigEndian.Uint32(payload))
-
 		log.Printf("Received a Have message for piece %d from %s", pieceNum, p.peerName)
 
 		// Update the local peer bitfield
@@ -521,8 +501,6 @@ func (p *Peer) decodeMessage(payload []byte) {
 				p.sendInterested()
 			}
 		}
-
-		break
 	case MsgBitfield:
 		log.Printf("Received a Bitfield message from %s with payload %x", p.peerName, payload)
 
@@ -538,8 +516,6 @@ func (p *Peer) decodeMessage(payload []byte) {
 				p.sendInterested()
 			}
 		}
-
-		break
 	case MsgRequest:
 		var blockInfo BlockInfo
 		blockInfo.pieceIndex = binary.BigEndian.Uint32(payload[0:4])
@@ -548,20 +524,16 @@ func (p *Peer) decodeMessage(payload []byte) {
 		blockRequest := BlockRequest{request: blockInfo, response: p.blockResponse}
 		p.diskIOChans.blockRequest <- blockRequest
 		log.Printf("\033[31mReceived a Request message for %v from %s\033[0m", blockInfo, p.peerName)
-		break
 	case MsgBlock:
 		if len(payload) < 9 {
 			log.Fatalf("Received a Block (Piece) message from %s with invalid payload size of %d.", p.peerName, len(payload))
 		}
 
-		pieceNumBytes := payload[0:4]
-		beginBytes := payload[4:8]
-		blockBytes := payload[8:]
+		pieceNum := int(binary.BigEndian.Uint32(payload[0:4]))
+		begin := int(binary.BigEndian.Uint32(payload[4:8]))
+		blockData := payload[8:]
 
-		pieceNum := int(binary.BigEndian.Uint32(pieceNumBytes))
-		begin := binary.BigEndian.Uint32(beginBytes)
-
-		blockNum := int(begin / downloadBlockSize)
+		blockNum := begin / downloadBlockSize
 		expectedBlockSize := p.expectedLengthForBlock(pieceNum, blockNum)
 
 		if p.currentDownload == nil && p.nextDownload == nil {
@@ -569,10 +541,10 @@ func (p *Peer) decodeMessage(payload []byte) {
 			return
 		} else if begin%downloadBlockSize != 0 {
 			log.Fatalf("Received a Block (Piece) message from %s with an invalid begin value of %d", p.peerName, begin)
-		} else if len(blockBytes) != expectedBlockSize {
-			log.Fatalf("Received a Block (Piece) message from %s with an invalid block size of %d. Expected %d", p.peerName, len(blockBytes), expectedBlockSize)
+		} else if len(blockData) != expectedBlockSize {
+			log.Fatalf("Received a Block (Piece) message from %s with an invalid block size of %d. Expected %d", p.peerName, len(blockData), expectedBlockSize)
 		} else {
-			log.Printf("Received a Block (Piece) message from %s for piece %d begin %d with %d bytes of block data", p.peerName, pieceNum, begin, len(blockBytes))
+			log.Printf("Received a Block (Piece) message from %s for piece %d begin %d with %d bytes of block data", p.peerName, pieceNum, begin, len(blockData))
 		}
 
 		var piece *PieceDownload
@@ -588,7 +560,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 		}
 
 		// The block (piece) message is valid. Write the contents to the buffer.
-		copy(piece.data[begin:], blockBytes)
+		copy(piece.data[begin:], blockData)
 
 		piece.numBlocksReceived += 1
 		piece.numOutstandingBlocks -= 1
@@ -628,40 +600,27 @@ func (p *Peer) decodeMessage(payload []byte) {
 		}
 
 		p.sendOneOrMoreRequests()
-
-		break
 	case MsgCancel:
-		// IMPLEMENT ME
-		pieceNum := 0 // FIXME
-
-		log.Printf("Received a Cancel message for piece %d from %s", pieceNum, p.peerName)
-		break
+		// TODO: Implement cancel handling
+		pieceIndex := binary.BigEndian.Uint32(payload[0:4])
+		begin := binary.BigEndian.Uint32(payload[4:8])
+		length := binary.BigEndian.Uint32(payload[8:12])
+		log.Printf("Received a Cancel message for piece %d, begin %x, length %x from %s", pieceIndex, begin, length, p.peerName)
 	case MsgPort:
 		log.Printf("Ignoring a Port message that was received from %s", p.peerName)
-		break
 	}
 }
 
 func (p *Peer) reader() {
-	log.Println("Peer : reader : Started")
-	defer log.Println("Peer : reader : Completed")
+	log.Printf("Peer (%s) : reader : Started", p.peerName)
+	defer log.Printf("Peer (%s) : reader : Completed", p.peerName)
 
 	var handshake Handshake
 	err := binary.Read(p.conn, binary.BigEndian, &handshake)
 	if err != nil {
-		if err == io.EOF || err == io.ErrUnexpectedEOF {
-			log.Println("Peer : reader : binary.Read :", p.peerName, err)
-			p.Stop()
-			return
-		}
-		if e, ok := err.(*net.OpError); ok {
-			if e.Err == syscall.ECONNRESET {
-				log.Println("Peer : reader : binary.Read :", p.peerName, e.Err)
-				p.Stop()
-				return
-			}
-		}
-		log.Fatal("Peer : reader : binary.Read :", p.peerName, err)
+		log.Printf("Peer (%s) error in reader() doing binary.Read(): %s", p.peerName, err)
+		p.Stop()
+		return
 	}
 
 	p.lastRxMessage = time.Now()
@@ -669,7 +628,8 @@ func (p *Peer) reader() {
 
 	err = verifyHandshake(&handshake, p.infoHash)
 	if err != nil {
-		p.conn.Close()
+		log.Printf("Peer (%s) verifyandshake returned: %s", p.peerName, err)
+		p.Stop()
 		return
 	}
 	p.peerID = handshake.PeerID[:]
@@ -678,19 +638,9 @@ func (p *Peer) reader() {
 		length := make([]byte, 4)
 		n, err := io.ReadFull(p.conn, length)
 		if err != nil {
-			if err == io.EOF || err == io.ErrUnexpectedEOF {
-				log.Println("Peer : reader : io.ReadFull :", p.peerName, err)
-				p.Stop()
-				return
-			}
-			if e, ok := err.(*net.OpError); ok {
-				if e.Err == syscall.ECONNRESET {
-					log.Println("Peer : reader : io.ReadFull :", p.peerName, e.Err)
-				}
-				p.Stop()
-				return
-			}
-			log.Fatal("Peer : reader : io.ReadFull :", p.peerName, err)
+			log.Printf("Peer (%s) error in reader() doing io.ReadFull(): %s", p.peerName, err)
+			p.Stop()
+			return
 		}
 		p.lastRxMessage = time.Now()
 		p.stats.addRead(n)
@@ -698,27 +648,14 @@ func (p *Peer) reader() {
 		payload := make([]byte, binary.BigEndian.Uint32(length))
 		n, err = io.ReadFull(p.conn, payload)
 		if err != nil {
-			// FIXME if this is not a keepalive, we should
-			// definitely get a payload
-			if err == io.EOF || err == io.ErrUnexpectedEOF {
-				log.Println("Peer : reader : io.ReadFull :", p.peerName, err)
-				p.Stop()
-				return
-			}
-			if e, ok := err.(*net.OpError); ok {
-				if e.Err == syscall.ECONNRESET {
-					log.Println("Peer : reader : io.ReadFull :", p.peerName, e.Err)
-				}
-				p.Stop()
-				return
-			}
-			log.Fatal("Peer : reader : io.ReadFull :", p.peerName, err)
+			log.Printf("Peer (%s) error in reader() doing io.ReadFull(): %s", p.peerName, err)
+			p.Stop()
+			return
 		}
 		p.lastRxMessage = time.Now()
 		p.stats.addRead(n)
 
-		//log.Printf("Read %d bytes of %x\n", (n + 4), payload)
-		log.Printf("Read %d bytes from a received message", (n + 4))
+		log.Printf("Peer (%s) read %d bytes", p.peerName, n + 4)
 		p.decodeMessage(payload)
 	}
 }
@@ -735,8 +672,9 @@ func (p *Peer) sendHandshake() {
 
 	err := binary.Write(p.conn, binary.BigEndian, &handshake)
 	if err != nil {
-		// TODO: Handle errors
-		log.Fatal(err)
+		log.Printf("Peer (%s) error in sendHandshake() doing binary.Write(): %s", p.peerName, err)
+		p.Stop()
+		return
 	}
 
 	p.lastTxMessage = time.Now()
@@ -751,11 +689,8 @@ func (p *Peer) sendKeepalive() {
 	// Untested
 	err := binary.Write(p.conn, binary.BigEndian, &message)
 	if err != nil {
-		if err.Error() == "use of closed network connection" {
-			log.Println(err)
-		} else {
-			log.Fatal(err)
-		}
+		log.Printf("Peer (%s) error in sendKeepalive() doing binary.Write(): %s", p.peerName, err)
+		p.Stop()
 		return
 	}
 
@@ -763,10 +698,29 @@ func (p *Peer) sendKeepalive() {
 	p.stats.addWrite(4)
 }
 
+func (p *Peer) writer() {
+	log.Println("Peer : writer : Started:", p.peerName)
+	defer log.Println("Peer : writer : Completed:", p.peerName)
+
+	for {
+		select {
+		case message := <-p.sendChan:
+			err := binary.Write(p.conn, binary.BigEndian, message)
+			if err != nil {
+				log.Printf("Peer (%s) error in writer() doing binary.Write(): %s", p.peerName, err)
+				p.Stop()
+				return
+			}
+			p.lastTxMessage = time.Now()
+			p.stats.addWrite(len(message))
+			log.Printf("Peer (%s) wrote %d bytes", p.peerName, len(message))
+		}
+	}
+}
+
 // Sends any message besides a handshake or a keepalive, both of which
 // don't have a beginning LEN-ID structure. The length is automatically calculated.
-func (p *Peer) sendMessage(ID int, payload interface{}) {
-
+func (p *Peer) constructMessage(ID int, payload interface{}) {
 	// Write the payload to a slice of bytes so the length can be computed
 	payloadBuffer := new(bytes.Buffer)
 	err := binary.Write(payloadBuffer, binary.BigEndian, payload)
@@ -797,38 +751,31 @@ func (p *Peer) sendMessage(ID int, payload interface{}) {
 		log.Fatal(err)
 	}
 
-	// Write the message over TCP to the peer
-	message := messageBuffer.Bytes()
-	//log.Printf("TEMP: Sending over TCP: %v", message)
-	err = binary.Write(p.conn, binary.BigEndian, message)
-	if err != nil {
-		log.Fatal(err)
-	}
-	p.lastTxMessage = time.Now()
-	p.stats.addWrite(len(message))
+	// Send the message to the peer
+	p.sendChan <- messageBuffer.Bytes()
 }
 
 func (p *Peer) sendChoke() {
 	log.Printf("Peer : sendChoke : Sending choke to %s", p.peerName)
-	go p.sendMessage(MsgChoke, make([]byte, 0))
+	go p.constructMessage(MsgChoke, make([]byte, 0))
 	p.amChoking = true
 }
 
 func (p *Peer) sendUnchoke() {
 	log.Printf("Peer : sendUnchoke : Sending unchoke to %s", p.peerName)
-	go p.sendMessage(MsgUnchoke, make([]byte, 0))
+	go p.constructMessage(MsgUnchoke, make([]byte, 0))
 	p.amChoking = false
 }
 
 func (p *Peer) sendInterested() {
 	log.Printf("Peer : sendInterested : Sending interested to %s", p.peerName)
-	go p.sendMessage(MsgInterested, make([]byte, 0))
+	go p.constructMessage(MsgInterested, make([]byte, 0))
 	p.amInterested = true
 }
 
 func (p *Peer) sendNotInterested() {
 	log.Printf("Peer : sendNotInterested : Sending not-interested to %s", p.peerName)
-	go p.sendMessage(MsgNotInterested, make([]byte, 0))
+	go p.constructMessage(MsgNotInterested, make([]byte, 0))
 	p.amInterested = false
 }
 
@@ -839,13 +786,13 @@ func (p *Peer) sendHave(pieceNum int) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	p.sendMessage(MsgHave, payloadBuffer.Bytes())
+	p.constructMessage(MsgHave, payloadBuffer.Bytes())
 }
 
 func (p *Peer) sendBitfield() {
 	compacted := convertBoolSliceToByteSlice(p.ourBitfield)
 	log.Printf("Peer : sendBitfield : Sending bitfield to %s with payload %x", p.peerName, compacted)
-	p.sendMessage(MsgBitfield, compacted)
+	p.constructMessage(MsgBitfield, compacted)
 }
 
 func (p *Peer) sendRequest(pieceNum int, begin int, length int) {
@@ -859,7 +806,7 @@ func (p *Peer) sendRequest(pieceNum int, begin int, length int) {
 		log.Fatal(err)
 	}
 
-	p.sendMessage(MsgRequest, buffer.Bytes())
+	p.constructMessage(MsgRequest, buffer.Bytes())
 }
 
 func (p *Peer) expectedLengthForBlock(pieceNum int, blockNum int) int {
@@ -973,7 +920,7 @@ func (p *Peer) sendBlock(pieceNum uint32, begin uint32, block []byte) {
 		log.Fatal(err)
 	}
 
-	p.sendMessage(MsgBlock, buffer.Bytes())
+	p.constructMessage(MsgBlock, buffer.Bytes())
 }
 
 func (p *Peer) sendCancel(pieceNum int, begin int, length int) {
@@ -986,7 +933,7 @@ func (p *Peer) sendCancel(pieceNum int, begin int, length int) {
 		log.Fatal(err)
 	}
 
-	p.sendMessage(MsgCancel, buffer.Bytes())
+	p.constructMessage(MsgCancel, buffer.Bytes())
 }
 
 func (p *Peer) receiveHavesFromController(innerChan chan HavePiece) []HavePiece {
@@ -1050,6 +997,7 @@ func (p *Peer) Run() {
 	havePieces := p.receiveHavesFromController(<-p.contRxChans.havePiece)
 	p.updateOurBitfield(havePieces)
 	go p.sendBitfield()
+	go p.writer()
 	go p.reader()
 
 	for {
@@ -1110,7 +1058,8 @@ func (p *Peer) Run() {
 			}
 
 		case <-p.t.Dying():
-			//p.peerManagerChans.deadPeer <- p.peerName
+			p.conn.Close()
+			p.peerManagerChans.deadPeer <- p.peerName
 			return
 		}
 	}

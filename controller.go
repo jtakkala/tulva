@@ -148,19 +148,19 @@ func (cont *Controller) updateCompletedFlagIfFinished(initializing bool) {
 	}
 	cont.downloadComplete = true
 	if initializing {
-		log.Printf("The full file was previously downloaded. The file will be seeded.")
+		log.Println("The full file was previously downloaded. The file will be seeded.")
 	} else {
-		log.Printf("")
-		log.Printf("")
-		log.Printf("**********************************************************************")
-		log.Printf("*--------------------------------------------------------------------*")
-		log.Printf("*------------ The last piece just finished downloading. -------------*")
-		log.Printf("*--------------------------------------------------------------------*")
-		log.Printf("*-------------------- The file will be seeded. ----------------------*")
-		log.Printf("*--------------------------------------------------------------------*")
-		log.Printf("**********************************************************************")
-		log.Printf("")
-		log.Printf("")
+		log.Println("")
+		log.Println("")
+		log.Println("**********************************************************************")
+		log.Println("*--------------------------------------------------------------------*")
+		log.Println("*------------ The last piece just finished downloading. -------------*")
+		log.Println("*--------------------------------------------------------------------*")
+		log.Println("*-------------------- The file will be seeded. ----------------------*")
+		log.Println("*--------------------------------------------------------------------*")
+		log.Println("**********************************************************************")
+		log.Println("")
+		log.Println("")
 	}
 }
 
