@@ -91,12 +91,13 @@ func NewControllerDiskIOChans() *ControllerDiskIOChans {
 }
 
 type ControllerPeerManagerChans struct {
-	newPeer  chan PeerComms // Other end is the PeerManager
-	deadPeer chan string    // Other end is the PeerManager
+	newPeer  chan PeerComms
+	deadPeer chan string
+	seeding  chan bool // Note this is a TRANSMIT chan unlike all other chans in ControllerRxChans
 }
 
 func NewControllerPeerManagerChans() *ControllerPeerManagerChans {
-	return &ControllerPeerManagerChans{newPeer: make(chan PeerComms), deadPeer: make(chan string)}
+	return &ControllerPeerManagerChans{newPeer: make(chan PeerComms), deadPeer: make(chan string), seeding: make(chan bool)}
 }
 
 type PeerControllerChans struct {
@@ -147,6 +148,9 @@ func (cont *Controller) updateCompletedFlagIfFinished(initializing bool) {
 		}
 	}
 	cont.downloadComplete = true
+	go func() {
+		cont.rxChans.peerManager.seeding <- true
+	}()
 		log.Println("")
 		log.Println("")
 		log.Println("**********************************************************************")

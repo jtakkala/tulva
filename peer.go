@@ -64,7 +64,7 @@ type Peer struct {
 	infoHash         []byte
 	pieceLength      int
 	sendChan         chan []byte
-	totalLength	 int
+	totalLength	     int
 	currentDownload  *PieceDownload
 	nextDownload     *PieceDownload
 	diskIOChans      diskIOPeerChans
@@ -125,6 +125,7 @@ type PeerManager struct {
 	numPieces     int
 	pieceLength   int
 	totalLength   int
+	seeding		  bool
 	peerChans     peerManagerChans
 	serverChans   serverPeerChans
 	trackerChans  trackerPeerChans
@@ -223,10 +224,12 @@ func NewPeerManager(infoHash []byte, numPieces int, pieceLength int, totalLength
 	pm.diskIOChans = diskIOChans
 	pm.serverChans = serverChans
 	pm.trackerChans = trackerChans
+	pm.seeding = false
 	pm.peerChans.deadPeer = make(chan string)
 	pm.peers = make(map[string]*Peer)
 	pm.contChans.newPeer = make(chan PeerComms)
 	pm.contChans.deadPeer = make(chan string)
+	pm.contChans.seeding = make(chan bool)
 	pm.peerContChans.chokeStatus = make(chan PeerChokeStatus)
 	pm.peerContChans.havePiece = make(chan chan HavePiece)
 	return pm
@@ -234,7 +237,7 @@ func NewPeerManager(infoHash []byte, numPieces int, pieceLength int, totalLength
 
 func connectToPeer(peerTuple PeerTuple, connCh chan *net.TCPConn) {
 	raddr := net.TCPAddr{peerTuple.IP, int(peerTuple.Port), ""}
-	log.Println("Connecting to", raddr)
+	log.Println("Peer : Connecting to", raddr)
 	conn, err := net.DialTCP("tcp4", nil, &raddr)
 	if err != nil {
 		log.Println("Peer : connectToPeer : ERROR-",err)
@@ -1085,34 +1088,45 @@ func (pm *PeerManager) Run() {
 	for {
 		select {
 		case peer := <-pm.trackerChans.peers:
-			peerName := fmt.Sprintf("%s:%d", peer.IP.String(), peer.Port)
-			_, ok := pm.peers[peerName]
-			if !ok {
-				// FIXME Code in this block is duplicated below
+			select {
+			case finished := <- pm.contChans.seeding:
+				if !finished {
+					log.Fatalf("PeerManager : Unexpectedly received a false over the seeding channel.")
+				} else {
+					pm.seeding = true
+				}
+			default:
+			}
+			if !pm.seeding {
+				peerName := fmt.Sprintf("%s:%d", peer.IP.String(), peer.Port)
+				_, ok := pm.peers[peerName]
+				if !ok {
+					// FIXME Code in this block is duplicated below
 
-				// Create the Controller->Peer chans struct
-				contTxChans := *NewControllerPeerChans()
+					// Create the Controller->Peer chans struct
+					contTxChans := *NewControllerPeerChans()
 
-				// Construct the Peer object
-				pm.peers[peerName] = NewPeer(
-					peerName,
-					pm.infoHash,
-					pm.numPieces,
-					pm.pieceLength,
-					pm.totalLength,
-					pm.diskIOChans,
-					contTxChans,
-					pm.peerContChans)
+					// Construct the Peer object
+					pm.peers[peerName] = NewPeer(
+						peerName,
+						pm.infoHash,
+						pm.numPieces,
+						pm.pieceLength,
+						pm.totalLength,
+						pm.diskIOChans,
+						contTxChans,
+						pm.peerContChans)
 
-				// Give the controller the channels that it will use to
-				// transmit messages to this new peer
-				go func() {
-					pm.contChans.newPeer <- PeerComms{peerName: peerName, chans: contTxChans}
-				}()
+					// Give the controller the channels that it will use to
+					// transmit messages to this new peer
+					go func() {
+						pm.contChans.newPeer <- PeerComms{peerName: peerName, chans: contTxChans}
+					}()
 
-				// Have the 'peer' routine create an outbound
-				// TCP connection to the remote peer
-				go connectToPeer(peer, pm.serverChans.conns)
+					// Have the 'peer' routine create an outbound
+					// TCP connection to the remote peer
+					go connectToPeer(peer, pm.serverChans.conns)
+				}
 			}
 		case conn := <-pm.serverChans.conns:
 			_, ok := pm.peers[conn.RemoteAddr().String()]
