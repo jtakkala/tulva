@@ -97,10 +97,9 @@ func ParseTorrentFile(filename string) (torrent Torrent, err error) {
 		return
 	}
 
-	// Print a summary about the torrent file
 	log.Printf("Parse : ParseTorrentFile : Successfully parsed %s", filename)
-	log.Printf("Parse : ParseTorrentFile : Determined that %d pieces exist in the torrent", (len(torrent.metaInfo.Info.Pieces) / 20))
-
+	log.Printf("Parse : ParseTorrentFile : The length of each piece is %d", torrent.metaInfo.Info.PieceLength)
+	
 	return
 }
 
@@ -142,16 +141,23 @@ func (t *Torrent) Run() {
 
 	go diskIO.Run()
 
-	var totalLength int
+	totalLength := 0
+	numFiles := 0
 	if t.metaInfo.Info.Length != 0 {
 		// There is a single file
 		totalLength = t.metaInfo.Info.Length
+		numFiles = 1
 	} else {
 		// There are multiple files
 		for i := 0; i < len(t.metaInfo.Info.Files); i++ {
 			totalLength += t.metaInfo.Info.Files[i].Length
+			numFiles += 1
 		}
 	}
+
+	log.Printf("Torrent : Run : The torrent contains %d file(s), which are split across %d pieces", numFiles, (len(t.metaInfo.Info.Pieces) / 20))
+	log.Printf("Torrent : Run : The total length of all file(s) is %d", totalLength)
+
 
 	server := NewServer()
 	trackerManager := NewTrackerManager(server.Port)
