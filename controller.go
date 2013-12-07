@@ -147,21 +147,21 @@ func (cont *Controller) updateCompletedFlagIfFinished(initializing bool) {
 		}
 	}
 	cont.downloadComplete = true
-	if initializing {
-		log.Println("The full file was previously downloaded. The file will be seeded.")
-	} else {
 		log.Println("")
 		log.Println("")
 		log.Println("**********************************************************************")
 		log.Println("*--------------------------------------------------------------------*")
+	if initializing {
+		log.Println("*------------- The full file was previously downloaded. -------------*")
+	} else {
 		log.Println("*------------ The last piece just finished downloading. -------------*")
+	}
 		log.Println("*--------------------------------------------------------------------*")
 		log.Println("*-------------------- The file will be seeded. ----------------------*")
 		log.Println("*--------------------------------------------------------------------*")
 		log.Println("**********************************************************************")
 		log.Println("")
 		log.Println("")
-	}
 }
 
 func (cont *Controller) Stop() error {
