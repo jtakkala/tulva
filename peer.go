@@ -821,13 +821,13 @@ func (p *Peer) sendRequest(pieceNum int, begin int, length int) {
 func (p *Peer) expectedLengthForBlock(pieceNum int, blockNum int) int {
 	if pieceNum == (len(p.ourBitfield) - 1) {
 		// This is the last piece. Check to see if it's the last block
-		lastPieceLength := p.totalLength % p.pieceLength
+		lastPieceLength := p.expectedLengthForPiece(pieceNum)
 
 		if ((blockNum * downloadBlockSize) + downloadBlockSize) > lastPieceLength {
 			// This is the last block of the last piece
 			return (p.totalLength % p.pieceLength) % downloadBlockSize
 		} else {
-			// This is the last piece, but not the last block. 
+			// This is the last piece, but not the last block.  
 			return downloadBlockSize
 		}
 	} else {
@@ -839,7 +839,14 @@ func (p *Peer) expectedLengthForBlock(pieceNum int, blockNum int) int {
 func (p *Peer) expectedLengthForPiece(pieceNum int) int {
 	if pieceNum == (len(p.ourBitfield) - 1) {
 		// This is the last piece
-		return p.totalLength % p.pieceLength
+		pieceLength := p.totalLength % p.pieceLength
+		if pieceLength == 0 {
+			// The last piece of this torrent is the same size as every other piece
+			return p.pieceLength
+		} else {
+			// The last piece is smaller than the other pieces. 
+			return pieceLength
+		}
 	} else {
 		// this is not the last piece
 		return p.pieceLength
@@ -849,8 +856,12 @@ func (p *Peer) expectedLengthForPiece(pieceNum int) int {
 func (p *Peer) expectedNumBlocksForPiece(pieceNum int) int {
 	if pieceNum == (len(p.ourBitfield) - 1) {
 		// This is the last piece
-		lengthOfLastPiece := p.totalLength % p.pieceLength
-		return (lengthOfLastPiece / downloadBlockSize) + 1
+		lengthOfLastPiece := p.expectedLengthForPiece(pieceNum)
+		if lengthOfLastPiece == p.pieceLength {
+			return p.pieceLength / downloadBlockSize 
+		} else {
+			return (lengthOfLastPiece / downloadBlockSize) + 1
+		}
 	} else {
 		// this is not the last piece
 		return p.pieceLength / downloadBlockSize
