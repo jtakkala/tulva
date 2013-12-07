@@ -441,6 +441,9 @@ func (p *Peer) decodeMessage(payload []byte) {
 		if !p.peerChoking {
 			// We're changing from being unchoked to choked
 			p.peerChoking = true
+			// Clear out any unfinished work
+			p.currentDownload = nil
+			p.nextDownload = nil
 			// Tell the controller that we've switched from unchoked to choked
 			go func() {
 				p.contTxChans.chokeStatus <- PeerChokeStatus{peerName: p.peerName, isChoked: true}
