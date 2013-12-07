@@ -17,7 +17,7 @@ import (
 	"reflect"
 	"sort"
 	"sync"
-	"syscall"
+	//"syscall"
 	"time"
 )
 
@@ -237,19 +237,22 @@ func connectToPeer(peerTuple PeerTuple, connCh chan *net.TCPConn) {
 	log.Println("Connecting to", raddr)
 	conn, err := net.DialTCP("tcp4", nil, &raddr)
 	if err != nil {
-		if e, ok := err.(*net.OpError); ok {
-			if e.Err == syscall.ECONNREFUSED {
-				log.Println("Peer : connectToPeer : ", raddr, err)
-				return
-			}
-			if e.Err == syscall.ETIMEDOUT {
-				log.Println("Peer : connectToPeer : ", raddr, err)
-				return
-			}
-		}
-		log.Fatal("Peer : connectToPeer : ", raddr, err)
+		log.Println("Peer : connectToPeer : ERROR-",err)
+		return
+
+ 	//	if e, ok := err.(*net.OpError); ok {
+	//		if e.Err == syscall.ECONNREFUSED {
+	//			log.Println("Peer : connectToPeer : ", raddr, err)
+	//			return
+	//		}
+	//		if e.Err == syscall.ETIMEDOUT {
+	//			log.Println("Peer : connectToPeer : ", raddr, err)
+	//			return
+	//		}
+	//	}
+	//	log.Fatal("Peer : connectToPeer : ", raddr, err)
 	}
-	log.Println("Peer : connectToPeer : Connected:", raddr)
+	log.Println("Peer : connectToPeer : Connected to", raddr)
 	connCh <- conn
 }
 
