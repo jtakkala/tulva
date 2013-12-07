@@ -39,7 +39,7 @@ const (
 
 const (
 	downloadBlockSize             = 16384
-	maxSimultaneousBlockDownloads = 5
+	maxSimultaneousBlockDownloads = 20
 )
 
 // PeerTuple represents a single IP+port pair of a peer
