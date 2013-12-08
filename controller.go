@@ -511,11 +511,13 @@ func (cont *Controller) Run() {
 
 		case peerName := <-cont.rxChans.peerManager.deadPeer:
 
-			_, exists := cont.peers[peerName]
+			peerInfo, exists := cont.peers[peerName]
 
 			if !exists {
 				log.Fatalf("Controller : Run (Dead Peer) : Was told that %s is dead, but that peer doesn't exist in the mapping", peerName)
 			}
+
+			cont.removeUnfinishedWorkForPeer(peerInfo)
 
 			delete(cont.peers, peerName)
 
