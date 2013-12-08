@@ -548,7 +548,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 		expectedBlockSize := p.expectedLengthForBlock(pieceNum, blockNum)
 
 		if p.currentDownload == nil && p.nextDownload == nil {
-			log.Printf("WARNING: Received a Block (Piece) message from %s but there aren't any current or next downloads", p.peerName)
+			log.Printf("WARNING: Received piece %d:%d from %s but there aren't any current or next downloads", pieceNum, begin, p.peerName)
 			return
 		} else if begin%downloadBlockSize != 0 {
 			log.Fatalf("Received a Block (Piece) message from %s with an invalid begin value of %d", p.peerName, begin)
@@ -667,6 +667,7 @@ func (p *Peer) reader() {
 		p.stats.addRead(n)
 
 		log.Printf("Peer (%s) read %d bytes", p.peerName, n + 4)
+		// TODO: Use a goroutine here when calling decodeMessage?
 		p.decodeMessage(payload)
 	}
 }
