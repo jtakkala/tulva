@@ -179,7 +179,7 @@ func (cont *Controller) sendHaveToPeersWhoNeedPiece(pieceNum int) {
 		if !peerInfo.availablePieces[pieceNum] {
 
 			// This peer doesn't have the piece that we just finished. Send them a HAVE message.
-			log.Printf("Controller : sendHaveToPeersWhoNeedPiece : Sending HAVE to %s for piece %d", peerInfo.peerName, pieceNum)
+			log.Printf("Controller : sendHaveToPeersWhoNeedPiece : Sending HAVE to %s for piece %x", peerInfo.peerName, pieceNum)
 
 			haveMessage := new(HavePiece)
 
@@ -218,7 +218,7 @@ func (cont *Controller) removePieceFromActiveRequests(piece ReceivedPiece) {
 		for peerName, peerInfo := range cont.peers {
 			if _, exists := peerInfo.activeRequests[piece.pieceNum]; exists {
 				// This peer was also working on the same piece
-				log.Printf("Controller : removePieceFromActiveRequests : %s was also working on piece %d which is finished. Sending a CANCEL", peerName, piece.pieceNum)
+				log.Printf("Controller : removePieceFromActiveRequests : %s was also working on piece %x which is finished. Sending a CANCEL", peerName, piece.pieceNum)
 
 				// Remove this piece from the peer's activeRequests set
 				delete(peerInfo.activeRequests, piece.pieceNum)
@@ -237,12 +237,12 @@ func (cont *Controller) removePieceFromActiveRequests(piece ReceivedPiece) {
 
 		stuckRequests := cont.activeRequestsTotals[piece.pieceNum]
 		if stuckRequests != 0 {
-			log.Fatalf("Controller : removePieceFromActiveRequests : Somehow there are %d stuck requests for piece number %d", stuckRequests, piece.pieceNum)
+			log.Fatalf("Controller : removePieceFromActiveRequests : Somehow there are %d stuck requests for piece %x", stuckRequests, piece.pieceNum)
 		}
 
 	} else {
 		// The peer just finished this piece, but it wasn't in its active request list
-		log.Printf("Controller : removePieceFromActiveRequests : %s finished piece %d, but that piece wasn't in its active request list", piece.peerName, piece.pieceNum)
+		log.Printf("Controller : removePieceFromActiveRequests : %s finished piece %x, but that piece wasn't in its active request list", piece.peerName, piece.pieceNum)
 	}
 }
 
@@ -384,7 +384,7 @@ func (cont *Controller) sendRequestsToPeer(peerInfo *PeerInfo, raritySlice []int
 				requestMessage := new(RequestPiece)
 				requestMessage.pieceNum = pieceNum
 				requestMessage.expectedHash = cont.pieceHashes[pieceNum]
-				log.Printf("Controller : SendRequestsToPeer : Requesting %s to get pieceNum %d", peerInfo.peerName, pieceNum)
+				log.Printf("Controller : SendRequestsToPeer : Requesting %s to get piece %x", peerInfo.peerName, pieceNum)
 				go func() { peerInfo.chans.requestPiece <- *requestMessage }()
 
 				// Add this pieceNum to the set of pieces that this peer is working on
@@ -444,11 +444,11 @@ func (cont *Controller) Run() {
 			_, exists := cont.peers[piece.peerName]
 
 			if !exists {
-				log.Printf("Controller : Run (Received Piece) : WARNING. Was notified that %s finished downloading %d, but it doesn't currently exist in the peers mapping.", piece.peerName, piece.pieceNum)
+				log.Printf("Controller : Run (Received Piece) : WARNING. Was notified that %s finished downloading piece %x, but it doesn't currently exist in the peers mapping.", piece.peerName, piece.pieceNum)
 			} else if !cont.peers[piece.peerName].isChoked {
-				log.Printf("Controller : Run (Received Piece) : %s finished downloading piece number %d", piece.peerName, piece.pieceNum)
+				log.Printf("Controller : Run (Received Piece) : %s finished downloading piece %x", piece.peerName, piece.pieceNum)
 			} else {
-				log.Printf("Controller : Run (Received Piece) : WARNING. Was notified that %s finished downloading %d but it's currently choked.", piece.peerName, piece.pieceNum)
+				log.Printf("Controller : Run (Received Piece) : WARNING. Was notified that %s finished downloading piece %x but it's currently choked.", piece.peerName, piece.pieceNum)
 			}
 
 			// Update our bitfield to show that we now have that piece

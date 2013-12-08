@@ -161,7 +161,7 @@ func (diskio *DiskIO) writePiece(piece Piece) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		log.Printf("Wrote %d bytes for piece %x at offset %x, file %s\n", n, piece.index, offset, diskio.metaInfo.Info.Name)
+		log.Printf("DiskIO : writePiece: wrote piece %x:%x[%x], file %s\n", piece.index, offset, n, diskio.metaInfo.Info.Name)
 
 	} else {
 		// Multiple file mode
@@ -186,7 +186,7 @@ func (diskio *DiskIO) writePiece(piece Piece) {
 				if err != nil {
 					log.Fatal(err)
 				}
-				log.Printf("Wrote %d bytes for piece %x at offset %x, file %s\n", n, piece.index, offset, diskio.metaInfo.Info.Files[i].Path)
+				log.Printf("DiskIO : writePiece: Wrote piece %x:%x[%x], file %s\n", piece.index, offset, n, diskio.metaInfo.Info.Files[i].Path)
 
 				piece.data = piece.data[maxWriteCurrentFile:]
 				offset = 0
@@ -238,7 +238,7 @@ func (diskio *DiskIO) readBlock(file *os.File, block BlockInfo, offset int64) []
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("Read %d bytes of block %x:%x\n", n, block.pieceIndex, block.begin)
+	log.Printf("DiskIO : readBlock: Read block %x:%x[%x]\n", block.pieceIndex, block.begin, n)
 	return blockData
 }
 

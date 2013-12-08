@@ -496,7 +496,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 
 		// Determine the piece number
 		pieceNum := int(binary.BigEndian.Uint32(payload))
-		log.Printf("Received a Have message for piece %d from %s", pieceNum, p.peerName)
+		log.Printf("Received a Have message for piece %x from %s", pieceNum, p.peerName)
 
 		// Update the local peer bitfield
 		p.peerBitfield[pieceNum] = true
@@ -548,14 +548,14 @@ func (p *Peer) decodeMessage(payload []byte) {
 		expectedBlockSize := p.expectedLengthForBlock(pieceNum, blockNum)
 
 		if p.currentDownload == nil && p.nextDownload == nil {
-			log.Printf("WARNING: Received piece %d:%d from %s but there aren't any current or next downloads", pieceNum, begin, p.peerName)
+			log.Printf("WARNING: Received piece %x:%x from %s but there aren't any current or next downloads", pieceNum, begin, p.peerName)
 			return
 		} else if begin%downloadBlockSize != 0 {
-			log.Fatalf("Received a Block (Piece) message from %s with an invalid begin value of %d", p.peerName, begin)
+			log.Fatalf("Received a Block (Piece) message from %s with an invalid begin value of %x", p.peerName, begin)
 		} else if len(blockData) != expectedBlockSize {
-			log.Fatalf("Received a Block (Piece) message from %s with an invalid block size of %d. Expected %d", p.peerName, len(blockData), expectedBlockSize)
+			log.Fatalf("Received a Block (Piece) message from %s with an invalid block size of %x. Expected %x", p.peerName, len(blockData), expectedBlockSize)
 		} else {
-			log.Printf("Received a Block (Piece) message from %s for piece %d begin %d with %d bytes of block data", p.peerName, pieceNum, begin, len(blockData))
+			log.Printf("Received a Block (Piece) message from %s for piece %x:%x[%x]", p.peerName, pieceNum, begin, len(blockData))
 		}
 
 		var piece *PieceDownload
@@ -566,7 +566,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 			piece = p.nextDownload
 
 		} else {
-			log.Printf("WARNING: The block from %s for piece %d doesn't match the current or next download pieces", p.peerName, pieceNum)
+			log.Printf("WARNING: The block from %s for piece %x doesn't match the current or next download pieces", p.peerName, pieceNum)
 			return
 		}
 
@@ -577,17 +577,17 @@ func (p *Peer) decodeMessage(payload []byte) {
 		piece.numOutstandingBlocks -= 1
 
 		if piece.numBlocksReceived == piece.numBlocksInPiece {
-			log.Printf("Finished downloading all blocks for piece %d from %s", pieceNum, p.peerName)
+			log.Printf("Finished downloading all blocks for piece %x from %s", pieceNum, p.peerName)
 
 			// SHA1 check the entire piece
 			if !checkHash(piece.data, piece.expectedHash) {
 				// The piece received from this peer didn't pass the checksum.
-				log.Printf("ERROR: Checksum for piece %d received from %s did NOT match what's expected. Disconnecting.", pieceNum, p.peerName)
+				log.Printf("ERROR: Checksum for piece %x received from %s did NOT match what's expected. Disconnecting.", pieceNum, p.peerName)
 				p.Stop()
 				return
 			}
 
-			log.Printf("Checksum for piece %d received from %s matches what's expected", pieceNum, p.peerName)
+			log.Printf("Checksum for piece %x received from %s matches what's expected", pieceNum, p.peerName)
 			// If this is currentDownload (likely), move nextDownload to currentDownload
 			if piece.pieceNum == p.currentDownload.pieceNum {
 				// since currentDownload is finished, overwrite the reference of currentDownload
@@ -616,7 +616,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 		pieceIndex := binary.BigEndian.Uint32(payload[0:4])
 		begin := binary.BigEndian.Uint32(payload[4:8])
 		length := binary.BigEndian.Uint32(payload[8:12])
-		log.Printf("Received a Cancel message for piece %d, begin %x, length %x from %s", pieceIndex, begin, length, p.peerName)
+		log.Printf("Received a Cancel message for piece %x:%x[%x] from %s", pieceIndex, begin, length, p.peerName)
 	case MsgPort:
 		log.Printf("Ignoring a Port message that was received from %s", p.peerName)
 	}
@@ -792,7 +792,7 @@ func (p *Peer) sendNotInterested() {
 }
 
 func (p *Peer) sendHave(pieceNum int) {
-	log.Printf("Peer : sendHave : Sending have to %s for piece %d", p.peerName, pieceNum)
+	log.Printf("Peer : sendHave : Sending have to %s for piece %x", p.peerName, pieceNum)
 	payloadBuffer := new(bytes.Buffer)
 	err := binary.Write(payloadBuffer, binary.BigEndian, uint32(pieceNum))
 	if err != nil {
@@ -808,7 +808,7 @@ func (p *Peer) sendBitfield() {
 }
 
 func (p *Peer) sendRequest(pieceNum int, begin int, length int) {
-	log.Printf("Peer : sendRequest : Sending Request to %s for piece %d with begin %d and length %d", p.peerName, pieceNum, begin, length)
+	log.Printf("Peer : sendRequest : Sending Request to %s for piece %x:%x[%x]", p.peerName, pieceNum, begin, length)
 	buffer := new(bytes.Buffer)
 
 	ints := []uint32{uint32(pieceNum), uint32(begin), uint32(length)}
@@ -1037,7 +1037,7 @@ func (p *Peer) Run() {
 		case blockResponse := <-p.blockResponse:
 			go p.sendBlock(blockResponse.info.pieceIndex, blockResponse.info.begin, blockResponse.data)
 		case requestPiece := <-p.contRxChans.requestPiece:
-			log.Printf("Peer : Run : Controller told %s to get piece number %d", p.peerName, requestPiece.pieceNum)
+			log.Printf("Peer : Run : Controller told %s to get piece %x", p.peerName, requestPiece.pieceNum)
 
 			// check to see if we're currently downloading another piece. If so, then there's a
 			// bug because the controller should only ask us to download one at a time.
@@ -1046,7 +1046,7 @@ func (p *Peer) Run() {
 				case cancelPiece := <-p.contRxChans.cancelPiece:
 					p.processCancelFromController(cancelPiece)
 				default:
-					log.Fatalf("Peer : Run : %s was told to download piece %d, but we're already downloading two pieces", p.peerName, requestPiece.pieceNum)
+					log.Fatalf("Peer : Run : %s was told to download piece %x, but we're already downloading two pieces", p.peerName, requestPiece.pieceNum)
 				}
 			}
 
