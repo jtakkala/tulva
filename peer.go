@@ -717,15 +717,15 @@ func (p *Peer) writer() {
 	for {
 		select {
 		case message := <-p.sendChan:
-			err := binary.Write(p.conn, binary.BigEndian, message)
+			n, err := p.conn.Write(message)
 			if err != nil {
-				log.Printf("Peer (%s) error in writer() doing binary.Write(): %s", p.peerName, err)
+				log.Printf("Peer (%s) error in writer() doing Write(): %s", p.peerName, err)
 				p.Stop()
 				return
 			}
 			p.lastTxMessage = time.Now()
-			p.stats.addWrite(len(message))
-			log.Printf("Peer (%s) wrote %d bytes", p.peerName, len(message))
+			p.stats.addWrite(n)
+			log.Printf("Peer (%s) wrote %d bytes", p.peerName, n)
 		}
 	}
 }
