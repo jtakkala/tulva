@@ -667,8 +667,7 @@ func (p *Peer) reader() {
 		p.stats.addRead(n)
 
 		log.Printf("Peer (%s) read %d bytes", p.peerName, n + 4)
-		// TODO: Use a goroutine here when calling decodeMessage?
-		p.decodeMessage(payload)
+		go p.decodeMessage(payload)
 	}
 }
 
