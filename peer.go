@@ -267,7 +267,8 @@ func NewPeer(
 	totalLength int,
 	diskIOChans diskIOPeerChans,
 	contRxChans ControllerPeerChans,
-	contTxChans PeerControllerChans) *Peer {
+	contTxChans PeerControllerChans,
+	peerManagerChans peerManagerChans) *Peer {
 	p := &Peer{
 		peerName:       peerName,
 		infoHash:       infoHash,
@@ -286,7 +287,8 @@ func NewPeer(
 		diskIOChans:    diskIOChans,
 		blockResponse:  make(chan BlockResponse),
 		contRxChans:    contRxChans,
-		contTxChans:    contTxChans}
+		contTxChans:    contTxChans,
+		peerManagerChans: peerManagerChans}
 	return p
 }
 
@@ -1126,7 +1128,8 @@ func (pm *PeerManager) Run() {
 						pm.totalLength,
 						pm.diskIOChans,
 						contTxChans,
-						pm.peerContChans)
+						pm.peerContChans,
+						pm.peerChans)
 
 					// Give the controller the channels that it will use to
 					// transmit messages to this new peer
@@ -1155,7 +1158,8 @@ func (pm *PeerManager) Run() {
 					pm.totalLength,
 					pm.diskIOChans,
 					contTxChans,
-					pm.peerContChans)
+					pm.peerContChans,
+					pm.peerChans)
 
 				// Give the controller the channels that it will use to
 				// transmit messages to this new peer
