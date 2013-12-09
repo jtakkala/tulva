@@ -1038,8 +1038,7 @@ func (p *Peer) Run() {
 		case requestPiece := <-p.contRxChans.requestPiece:
 			log.Printf("Peer : Run : Controller told %s to get piece %x", p.peerName, requestPiece.pieceNum)
 
-			// check to see if we're currently downloading another piece. If so, then there's a
-			// bug because the controller should only ask us to download one at a time.
+			// check to see if we're currently downloading another piece. 
 			if p.nextDownload != nil {
 				select {
 				case cancelPiece := <-p.contRxChans.cancelPiece:
