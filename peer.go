@@ -545,15 +545,14 @@ func (p *Peer) decodeMessage(payload []byte) {
 		blockData := payload[8:]
 
 		blockNum := begin / downloadBlockSize
-		expectedBlockSize := p.expectedLengthForBlock(pieceNum, blockNum)
 
 		if p.currentDownload == nil && p.nextDownload == nil {
 			log.Printf("WARNING: Received piece %x:%x from %s but there aren't any current or next downloads", pieceNum, begin, p.peerName)
 			return
 		} else if begin%downloadBlockSize != 0 {
 			log.Fatalf("Received a Block (Piece) message from %s with an invalid begin value of %x", p.peerName, begin)
-		} else if len(blockData) != expectedBlockSize {
-			log.Fatalf("Received a Block (Piece) message from %s with an invalid block size of %x. Expected %x", p.peerName, len(blockData), expectedBlockSize)
+		} else if len(blockData) != p.expectedLengthForBlock(pieceNum, blockNum) {
+			log.Fatalf("Received a Block (Piece) message from %s with an invalid block size of %x. Expected %x", p.peerName, len(blockData), p.expectedLengthForBlock(pieceNum, blockNum))
 		} else {
 			log.Printf("Received a Block (Piece) message from %s for piece %x:%x[%x]", p.peerName, pieceNum, begin, len(blockData))
 		}
@@ -561,10 +560,8 @@ func (p *Peer) decodeMessage(payload []byte) {
 		var piece *PieceDownload
 		if p.currentDownload.pieceNum == pieceNum {
 			piece = p.currentDownload
-
 		} else if p.nextDownload != nil && p.nextDownload.pieceNum == pieceNum {
 			piece = p.nextDownload
-
 		} else {
 			log.Printf("WARNING: The block from %s for piece %x doesn't match the current or next download pieces", p.peerName, pieceNum)
 			return
