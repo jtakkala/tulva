@@ -240,20 +240,8 @@ func connectToPeer(peerTuple PeerTuple, connCh chan *net.TCPConn) {
 	log.Println("Peer : Connecting to", raddr)
 	conn, err := net.DialTCP("tcp4", nil, &raddr)
 	if err != nil {
-		log.Println("Peer : connectToPeer : ERROR-",err)
+		log.Println("Peer : connectToPeer :", err)
 		return
-
- 	//	if e, ok := err.(*net.OpError); ok {
-	//		if e.Err == syscall.ECONNREFUSED {
-	//			log.Println("Peer : connectToPeer : ", raddr, err)
-	//			return
-	//		}
-	//		if e.Err == syscall.ETIMEDOUT {
-	//			log.Println("Peer : connectToPeer : ", raddr, err)
-	//			return
-	//		}
-	//	}
-	//	log.Fatal("Peer : connectToPeer : ", raddr, err)
 	}
 	log.Println("Peer : connectToPeer : Connected to", raddr)
 	connCh <- conn
@@ -1109,31 +1097,6 @@ func (pm *PeerManager) Run() {
 				peerName := fmt.Sprintf("%s:%d", peer.IP.String(), peer.Port)
 				_, ok := pm.peers[peerName]
 				if !ok {
-					// FIXME Code in this block is duplicated below
-
-					// Create the Controller->Peer chans struct
-					contTxChans := *NewControllerPeerChans()
-
-					// Construct the Peer object
-					pm.peers[peerName] = NewPeer(
-						peerName,
-						pm.infoHash,
-						pm.numPieces,
-						pm.pieceLength,
-						pm.totalLength,
-						pm.diskIOChans,
-						contTxChans,
-						pm.peerContChans,
-						pm.peerChans)
-
-					// Give the controller the channels that it will use to
-					// transmit messages to this new peer
-					go func() {
-						pm.contChans.newPeer <- PeerComms{peerName: peerName, chans: contTxChans}
-					}()
-
-					// Have the 'peer' routine create an outbound
-					// TCP connection to the remote peer
 					go connectToPeer(peer, pm.serverChans.conns)
 				}
 			}
