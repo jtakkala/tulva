@@ -242,20 +242,8 @@ func connectToPeer(peerTuple PeerTuple, connCh chan *net.TCPConn) {
 	log.Println("Peer : Connecting to", raddr)
 	conn, err := net.DialTCP("tcp4", nil, &raddr)
 	if err != nil {
-		log.Println("Peer : connectToPeer : ERROR-",err)
+		log.Println("Peer : connectToPeer :", err)
 		return
-
- 	//	if e, ok := err.(*net.OpError); ok {
-	//		if e.Err == syscall.ECONNREFUSED {
-	//			log.Println("Peer : connectToPeer : ", raddr, err)
-	//			return
-	//		}
-	//		if e.Err == syscall.ETIMEDOUT {
-	//			log.Println("Peer : connectToPeer : ", raddr, err)
-	//			return
-	//		}
-	//	}
-	//	log.Fatal("Peer : connectToPeer : ", raddr, err)
 	}
 	log.Println("Peer : connectToPeer : Connected to", raddr)
 	connCh <- conn
@@ -551,15 +539,14 @@ func (p *Peer) decodeMessage(payload []byte) {
 		blockData := payload[8:]
 
 		blockNum := begin / downloadBlockSize
-		expectedBlockSize := p.expectedLengthForBlock(pieceNum, blockNum)
 
 		if p.currentDownload.isFinished && p.nextDownload.isFinished {
 			log.Printf("WARNING: Received piece %x:%x from %s but there aren't any current or next downloads", pieceNum, begin, p.peerName)
 			return
 		} else if begin%downloadBlockSize != 0 {
 			log.Fatalf("Received a Block (Piece) message from %s with an invalid begin value of %x", p.peerName, begin)
-		} else if len(blockData) != expectedBlockSize {
-			log.Fatalf("Received a Block (Piece) message from %s with an invalid block size of %x. Expected %x", p.peerName, len(blockData), expectedBlockSize)
+		} else if len(blockData) != p.expectedLengthForBlock(pieceNum, blockNum) {
+			log.Fatalf("Received a Block (Piece) message from %s with an invalid block size of %x. Expected %x", p.peerName, len(blockData), p.expectedLengthForBlock(pieceNum, blockNum))
 		} else {
 			log.Printf("Received a Block (Piece) message from %s for piece %x:%x[%x]", p.peerName, pieceNum, begin, len(blockData))
 		}
@@ -567,10 +554,13 @@ func (p *Peer) decodeMessage(payload []byte) {
 		var piece *PieceDownload
 		if !p.currentDownload.isFinished && p.currentDownload.pieceNum == pieceNum {
 			piece = p.currentDownload
+<<<<<<< HEAD
 
 		} else if !p.nextDownload.isFinished && p.nextDownload.pieceNum == pieceNum {
+=======
+		} else if p.nextDownload != nil && p.nextDownload.pieceNum == pieceNum {
+>>>>>>> origin/master
 			piece = p.nextDownload
-
 		} else {
 			log.Printf("WARNING: The block from %s for piece %x doesn't match the current or next download pieces", p.peerName, pieceNum)
 			return
