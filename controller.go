@@ -8,6 +8,7 @@ import (
 	"launchpad.net/tomb"
 	"log"
 	"sort"
+	"os"
 )
 
 /*
@@ -166,6 +167,7 @@ func (cont *Controller) updateCompletedFlagIfFinished(initializing bool) {
 		log.Println("**********************************************************************")
 		log.Println("")
 		log.Println("")
+		os.Exit(0)
 }
 
 func (cont *Controller) Stop() error {
