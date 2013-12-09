@@ -1049,11 +1049,10 @@ func (p *Peer) Run() {
 			}
 
 			// Create a new PieceDownload struct for the piece that we're told to download
-			pd := p.newPieceDownload(requestPiece)
 			if p.currentDownload == nil {
-				p.currentDownload = pd
+				p.currentDownload = p.newPieceDownload(requestPiece)
 			} else {
-				p.nextDownload = pd
+				p.nextDownload = p.newPieceDownload(requestPiece)
 			}
 
 			// Send the first set of block requests all at once. When we get response (piece) messages,
