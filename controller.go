@@ -188,6 +188,8 @@ func (cont *Controller) sendHaveToPeersWhoNeedPiece(pieceNum int) {
 			// directly to the peer
 			haveMessage.pieceNum = pieceNum
 
+			go sendHaveToPeer(pieceNum, peerInfo.chans.havePiece)
+			/*
 			go func() {
 				// Create a temporary channel that's sent through the main HavePiece channel
 				innerChan := make(chan HavePiece)
@@ -199,10 +201,16 @@ func (cont *Controller) sendHaveToPeersWhoNeedPiece(pieceNum int) {
 
 				// Close the inner channel indicating to the other side that there are no more pieces
 				close(innerChan)
-			}()
-
+			}()*/
 		}
 	}
+}
+
+func sendHaveToPeer(pieceNum int, outerChan chan chan HavePiece) {
+	innerChan := make(chan HavePiece)
+	outerChan <- innerChan
+	innerChan <- HavePiece{pieceNum: pieceNum}
+	close(innerChan)
 }
 
 func (cont *Controller) removePieceFromActiveRequests(piece ReceivedPiece) {
