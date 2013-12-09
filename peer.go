@@ -82,7 +82,8 @@ type PieceDownload struct {
 	data                 []byte
 	numBlocksReceived    int
 	numOutstandingBlocks int
-	numBlocksInPiece    int
+	numBlocksInPiece     int
+	isFinished			 bool
 }
 
 func (p *Peer) newPieceDownload(requestPiece RequestPiece) *PieceDownload {
@@ -91,6 +92,7 @@ func (p *Peer) newPieceDownload(requestPiece RequestPiece) *PieceDownload {
 	pd.expectedHash = requestPiece.expectedHash
 	pd.data = make([]byte, p.expectedLengthForPiece(requestPiece.pieceNum))
 	pd.numBlocksInPiece = p.expectedNumBlocksForPiece(requestPiece.pieceNum)
+	pd.isFinished = false
 	return pd
 }
 
@@ -289,6 +291,10 @@ func NewPeer(
 		contRxChans:    contRxChans,
 		contTxChans:    contTxChans,
 		peerManagerChans: peerManagerChans}
+	p.currentDownload = p.newPieceDownload(RequestPiece{pieceNum:0})
+	p.currentDownload.isFinished = true
+	p.nextDownload = p.newPieceDownload(RequestPiece{pieceNum:0})
+	p.nextDownload.isFinished = true
 	return p
 }
 
@@ -447,8 +453,8 @@ func (p *Peer) decodeMessage(payload []byte) {
 			// We're changing from being unchoked to choked
 			p.peerChoking = true
 			// Clear out any unfinished work
-			p.currentDownload = nil
-			p.nextDownload = nil
+			p.currentDownload.isFinished = true
+			p.nextDownload.isFinished = true
 			// Tell the controller that we've switched from unchoked to choked
 			go func() {
 				p.contTxChans.chokeStatus <- PeerChokeStatus{peerName: p.peerName, isChoked: true}
@@ -547,7 +553,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 		blockNum := begin / downloadBlockSize
 		expectedBlockSize := p.expectedLengthForBlock(pieceNum, blockNum)
 
-		if p.currentDownload == nil && p.nextDownload == nil {
+		if p.currentDownload.isFinished && p.nextDownload.isFinished {
 			log.Printf("WARNING: Received piece %x:%x from %s but there aren't any current or next downloads", pieceNum, begin, p.peerName)
 			return
 		} else if begin%downloadBlockSize != 0 {
@@ -559,10 +565,10 @@ func (p *Peer) decodeMessage(payload []byte) {
 		}
 
 		var piece *PieceDownload
-		if p.currentDownload.pieceNum == pieceNum {
+		if !p.currentDownload.isFinished && p.currentDownload.pieceNum == pieceNum {
 			piece = p.currentDownload
 
-		} else if p.nextDownload != nil && p.nextDownload.pieceNum == pieceNum {
+		} else if !p.nextDownload.isFinished && p.nextDownload.pieceNum == pieceNum {
 			piece = p.nextDownload
 
 		} else {
@@ -590,21 +596,24 @@ func (p *Peer) decodeMessage(payload []byte) {
 			log.Printf("Checksum for piece %x received from %s matches what's expected", pieceNum, p.peerName)
 			// If this is currentDownload (likely), move nextDownload to currentDownload
 			if piece.pieceNum == p.currentDownload.pieceNum {
-				// since currentDownload is finished, overwrite the reference of currentDownload
-				// with nextDownload
+				p.currentDownload.isFinished = true
+				tmp := p.currentDownload
 				p.currentDownload = p.nextDownload
+				p.nextDownload = tmp
+			} else {
+				p.nextDownload.isFinished = true
 			}
 
 			// We've either finished the currentDownload and copied the reference of nextDownload
 			// to currentDownload, or we finished nextDownload. In either case, we want to nil out
 			// the reference of nextDownload
-			p.nextDownload = nil
+			//p.nextDownload = nil
 
-			go p.sendFinishedPieceToDiskIO(pieceNum, piece.data)
+			p.sendFinishedPieceToDiskIO(pieceNum, piece.data)
 
 			// if nextDownload was previosly nil, then currentDownload will now be nil, because we
 			// copied the reference from nextDownload to currentDownload.
-			if p.currentDownload == nil {
+			if p.currentDownload.isFinished && p.nextDownload.isFinished {
 				log.Printf("Peer %s has no active or next pieces. It will be idle until given more pieces to download", p.peerName)
 				return
 			}
@@ -880,7 +889,7 @@ func (p *Peer) sendOneOrMoreRequests() {
 	for {
 
 		numOutstandingBlocks := p.currentDownload.numOutstandingBlocks
-		if p.nextDownload != nil {
+		if !p.nextDownload.isFinished {
 			numOutstandingBlocks += p.nextDownload.numOutstandingBlocks
 		}
 
@@ -906,7 +915,7 @@ func (p *Peer) sendOneOrMoreRequests() {
 
 			} else {
 				// There are no more requests to send for the currentDownload piece
-				if p.nextDownload == nil {
+				if p.nextDownload.isFinished {
 					break // we don't have a nextDownload set yet, so we can't send any more at the moment.
 
 				} else {
@@ -986,20 +995,22 @@ func (p *Peer) Stop() error {
 }
 
 func (p *Peer) processCancelFromController(cancelPiece CancelPiece) {
-	if p.currentDownload == nil {
+	if p.currentDownload.isFinished && p.nextDownload.isFinished {
 		log.Printf("Peer : Run : WARNING - Controller told %s to cancel pieceNum %d, but this peer isn't working on anything", p.peerName, cancelPiece.pieceNum)
 	} else if p.currentDownload.pieceNum == cancelPiece.pieceNum {
 		log.Printf("Peer : Run : Controller told %s to cancel pieceNum %d, which is our higher priority download", p.peerName, cancelPiece.pieceNum)
 		// we aren't currently sending actual cancel messages to the peer at this time, so 
 		// we may receive extra blocks for any requests that are outstanding.  
+		p.currentDownload.isFinished = true
+		tmp := p.currentDownload
 		p.currentDownload = p.nextDownload
-		p.nextDownload = nil
+		p.nextDownload = tmp
 
-	} else if p.nextDownload != nil && p.nextDownload.pieceNum == cancelPiece.pieceNum {
+	} else if !p.nextDownload.isFinished && p.nextDownload.pieceNum == cancelPiece.pieceNum {
 		log.Printf("Peer : Run : Controller told %s to cancel pieceNum %d, which is our lower priority download", p.peerName, cancelPiece.pieceNum)
 		// we aren't currently sending actual cancel messages to the peer at this time, so 
 		// we may receive extra blocks for any requests that are outstanding.  
-		p.nextDownload = nil
+		p.nextDownload.isFinished = true
 
 	} else {
 		log.Printf("Peer : Run : WARNING - Controller told %s to cancel pieceNum %d, but this peer isn't working on that piece", p.peerName, cancelPiece.pieceNum)
@@ -1022,6 +1033,8 @@ func (p *Peer) Run() {
 	go p.writer()
 	go p.reader()
 
+	log.Printf("Peer : Run : %s finished initializing reader and writer", p.peerName)
+
 	for {
 		select {
 		case t := <-p.keepalive:
@@ -1039,7 +1052,7 @@ func (p *Peer) Run() {
 			log.Printf("Peer : Run : Controller told %s to get piece %x", p.peerName, requestPiece.pieceNum)
 
 			// check to see if we're currently downloading another piece. 
-			if p.nextDownload != nil {
+			if !p.currentDownload.isFinished && !p.nextDownload.isFinished {
 				select {
 				case cancelPiece := <-p.contRxChans.cancelPiece:
 					p.processCancelFromController(cancelPiece)
@@ -1048,12 +1061,29 @@ func (p *Peer) Run() {
 				}
 			}
 
-			// Create a new PieceDownload struct for the piece that we're told to download
-			pd := p.newPieceDownload(requestPiece)
-			if p.currentDownload == nil {
-				p.currentDownload = pd
+			if p.currentDownload.isFinished {
+				p.currentDownload.isFinished = false
+				p.currentDownload.pieceNum = requestPiece.pieceNum
+				p.currentDownload.expectedHash = requestPiece.expectedHash
+				if len(p.currentDownload.data) != p.expectedLengthForPiece(requestPiece.pieceNum) {
+					log.Printf("REMADE currentDownload for %s. Previous length: %d. New length: %d", p.peerName, len(p.currentDownload.data), p.expectedLengthForPiece(requestPiece.pieceNum))
+					p.currentDownload.data = make([]byte, p.expectedLengthForPiece(requestPiece.pieceNum))
+				}
+				p.currentDownload.numBlocksInPiece = p.expectedNumBlocksForPiece(requestPiece.pieceNum)
+				p.currentDownload.numBlocksReceived = 0
+				p.currentDownload.numOutstandingBlocks = 0
+
 			} else {
-				p.nextDownload = pd
+				p.nextDownload.isFinished = false
+				p.nextDownload.pieceNum = requestPiece.pieceNum
+				p.nextDownload.expectedHash = requestPiece.expectedHash
+				if len(p.nextDownload.data) != p.expectedLengthForPiece(requestPiece.pieceNum) {
+					log.Printf("REMADE currentDownload for %s. Previous length: %d. New length: %d", p.peerName, len(p.currentDownload.data), p.expectedLengthForPiece(requestPiece.pieceNum))
+					p.nextDownload.data = make([]byte, p.expectedLengthForPiece(requestPiece.pieceNum))
+				}
+				p.nextDownload.numBlocksInPiece = p.expectedNumBlocksForPiece(requestPiece.pieceNum)
+				p.nextDownload.numBlocksReceived = 0
+				p.nextDownload.numOutstandingBlocks = 0
 			}
 
 			// Send the first set of block requests all at once. When we get response (piece) messages,
@@ -1064,6 +1094,7 @@ func (p *Peer) Run() {
 			p.processCancelFromController(cancelPiece)
 
 		case innerChan := <-p.contRxChans.havePiece:
+			log.Printf("Peer : %s received a HavePiece innerChan from controller.", p.peerName)
 
 			havePieces := p.receiveHavesFromController(innerChan)
 			p.updateOurBitfield(havePieces)
@@ -1113,29 +1144,6 @@ func (pm *PeerManager) Run() {
 				peerName := fmt.Sprintf("%s:%d", peer.IP.String(), peer.Port)
 				_, ok := pm.peers[peerName]
 				if !ok {
-					// FIXME Code in this block is duplicated below
-
-					// Create the Controller->Peer chans struct
-					contTxChans := *NewControllerPeerChans()
-
-					// Construct the Peer object
-					pm.peers[peerName] = NewPeer(
-						peerName,
-						pm.infoHash,
-						pm.numPieces,
-						pm.pieceLength,
-						pm.totalLength,
-						pm.diskIOChans,
-						contTxChans,
-						pm.peerContChans,
-						pm.peerChans)
-
-					// Give the controller the channels that it will use to
-					// transmit messages to this new peer
-					go func() {
-						pm.contChans.newPeer <- PeerComms{peerName: peerName, chans: contTxChans}
-					}()
-
 					// Have the 'peer' routine create an outbound
 					// TCP connection to the remote peer
 					go connectToPeer(peer, pm.serverChans.conns)
