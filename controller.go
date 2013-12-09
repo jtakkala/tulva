@@ -541,7 +541,8 @@ func (cont *Controller) Run() {
 			peerInfo, exists := cont.peers[chokeStatus.peerName]
 
 			if !exists {
-				log.Fatalf("Controller : Run (Choke Status) : Unable to process PeerChokeStatus from %s because it doesn't exist in the peers mapping")
+				log.Printf("Controller : Run (Choke Status) : WARNING: Unable to process PeerChokeStatus from %s because it doesn't exist in the peers mapping")
+				return
 			}
 
 			peerInfo.isChoked = chokeStatus.isChoked
@@ -577,7 +578,8 @@ func (cont *Controller) Run() {
 				// Update the peers availability slice.
 				peerInfo, exists = cont.peers[piece.peerName]
 				if !exists {
-					log.Fatalf("Controller : Run (Have Piece) : Unable to process HavePiece for %s because the peer doesn't exist in the peers mapping", piece.peerName)
+					log.Printf("Controller : Run (Have Piece) : WARNING: Unable to process HavePiece for %s because the peer doesn't exist in the peers mapping", piece.peerName)
+					return
 				}
 
 				// Mark this peer as having this piece
