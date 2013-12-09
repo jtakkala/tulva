@@ -513,7 +513,9 @@ func (cont *Controller) Run() {
 
 			peerInfo, exists := cont.peers[peerName]
 
-			if !exists {
+			if exists {
+				log.Printf("Controller : Run (Dead Peer) : Deleting peer %s", peerInfo.peerName)
+			} else {
 				log.Fatalf("Controller : Run (Dead Peer) : Was told that %s is dead, but that peer doesn't exist in the mapping", peerName)
 			}
 
