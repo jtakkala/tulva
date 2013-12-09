@@ -554,12 +554,8 @@ func (p *Peer) decodeMessage(payload []byte) {
 		var piece *PieceDownload
 		if !p.currentDownload.isFinished && p.currentDownload.pieceNum == pieceNum {
 			piece = p.currentDownload
-<<<<<<< HEAD
 
 		} else if !p.nextDownload.isFinished && p.nextDownload.pieceNum == pieceNum {
-=======
-		} else if p.nextDownload != nil && p.nextDownload.pieceNum == pieceNum {
->>>>>>> origin/master
 			piece = p.nextDownload
 		} else {
 			log.Printf("WARNING: The block from %s for piece %x doesn't match the current or next download pieces", p.peerName, pieceNum)
