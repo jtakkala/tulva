@@ -11,6 +11,8 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
@@ -37,8 +39,19 @@ func main() {
 	log.Println("main : main : Started")
 	defer log.Println("main : main : Exiting")
 
+	// Launch pprof
 	go func() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
+
+	// Signal handler to catch Ctrl-C and SIGTERM from 'kill' command
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		log.Println("Received Interrupt")
+		t.Stop()
+		os.Exit(1)
 	}()
 
 	// Launch the torrent
