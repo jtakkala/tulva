@@ -551,7 +551,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 		} else if len(blockData) != p.expectedLengthForBlock(pieceNum, blockNum) {
 			log.Fatalf("Received a Block (Piece) message from %s with an invalid block size of %x. Expected %x", p.peerName, len(blockData), p.expectedLengthForBlock(pieceNum, blockNum))
 		} else {
-			log.Printf("Received a Block (Piece) message from %s for piece %x:%x[%x]", p.peerName, pieceNum, begin, len(blockData))
+			//log.Printf("Received a Block (Piece) message from %s for piece %x:%x[%x]", p.peerName, pieceNum, begin, len(blockData))
 		}
 
 		/*
@@ -712,7 +712,7 @@ func (p *Peer) reader() {
 		p.lastRxMessage = time.Now()
 		p.stats.addRead(n)
 
-		log.Printf("Peer (%s) read %d bytes", p.peerName, n + 4)
+		//log.Printf("Peer (%s) read %d bytes", p.peerName, n + 4)
 		go p.decodeMessage(payload)
 	}
 }
@@ -770,7 +770,7 @@ func (p *Peer) writer() {
 			}
 			p.lastTxMessage = time.Now()
 			p.stats.addWrite(n)
-			log.Printf("Peer (%s) wrote %d bytes", p.peerName, n)
+			//log.Printf("Peer (%s) wrote %d bytes", p.peerName, n)
 		}
 	}
 }
