@@ -853,7 +853,7 @@ func (p *Peer) sendBitfield() {
 }
 
 func (p *Peer) sendRequest(pieceNum int, begin int, length int) {
-	log.Printf("Peer : sendRequest : Sending Request to %s for piece %x:%x[%x]", p.peerName, pieceNum, begin, length)
+	//log.Printf("Peer : sendRequest : Sending Request to %s for piece %x:%x[%x]", p.peerName, pieceNum, begin, length)
 	buffer := new(bytes.Buffer)
 
 	ints := []uint32{uint32(pieceNum), uint32(begin), uint32(length)}
