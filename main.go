@@ -8,8 +8,8 @@ import (
 	//"errors"
 	"log"
 	"math/rand"
-	"net/http"
-	_ "net/http/pprof"
+	//"net/http"
+	//_ "net/http/pprof"
 	"os"
 	"time"
 )
@@ -37,9 +37,11 @@ func main() {
 	log.Println("main : main : Started")
 	defer log.Println("main : main : Exiting")
 
+	/*
 	go func() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
+	*/
 
 	// Launch the torrent
 	t.Run()
