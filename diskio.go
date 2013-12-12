@@ -6,8 +6,8 @@ package main
 
 import (
 	"bytes"
-	"crypto/sha1"
 	"fmt"
+	"crypto/sha1"
 	"io"
 	"launchpad.net/tomb"
 	"log"
@@ -98,6 +98,7 @@ func (diskio *DiskIO) Verify() []bool {
 			if err != nil {
 				if err == io.EOF {
 					// Reached EOF
+					fmt.Printf("\n")
 					break
 				}
 				log.Fatal(err)
@@ -116,7 +117,7 @@ func (diskio *DiskIO) Verify() []bool {
 			finishedPieces[(pieceIndex / 20)] = diskio.checkHash(buf[:n], pieceIndex)
 		}
 	}
-	fmt.Println()
+	log.Println()
 
 	return finishedPieces
 }
@@ -284,7 +285,7 @@ func (diskio *DiskIO) Run() {
 				diskio.contChans.receivedPiece <- ReceivedPiece{pieceNum: piece.index, peerName: piece.peerName}
 			}()
 		case blockRequest := <-diskio.peerChans.blockRequest:
-			fmt.Println("Received block request:", blockRequest)
+			log.Println("Received block request:", blockRequest)
 			go func() {
 				blockRequest.response <- diskio.requestBlock(blockRequest.request)
 			}()
