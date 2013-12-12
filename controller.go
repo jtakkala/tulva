@@ -134,7 +134,7 @@ func NewController(finishedPieces []bool, pieceHashes [][]byte, diskIOChans Cont
 	cont.rxChans = &ControllerRxChans{diskIOChans, peerManagerChans, peerChans}
 	cont.peers = make(map[string]*PeerInfo)
 	cont.activeRequestsTotals = make([]int, len(finishedPieces))
-	cont.maxSimultaneousDownloadsPerPeer = 2 // only 2 pieces at a time
+	cont.maxSimultaneousDownloadsPerPeer = 5 // only 2 pieces at a time
 
 	cont.updateCompletedFlagIfFinished(true)
 
