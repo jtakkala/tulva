@@ -73,6 +73,7 @@ type Peer struct {
 	contRxChans      ControllerPeerChans
 	contTxChans      PeerControllerChans
 	stats            PeerStats
+	statsCh		 chan PeerStats
 	t                tomb.Tomb
 }
 
@@ -132,6 +133,7 @@ type PeerManager struct {
 	diskIOChans   diskIOPeerChans
 	contChans     ControllerPeerManagerChans
 	peerContChans PeerControllerChans
+	statsCh	      chan PeerStats
 	t             tomb.Tomb
 }
 
@@ -215,7 +217,7 @@ func sortedPeersByQtyPiecesNeeded(peers map[string]*PeerInfo) SortedPeers {
 	return peerInfoSlice
 }
 
-func NewPeerManager(infoHash []byte, numPieces int, pieceLength int, totalLength int, diskIOChans diskIOPeerChans, serverChans serverPeerChans, trackerChans trackerPeerChans) *PeerManager {
+func NewPeerManager(infoHash []byte, numPieces int, pieceLength int, totalLength int, diskIOChans diskIOPeerChans, serverChans serverPeerChans, statsCh chan PeerStats, trackerChans trackerPeerChans) *PeerManager {
 	pm := new(PeerManager)
 	pm.infoHash = infoHash
 	pm.numPieces = numPieces
@@ -223,6 +225,7 @@ func NewPeerManager(infoHash []byte, numPieces int, pieceLength int, totalLength
 	pm.totalLength = totalLength
 	pm.diskIOChans = diskIOChans
 	pm.serverChans = serverChans
+	pm.statsCh = statsCh
 	pm.trackerChans = trackerChans
 	pm.seeding = false
 	pm.peerChans.deadPeer = make(chan string)
@@ -256,7 +259,8 @@ func NewPeer(
 	diskIOChans diskIOPeerChans,
 	contRxChans ControllerPeerChans,
 	contTxChans PeerControllerChans,
-	peerManagerChans peerManagerChans) *Peer {
+	peerManagerChans peerManagerChans,
+	statsCh chan PeerStats) *Peer {
 	p := &Peer{
 		peerName:       peerName,
 		infoHash:       infoHash,
@@ -276,7 +280,8 @@ func NewPeer(
 		blockResponse:  make(chan BlockResponse),
 		contRxChans:    contRxChans,
 		contTxChans:    contTxChans,
-		peerManagerChans: peerManagerChans}
+		peerManagerChans: peerManagerChans,
+		statsCh:	statsCh}
 	return p
 }
 
@@ -1018,6 +1023,9 @@ func (p *Peer) Run() {
 				log.Println("No RxMessage for 120 seconds", p.peerName, p.lastRxMessage.Unix(), t.Unix())
 				p.Stop()
 			}
+			go func() {
+				p.statsCh <- p.stats
+			}()
 		case blockResponse := <-p.blockResponse:
 			go p.sendBlock(blockResponse.info.pieceIndex, blockResponse.info.begin, blockResponse.data)
 		case requestPiece := <-p.contRxChans.requestPiece:
@@ -1117,7 +1125,8 @@ func (pm *PeerManager) Run() {
 					pm.diskIOChans,
 					contTxChans,
 					pm.peerContChans,
-					pm.peerChans)
+					pm.peerChans,
+					pm.statsCh)
 
 				// Give the controller the channels that it will use to
 				// transmit messages to this new peer

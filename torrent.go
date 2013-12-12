@@ -22,12 +22,6 @@ type Torrent struct {
 	t        tomb.Tomb
 }
 
-type Stats struct {
-	Left       int
-	Uploaded   int
-	Downloaded int
-}
-
 // Metainfo File Structure
 type MetaInfo struct {
 	Info struct {
@@ -160,11 +154,13 @@ func (t *Torrent) Run() {
 
 
 	server := NewServer()
+	stats := NewStats()
 	trackerManager := NewTrackerManager(server.Port)
-	peerManager := NewPeerManager(t.infoHash, len(pieceHashes), t.metaInfo.Info.PieceLength, totalLength, diskIO.peerChans, server.peerChans, trackerManager.peerChans)
+	peerManager := NewPeerManager(t.infoHash, len(pieceHashes), t.metaInfo.Info.PieceLength, totalLength, diskIO.peerChans, server.peerChans, stats.peerCh, trackerManager.peerChans)
 	controller := NewController(pieces, pieceHashes, diskIO.contChans, peerManager.contChans, peerManager.peerContChans)
 
 	go controller.Run()
+	go stats.Run()
 	go peerManager.Run()
 	go server.Run()
 	go trackerManager.Run(t.metaInfo, t.infoHash)
