@@ -34,10 +34,7 @@ type DiskIO struct {
 func (diskio *DiskIO) checkHash(buf []byte, pieceIndex int) bool {
 	h := sha1.New()
 	h.Write(buf)
-	if bytes.Equal(h.Sum(nil), []byte(diskio.metaInfo.Info.Pieces[pieceIndex:pieceIndex+h.Size()])) {
-		return true
-	}
-	return false
+	return bytes.Equal(h.Sum(nil), []byte(diskio.metaInfo.Info.Pieces[pieceIndex:pieceIndex+h.Size()]))
 }
 
 // Verify reads in each file and verifies the SHA-1 checksum of each piece.
