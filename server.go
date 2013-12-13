@@ -7,10 +7,7 @@ package main
 import (
 	"launchpad.net/tomb"
 	"log"
-	"math/rand"
 	"net"
-	"syscall"
-	"time"
 )
 
 type serverPeerChans struct {
@@ -27,37 +24,15 @@ type Server struct {
 func NewServer() *Server {
 	sv := new(Server)
 
+	// Send any new connections we receive to PeerManager
 	sv.peerChans.conns = make(chan *net.TCPConn)
 
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	var err error
-
-	// Randomly choose a port between 16384 - 65535
-	// Try up to 10 times, then exit if we can't bind
-	for i := 0; ; i++ {
-		sv.Port = uint16(r.Intn(49151)) + uint16(16384)
-		// TODO: Undo override of random port
-		sv.Port = uint16(6881)
-		sv.Listener, err = net.ListenTCP("tcp4", &net.TCPAddr{net.ParseIP("0.0.0.0"), int(sv.Port), ""})
-		if err != nil {
-			if e, ok := err.(*net.OpError); ok {
-				// If reason is EADDRINUSE, then try up to 10 times
-				if e.Err == syscall.EADDRINUSE {
-					if i < 10 {
-						log.Printf("Failed to bind to port %d. Trying again...\n", sv.Port)
-						continue
-					} else {
-						log.Println("Unable to bind to port. Giving up")
-						log.Fatal(err)
-					}
-				}
-			}
-			// Bail here on any other errors
-			log.Fatal(err)
-		}
-		// Success
-		break
+	sv.Listener, err = net.ListenTCP("tcp4", &net.TCPAddr{net.ParseIP("0.0.0.0"), 0, ""})
+	if err != nil {
+		log.Fatal(err)
 	}
+	sv.Port = uint16(sv.Listener.Addr().(*net.TCPAddr).Port)
 	log.Println("Server : Listening on port", sv.Port)
 
 	return sv
@@ -71,9 +46,7 @@ func (sv *Server) Listen() {
 	for {
 		conn, err := sv.Listener.AcceptTCP()
 		if err != nil {
-			// FIXME: Handle other error types
-			log.Println(err)
-			return
+			log.Fatal(err)
 		}
 		log.Println("Server: New connection from:", conn.RemoteAddr())
 		sv.peerChans.conns <- conn
