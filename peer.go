@@ -919,6 +919,7 @@ func (p *Peer) sendOneOrMoreRequests() {
 
 					// Make a recursive call to attempt to send more requests
 					p.sendOneOrMoreRequests()
+					return
 				}
 			}
 
