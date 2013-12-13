@@ -586,7 +586,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 			piece.isFinished = true
 			p.moveFinishedPieceDownloadsToEnd()
 
-			p.sendFinishedPieceToDiskIO(pieceNum, piece.data)
+			go p.sendFinishedPieceToDiskIO(pieceNum, piece.data)
 
 			// if nextDownload was previosly nil, then currentDownload will now be nil, because we
 			// copied the reference from nextDownload to currentDownload.
