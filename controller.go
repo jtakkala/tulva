@@ -8,6 +8,7 @@ import (
 	"launchpad.net/tomb"
 	"log"
 	"sort"
+	"os"
 )
 
 /*
@@ -133,7 +134,7 @@ func NewController(finishedPieces []bool, pieceHashes [][]byte, diskIOChans Cont
 	cont.rxChans = &ControllerRxChans{diskIOChans, peerManagerChans, peerChans}
 	cont.peers = make(map[string]*PeerInfo)
 	cont.activeRequestsTotals = make([]int, len(finishedPieces))
-	cont.maxSimultaneousDownloadsPerPeer = 2 // only 2 pieces at a time
+	cont.maxSimultaneousDownloadsPerPeer = 5 // only 2 pieces at a time
 
 	cont.updateCompletedFlagIfFinished(true)
 
@@ -166,6 +167,7 @@ func (cont *Controller) updateCompletedFlagIfFinished(initializing bool) {
 		log.Println("**********************************************************************")
 		log.Println("")
 		log.Println("")
+		os.Exit(0)
 }
 
 func (cont *Controller) Stop() error {
@@ -179,7 +181,7 @@ func (cont *Controller) sendHaveToPeersWhoNeedPiece(pieceNum int) {
 		if !peerInfo.availablePieces[pieceNum] {
 
 			// This peer doesn't have the piece that we just finished. Send them a HAVE message.
-			log.Printf("Controller : sendHaveToPeersWhoNeedPiece : Sending HAVE to %s for piece %x", peerInfo.peerName, pieceNum)
+			//log.Printf("Controller : sendHaveToPeersWhoNeedPiece : Sending HAVE to %s for piece %x", peerInfo.peerName, pieceNum)
 
 			haveMessage := new(HavePiece)
 
@@ -188,6 +190,8 @@ func (cont *Controller) sendHaveToPeersWhoNeedPiece(pieceNum int) {
 			// directly to the peer
 			haveMessage.pieceNum = pieceNum
 
+			go sendHaveToPeer(pieceNum, peerInfo.chans.havePiece)
+			/*
 			go func() {
 				// Create a temporary channel that's sent through the main HavePiece channel
 				innerChan := make(chan HavePiece)
@@ -199,10 +203,16 @@ func (cont *Controller) sendHaveToPeersWhoNeedPiece(pieceNum int) {
 
 				// Close the inner channel indicating to the other side that there are no more pieces
 				close(innerChan)
-			}()
-
+			}()*/
 		}
 	}
+}
+
+func sendHaveToPeer(pieceNum int, outerChan chan chan HavePiece) {
+	innerChan := make(chan HavePiece)
+	outerChan <- innerChan
+	innerChan <- HavePiece{pieceNum: pieceNum}
+	close(innerChan)
 }
 
 func (cont *Controller) removePieceFromActiveRequests(piece ReceivedPiece) {
@@ -242,7 +252,7 @@ func (cont *Controller) removePieceFromActiveRequests(piece ReceivedPiece) {
 
 	} else {
 		// The peer just finished this piece, but it wasn't in its active request list
-		log.Printf("Controller : removePieceFromActiveRequests : %s finished piece %x, but that piece wasn't in its active request list", piece.peerName, piece.pieceNum)
+		//log.Printf("Controller : removePieceFromActiveRequests : %s finished piece %x, but that piece wasn't in its active request list", piece.peerName, piece.pieceNum)
 	}
 }
 
@@ -361,17 +371,17 @@ func (cont *Controller) createDownloadPriorityForPeer(peerInfo *PeerInfo, rarity
 func (cont *Controller) sendRequestsToPeer(peerInfo *PeerInfo, raritySlice []int) {
 
 	if cont.downloadComplete {
-		log.Printf("Controller : SendRequestsToPeer : Not sending requests to %s because we've finished downloading the file.", peerInfo.peerName)
+		//log.Printf("Controller : SendRequestsToPeer : Not sending requests to %s because we've finished downloading the file.", peerInfo.peerName)
 
 	} else {
 		// Create the slice of pieces that this peer should work on next. It will not
 		// include pieces that have already been written to disk, or pieces that the
 		// peer is already working on.
 		downloadPriority := cont.createDownloadPriorityForPeer(peerInfo, raritySlice)
-		log.Printf("Controller : SendRequestsToPeer : Built downloadPriority with %d pieces for peer %s", len(downloadPriority), peerInfo.peerName)
+		//log.Printf("Controller : SendRequestsToPeer : Built downloadPriority with %d pieces for peer %s", len(downloadPriority), peerInfo.peerName)
 
 		if len(downloadPriority) == 0 {
-			log.Printf("Controller : SendRequestsToPeer : We aren't finished downloading, but %s doesn't have more pieces that we need", peerInfo.peerName)
+			//log.Printf("Controller : SendRequestsToPeer : We aren't finished downloading, but %s doesn't have more pieces that we need", peerInfo.peerName)
 
 		} else {
 			for _, pieceNum := range downloadPriority {
@@ -384,7 +394,7 @@ func (cont *Controller) sendRequestsToPeer(peerInfo *PeerInfo, raritySlice []int
 				requestMessage := new(RequestPiece)
 				requestMessage.pieceNum = pieceNum
 				requestMessage.expectedHash = cont.pieceHashes[pieceNum]
-				log.Printf("Controller : SendRequestsToPeer : Requesting %s to get piece %x", peerInfo.peerName, pieceNum)
+				//log.Printf("Controller : SendRequestsToPeer : Requesting %s to get piece %x", peerInfo.peerName, pieceNum)
 				go func() { peerInfo.chans.requestPiece <- *requestMessage }()
 
 				// Add this pieceNum to the set of pieces that this peer is working on
@@ -446,7 +456,7 @@ func (cont *Controller) Run() {
 			if !exists {
 				log.Printf("Controller : Run (Received Piece) : WARNING. Was notified that %s finished downloading piece %x, but it doesn't currently exist in the peers mapping.", piece.peerName, piece.pieceNum)
 			} else if !cont.peers[piece.peerName].isChoked {
-				log.Printf("Controller : Run (Received Piece) : %s finished downloading piece %x", piece.peerName, piece.pieceNum)
+				//log.Printf("Controller : Run (Received Piece) : %s finished downloading piece %x", piece.peerName, piece.pieceNum)
 			} else {
 				log.Printf("Controller : Run (Received Piece) : WARNING. Was notified that %s finished downloading piece %x but it's currently choked.", piece.peerName, piece.pieceNum)
 			}
@@ -533,7 +543,8 @@ func (cont *Controller) Run() {
 			peerInfo, exists := cont.peers[chokeStatus.peerName]
 
 			if !exists {
-				log.Fatalf("Controller : Run (Choke Status) : Unable to process PeerChokeStatus from %s because it doesn't exist in the peers mapping")
+				log.Printf("Controller : Run (Choke Status) : WARNING: Unable to process PeerChokeStatus from %s because it doesn't exist in the peers mapping")
+				return
 			}
 
 			peerInfo.isChoked = chokeStatus.isChoked
@@ -569,7 +580,8 @@ func (cont *Controller) Run() {
 				// Update the peers availability slice.
 				peerInfo, exists = cont.peers[piece.peerName]
 				if !exists {
-					log.Fatalf("Controller : Run (Have Piece) : Unable to process HavePiece for %s because the peer doesn't exist in the peers mapping", piece.peerName)
+					log.Printf("Controller : Run (Have Piece) : WARNING: Unable to process HavePiece for %s because the peer doesn't exist in the peers mapping", piece.peerName)
+					return
 				}
 
 				// Mark this peer as having this piece
@@ -579,7 +591,7 @@ func (cont *Controller) Run() {
 
 			}
 
-			log.Printf("Controller : Run (Have Piece) : Received %d HavePiece messages from %s", pieceCount, peerInfo.peerName)
+			//log.Printf("Controller : Run (Have Piece) : Received %d HavePiece messages from %s", pieceCount, peerInfo.peerName)
 
 			// This is either one or more HAVE messages sent for the initial peer bitfield, or it's
 			// a single HAVE message sent because the peer has a new piece. In either case, we should
