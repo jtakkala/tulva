@@ -6,7 +6,6 @@ package main
 
 import (
 	"bytes"
-	"fmt"
 	"crypto/sha1"
 	"io"
 	"launchpad.net/tomb"
@@ -50,7 +49,7 @@ func (diskio *DiskIO) Verify() []bool {
 	var pieceIndex, n int
 	var err error
 
-	fmt.Printf("Verifying downloaded files")
+	log.Printf("Verifying downloaded files")
 	if len(diskio.metaInfo.Info.Files) > 0 {
 		// Multiple File Mode
 		var m int
@@ -59,7 +58,7 @@ func (diskio *DiskIO) Verify() []bool {
 			for offset := int64(0); ; offset += int64(n) {
 				// Read from file at offset, up to buf size or
 				// less if last read was incomplete due to EOF
-				fmt.Printf(".")
+				log.Printf(".")
 				n, err = diskio.files[i].ReadAt(buf[m:], offset)
 				if err != nil {
 					if err == io.EOF {
@@ -90,12 +89,12 @@ func (diskio *DiskIO) Verify() []bool {
 		for offset := int64(0); ; offset += int64(n) {
 			// Read from file at offset, up to buf size or
 			// less if last read was incomplete due to EOF
-			fmt.Printf(".")
+			log.Printf(".")
 			n, err = diskio.files[0].ReadAt(buf, offset)
 			if err != nil {
 				if err == io.EOF {
 					// Reached EOF
-					fmt.Printf("\n")
+					log.Printf("\n")
 					break
 				}
 				log.Fatal(err)
@@ -244,7 +243,7 @@ func (diskio *DiskIO) requestBlock(block BlockInfo) BlockResponse {
 	log.Println("DiskIO : requestBlock : Started")
 	defer log.Println("DiskIO : requestBlock : Completed")
 
-	offset := int64(int(block.pieceIndex) * diskio.metaInfo.Info.PieceLength + int(block.begin))
+	offset := int64(int(block.pieceIndex)*diskio.metaInfo.Info.PieceLength + int(block.begin))
 	response := BlockResponse{info: block}
 	if len(diskio.metaInfo.Info.Files) == 0 {
 		// Single File Mode
