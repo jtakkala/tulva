@@ -907,10 +907,6 @@ func (p *Peer) sendOneOrMoreRequests() {
 			// Wait until blocks are received before sending more requests.
 			return
 		} else {
-			// We need to send more requests now. First check if we need to send
-			// any more requests in the currentDownload piece, which has higher
-			// priority than nextDownload
-			
 			for _, piece := range p.downloads {
 				if !piece.isFinished && piece.remainingRequestsToSend() > 0 {
 					blockNum := piece.numBlocksReceived + piece.numOutstandingBlocks
