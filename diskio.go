@@ -95,7 +95,6 @@ func (diskio *DiskIO) Verify() []bool {
 			if err != nil {
 				if err == io.EOF {
 					// Reached EOF
-					fmt.Printf("\n")
 					break
 				}
 				log.Fatal(err)
