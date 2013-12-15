@@ -7,6 +7,7 @@ package main
 import (
 	"bytes"
 	"crypto/sha1"
+	"fmt"
 	"io"
 	"launchpad.net/tomb"
 	"log"
@@ -58,7 +59,7 @@ func (diskio *DiskIO) Verify() []bool {
 			for offset := int64(0); ; offset += int64(n) {
 				// Read from file at offset, up to buf size or
 				// less if last read was incomplete due to EOF
-				log.Printf(".")
+				fmt.Printf(".")
 				n, err = diskio.files[i].ReadAt(buf[m:], offset)
 				if err != nil {
 					if err == io.EOF {
@@ -89,12 +90,12 @@ func (diskio *DiskIO) Verify() []bool {
 		for offset := int64(0); ; offset += int64(n) {
 			// Read from file at offset, up to buf size or
 			// less if last read was incomplete due to EOF
-			log.Printf(".")
+			fmt.Printf(".")
 			n, err = diskio.files[0].ReadAt(buf, offset)
 			if err != nil {
 				if err == io.EOF {
 					// Reached EOF
-					log.Printf("\n")
+					fmt.Printf("\n")
 					break
 				}
 				log.Fatal(err)
@@ -113,7 +114,7 @@ func (diskio *DiskIO) Verify() []bool {
 			finishedPieces[(pieceIndex / 20)] = diskio.checkHash(buf[:n], pieceIndex)
 		}
 	}
-	log.Println()
+	fmt.Println()
 
 	return finishedPieces
 }
