@@ -11,12 +11,12 @@ import (
 )
 
 type Stats struct {
-	Left int
-	Uploaded int
+	Left       int
+	Uploaded   int
 	Downloaded int
-	Errors int
-	peerCh chan PeerStats
-	ticker <-chan time.Time
+	Errors     int
+	peerCh     chan PeerStats
+	ticker     <-chan time.Time
 }
 
 func NewStats() *Stats {
@@ -34,11 +34,11 @@ func (s *Stats) Run() {
 
 	for {
 		select {
-		case stat := <- s.peerCh:
+		case stat := <-s.peerCh:
 			s.Downloaded += stat.read
 			s.Uploaded += stat.write
 			s.Errors += stat.errors
-		case <- s.ticker:
+		case <-s.ticker:
 			fmt.Printf("\033[31mDownloaded: %d, Uploaded: %d, Errors: %d\033[0m\n", s.Downloaded, s.Uploaded, s.Errors)
 		}
 	}

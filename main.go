@@ -9,7 +9,7 @@ import (
 	"log"
 	"math/rand"
 	//"net/http"
-	//_ "net/http/pprof"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
@@ -39,12 +39,9 @@ func main() {
 	log.Println("main : main : Started")
 	defer log.Println("main : main : Exiting")
 
-
-	/*
 	go func() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
-	*/
 
 	// Signal handler to catch Ctrl-C and SIGTERM from 'kill' command
 	c := make(chan os.Signal, 1)

@@ -7,8 +7,8 @@ package main
 import (
 	"launchpad.net/tomb"
 	"log"
-	"sort"
 	"os"
+	"sort"
 )
 
 /*
@@ -152,22 +152,22 @@ func (cont *Controller) updateCompletedFlagIfFinished(initializing bool) {
 	go func() {
 		cont.rxChans.peerManager.seeding <- true
 	}()
-		log.Println("")
-		log.Println("")
-		log.Println("**********************************************************************")
-		log.Println("*--------------------------------------------------------------------*")
+	log.Println("")
+	log.Println("")
+	log.Println("**********************************************************************")
+	log.Println("*--------------------------------------------------------------------*")
 	if initializing {
 		log.Println("*------------- The full file was previously downloaded. -------------*")
 	} else {
 		log.Println("*------------ The last piece just finished downloading. -------------*")
 	}
-		log.Println("*--------------------------------------------------------------------*")
-		log.Println("*-------------------- The file will be seeded. ----------------------*")
-		log.Println("*--------------------------------------------------------------------*")
-		log.Println("**********************************************************************")
-		log.Println("")
-		log.Println("")
-		os.Exit(0)
+	log.Println("*--------------------------------------------------------------------*")
+	log.Println("*-------------------- The file will be seeded. ----------------------*")
+	log.Println("*--------------------------------------------------------------------*")
+	log.Println("**********************************************************************")
+	log.Println("")
+	log.Println("")
+	os.Exit(0)
 }
 
 func (cont *Controller) Stop() error {
@@ -192,18 +192,18 @@ func (cont *Controller) sendHaveToPeersWhoNeedPiece(pieceNum int) {
 
 			go sendHaveToPeer(pieceNum, peerInfo.chans.havePiece)
 			/*
-			go func() {
-				// Create a temporary channel that's sent through the main HavePiece channel
-				innerChan := make(chan HavePiece)
-				peerInfo.chans.havePiece <- innerChan
+				go func() {
+					// Create a temporary channel that's sent through the main HavePiece channel
+					innerChan := make(chan HavePiece)
+					peerInfo.chans.havePiece <- innerChan
 
-				// Now that the other side has the innerChan (and is blocking on it), send the
-				// HAVE message.
-				innerChan <- *haveMessage
+					// Now that the other side has the innerChan (and is blocking on it), send the
+					// HAVE message.
+					innerChan <- *haveMessage
 
-				// Close the inner channel indicating to the other side that there are no more pieces
-				close(innerChan)
-			}()*/
+					// Close the inner channel indicating to the other side that there are no more pieces
+					close(innerChan)
+				}()*/
 		}
 	}
 }

@@ -93,7 +93,7 @@ func ParseTorrentFile(filename string) (torrent Torrent, err error) {
 
 	log.Printf("Parse : ParseTorrentFile : Successfully parsed %s", filename)
 	log.Printf("Parse : ParseTorrentFile : The length of each piece is %d", torrent.metaInfo.Info.PieceLength)
-	
+
 	return
 }
 
@@ -151,7 +151,6 @@ func (t *Torrent) Run() {
 
 	log.Printf("Torrent : Run : The torrent contains %d file(s), which are split across %d pieces", numFiles, (len(t.metaInfo.Info.Pieces) / 20))
 	log.Printf("Torrent : Run : The total length of all file(s) is %d", totalLength)
-
 
 	server := NewServer()
 	stats := NewStats()

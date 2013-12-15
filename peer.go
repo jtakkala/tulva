@@ -38,7 +38,7 @@ const (
 
 const (
 	downloadBlockSize             = 16384
-	maxSimultaneousBlockDownloads = 100
+	maxSimultaneousBlockDownloads = 20
 )
 
 // PeerTuple represents a single IP+port pair of a peer
@@ -63,7 +63,7 @@ type Peer struct {
 	infoHash         []byte
 	pieceLength      int
 	sendChan         chan []byte
-	totalLength	     int
+	totalLength      int
 	downloads        []*PieceDownload
 	diskIOChans      diskIOPeerChans
 	blockResponse    chan BlockResponse
@@ -71,7 +71,7 @@ type Peer struct {
 	contRxChans      ControllerPeerChans
 	contTxChans      PeerControllerChans
 	stats            PeerStats
-	statsCh		 chan PeerStats
+	statsCh          chan PeerStats
 	t                tomb.Tomb
 }
 
@@ -82,7 +82,7 @@ type PieceDownload struct {
 	numBlocksReceived    int
 	numOutstandingBlocks int
 	numBlocksInPiece     int
-	isFinished			 bool
+	isFinished           bool
 }
 
 func (piece *PieceDownload) remainingRequestsToSend() int {
@@ -130,14 +130,14 @@ type PeerManager struct {
 	numPieces     int
 	pieceLength   int
 	totalLength   int
-	seeding		  bool
+	seeding       bool
 	peerChans     peerManagerChans
 	serverChans   serverPeerChans
 	trackerChans  trackerPeerChans
 	diskIOChans   diskIOPeerChans
 	contChans     ControllerPeerManagerChans
 	peerContChans PeerControllerChans
-	statsCh	      chan PeerStats
+	statsCh       chan PeerStats
 	t             tomb.Tomb
 }
 
@@ -266,27 +266,27 @@ func NewPeer(
 	peerManagerChans peerManagerChans,
 	statsCh chan PeerStats) *Peer {
 	p := &Peer{
-		peerName:       peerName,
-		infoHash:       infoHash,
-		pieceLength:    pieceLength,
-		totalLength:    totalLength,
-		peerBitfield:   make([]bool, numPieces),
-		ourBitfield:    make([]bool, numPieces),
-		keepalive:      make(chan time.Time),
-		lastTxMessage:  time.Now(),
-		lastRxMessage:  time.Now(),
-		amChoking:      true,
-		amInterested:   false,
-		peerChoking:    true,
-		peerInterested: false,
-		sendChan:       make(chan []byte),
-		diskIOChans:    diskIOChans,
-		blockResponse:  make(chan BlockResponse),
-		contRxChans:    contRxChans,
-		contTxChans:    contTxChans,
+		peerName:         peerName,
+		infoHash:         infoHash,
+		pieceLength:      pieceLength,
+		totalLength:      totalLength,
+		peerBitfield:     make([]bool, numPieces),
+		ourBitfield:      make([]bool, numPieces),
+		keepalive:        make(chan time.Time),
+		lastTxMessage:    time.Now(),
+		lastRxMessage:    time.Now(),
+		amChoking:        true,
+		amInterested:     false,
+		peerChoking:      true,
+		peerInterested:   false,
+		sendChan:         make(chan []byte),
+		diskIOChans:      diskIOChans,
+		blockResponse:    make(chan BlockResponse),
+		contRxChans:      contRxChans,
+		contTxChans:      contTxChans,
 		peerManagerChans: peerManagerChans,
-		statsCh:	statsCh,
-		downloads: 		make([]*PieceDownload, 0)}
+		statsCh:          statsCh,
+		downloads:        make([]*PieceDownload, 0)}
 	return p
 }
 
@@ -449,7 +449,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 				download.isFinished = true
 				download.numBlocksReceived = 0
 				download.numOutstandingBlocks = 0
-			} 
+			}
 			// Tell the controller that we've switched from unchoked to choked
 			go func() {
 				p.contTxChans.chokeStatus <- PeerChokeStatus{peerName: p.peerName, isChoked: true}
@@ -582,7 +582,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 			}
 
 			log.Printf("Checksum for piece %x received from %s matches what's expected", pieceNum, p.peerName)
-			
+
 			piece.isFinished = true
 			p.moveFinishedPieceDownloadsToEnd()
 
@@ -592,7 +592,7 @@ func (p *Peer) decodeMessage(payload []byte) {
 			// copied the reference from nextDownload to currentDownload.
 			if !p.haveCurrentDownloads() {
 				log.Printf("Peer %s has no active or next pieces. It will be idle until given more pieces to download", p.peerName)
-				return		
+				return
 			}
 		}
 
@@ -848,11 +848,11 @@ func (p *Peer) expectedLengthForBlock(pieceNum int, blockNum int) int {
 			// This is the last block of the last piece
 			return (p.totalLength % p.pieceLength) % downloadBlockSize
 		} else {
-			// This is the last piece, but not the last block.  
+			// This is the last piece, but not the last block.
 			return downloadBlockSize
 		}
 	} else {
-		// This is not the last piece. 
+		// This is not the last piece.
 		return downloadBlockSize
 	}
 }
@@ -865,7 +865,7 @@ func (p *Peer) expectedLengthForPiece(pieceNum int) int {
 			// The last piece of this torrent is the same size as every other piece
 			return p.pieceLength
 		} else {
-			// The last piece is smaller than the other pieces. 
+			// The last piece is smaller than the other pieces.
 			return pieceLength
 		}
 	} else {
@@ -879,7 +879,7 @@ func (p *Peer) expectedNumBlocksForPiece(pieceNum int) int {
 		// This is the last piece
 		lengthOfLastPiece := p.expectedLengthForPiece(pieceNum)
 		if lengthOfLastPiece == p.pieceLength {
-			return p.pieceLength / downloadBlockSize 
+			return p.pieceLength / downloadBlockSize
 		} else {
 			return (lengthOfLastPiece / downloadBlockSize) + 1
 		}
@@ -910,7 +910,7 @@ func (p *Peer) sendOneOrMoreRequests() {
 			// We need to send more requests now. First check if we need to send
 			// any more requests in the currentDownload piece, which has higher
 			// priority than nextDownload
-			
+
 			for _, piece := range p.downloads {
 				if !piece.isFinished && piece.remainingRequestsToSend() > 0 {
 					blockNum := piece.numBlocksReceived + piece.numOutstandingBlocks
@@ -1000,7 +1000,7 @@ func (p *Peer) Stop() error {
 func (p *Peer) processCancelFromController(cancelPiece CancelPiece) {
 	if !p.haveCurrentDownloads() {
 		log.Printf("Peer : Run : WARNING - Controller told %s to cancel pieceNum %d, but this peer isn't working on anything", p.peerName, cancelPiece.pieceNum)
-		return 
+		return
 	}
 
 	piece := p.getPieceDownload(cancelPiece.pieceNum)
@@ -1108,8 +1108,6 @@ func (p *Peer) initializePieceDownload(requestPiece RequestPiece) {
 	piece.numBlocksInPiece = p.expectedNumBlocksForPiece(requestPiece.pieceNum)
 	piece.numBlocksReceived = 0
 	piece.numOutstandingBlocks = 0
-
-
 }
 
 func (pm *PeerManager) Stop() error {
@@ -1127,7 +1125,7 @@ func (pm *PeerManager) Run() {
 		select {
 		case peer := <-pm.trackerChans.peers:
 			select {
-			case finished := <- pm.contChans.seeding:
+			case finished := <-pm.contChans.seeding:
 				if !finished {
 					log.Fatalf("PeerManager : Unexpectedly received a false over the seeding channel.")
 				} else {
