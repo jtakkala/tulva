@@ -8,6 +8,8 @@ import (
 	"launchpad.net/tomb"
 	"log"
 	"sort"
+	"math/rand"
+	"time"
 )
 
 /*
@@ -34,6 +36,17 @@ func (r *RarityMap) put(rarity int, pieceNum int) {
 	r.data[rarity] = append(r.data[rarity], pieceNum)
 }
 
+func shuffle(ints *[]int) {
+	// Do an in-place Fisher Yates shuffle. 
+	rand.Seed(time.Now().UnixNano())
+	for i := (len(*ints) - 1); i > 0; i-- {
+		j := rand.Intn(i + 1)
+		tmp := (*ints)[i]
+		(*ints)[i] = (*ints)[j]
+		(*ints)[j] = tmp
+	}
+}
+
 // Flatten out the map into a slice that's sorted by rarity.
 func (r *RarityMap) getPiecesByRarity() []int {
 	pieces := make([]int, 0)
@@ -51,6 +64,7 @@ func (r *RarityMap) getPiecesByRarity() []int {
 	// concatenate that slice of pieces (for that rarity) to the result
 	for _, rarity := range keys {
 		pieceNums := r.data[rarity]
+		shuffle(&pieceNums)
 		pieces = append(pieces, pieceNums...)
 	}
 
@@ -133,7 +147,7 @@ func NewController(finishedPieces []bool, pieceHashes [][]byte, diskIOChans Cont
 	cont.rxChans = &ControllerRxChans{diskIOChans, peerManagerChans, peerChans}
 	cont.peers = make(map[string]*PeerInfo)
 	cont.activeRequestsTotals = make([]int, len(finishedPieces))
-	cont.maxSimultaneousDownloadsPerPeer = 5 // only 2 pieces at a time
+	cont.maxSimultaneousDownloadsPerPeer = 5 // only 5 pieces at a time
 
 	cont.updateCompletedFlagIfFinished(true)
 
@@ -189,19 +203,6 @@ func (cont *Controller) sendHaveToPeersWhoNeedPiece(pieceNum int) {
 			haveMessage.pieceNum = pieceNum
 
 			go sendHaveToPeer(pieceNum, peerInfo.chans.havePiece)
-			/*
-				go func() {
-					// Create a temporary channel that's sent through the main HavePiece channel
-					innerChan := make(chan HavePiece)
-					peerInfo.chans.havePiece <- innerChan
-
-					// Now that the other side has the innerChan (and is blocking on it), send the
-					// HAVE message.
-					innerChan <- *haveMessage
-
-					// Close the inner channel indicating to the other side that there are no more pieces
-					close(innerChan)
-				}()*/
 		}
 	}
 }
