@@ -131,6 +131,7 @@ func openOrCreateFile(name string) (file *os.File) {
 	if _, err := os.Stat(name); os.IsNotExist(err) {
 		// Create the file and return a handle
 		file, err = os.Create(name)
+		//file.WriteAt([]byte{255,255,255,255,255,255,255}, 0)
 		checkError(err)
 	} else {
 		// Open the file and return a handle
@@ -223,6 +224,7 @@ func (diskio *DiskIO) Init() {
 			name := filepath.Join(file.Path...)
 			diskio.files = append(diskio.files, openOrCreateFile(name))
 		}
+		err = os.Chdir("..")
 	} else {
 		// Single File Mode
 		diskio.files = append(diskio.files, openOrCreateFile(diskio.metaInfo.Info.Name))
@@ -256,6 +258,7 @@ func (diskio *DiskIO) requestBlock(block BlockInfo) BlockResponse {
 			} else {
 				// FIXME: Handle offset with multiple files correctly
 				response.data = diskio.readBlock(diskio.files[i], block, offset)
+				break
 			}
 		}
 	}
