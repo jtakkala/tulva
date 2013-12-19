@@ -1032,7 +1032,7 @@ func (p *Peer) Run() {
 		select {
 		case t := <-p.keepalive:
 			if p.lastTxMessage.Add(time.Second * 30).Before(t) {
-				log.Println("No txMessage for 30 seconds", p.peerName, p.lastTxMessage.Unix(), t.Unix())
+				log.Println("No TxMessage for 30 seconds", p.peerName, p.lastTxMessage.Unix(), t.Unix())
 				p.sendKeepalive()
 			}
 			if p.lastRxMessage.Add(time.Second * 120).Before(t) {
