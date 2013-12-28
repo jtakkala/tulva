@@ -131,7 +131,6 @@ func openOrCreateFile(name string) (file *os.File) {
 	if _, err := os.Stat(name); os.IsNotExist(err) {
 		// Create the file and return a handle
 		file, err = os.Create(name)
-		//file.WriteAt([]byte{255,255,255,255,255,255,255}, 0)
 		checkError(err)
 	} else {
 		// Open the file and return a handle
