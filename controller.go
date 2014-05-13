@@ -41,9 +41,7 @@ func shuffle(ints *[]int) {
 	rand.Seed(time.Now().UnixNano())
 	for i := (len(*ints) - 1); i > 0; i-- {
 		j := rand.Intn(i + 1)
-		tmp := (*ints)[i]
-		(*ints)[i] = (*ints)[j]
-		(*ints)[j] = tmp
+		(*ints)[i], (*ints)[j] = (*ints)[j], (*ints)[i]
 	}
 }
 
