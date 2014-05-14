@@ -36,12 +36,12 @@ func (r *RarityMap) put(rarity int, pieceNum int) {
 	r.data[rarity] = append(r.data[rarity], pieceNum)
 }
 
-func shuffle(ints *[]int) {
+func shuffle(ints []int) {
 	// Do an in-place Fisher Yates shuffle. 
 	rand.Seed(time.Now().UnixNano())
-	for i := (len(*ints) - 1); i > 0; i-- {
+	for i := (len(ints) - 1); i > 0; i-- {
 		j := rand.Intn(i + 1)
-		(*ints)[i], (*ints)[j] = (*ints)[j], (*ints)[i]
+		ints[i], ints[j] = ints[j], ints[i]
 	}
 }
 
@@ -62,7 +62,7 @@ func (r *RarityMap) getPiecesByRarity() []int {
 	// concatenate that slice of pieces (for that rarity) to the result
 	for _, rarity := range keys {
 		pieceNums := r.data[rarity]
-		shuffle(&pieceNums)
+		shuffle(pieceNums)
 		pieces = append(pieces, pieceNums...)
 	}
 
