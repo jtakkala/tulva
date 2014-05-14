@@ -591,3 +591,47 @@ func TestControllerTwoPeersDownloadingSamePieceAndOneFinishes(t *testing.T) {
 	}
 
 }
+
+// sliceToSet takes a slice of integers and returns the values in the slice as a set
+func sliceToSet(numbers []int) map[int]struct{} {
+	set := make(map[int]struct{})
+	for _, v := range numbers {
+		set[v] = struct{}{}
+	}
+	return set
+}
+
+func TestShuffle(t *testing.T) {
+	// initialize a slice of numbers and also copy them to a set
+	numbers := make([]int, 100)
+	for i := 0; i < len(numbers); i++ {
+		numbers[i] = i
+	}
+	oldSet := sliceToSet(numbers)
+	// shuffle the numbers in-place and return a new set
+	shuffle(numbers)
+	newSet := sliceToSet(numbers)
+	// assert that the lengths of the sets are equal
+	if len(oldSet) != len(newSet) {
+		t.Errorf("Expected shuffled set length to equal %d, but length is %d", len(oldSet), len(newSet))
+	}
+	// assert that all numbers in the original set are present in the new set
+	for k, _ := range oldSet {
+		_, ok := newSet[k]
+		if !ok {
+			t.Errorf("Expected to find '%d' in new set, but did not", k)
+		}
+	}
+	//
+	for i := 0; ; i++ {
+		if i >= len(numbers) {
+			// there is a tiny but unlikely possibility that the slice was shuffled and no numbers changed position
+			t.Errorf("Reached end of slice and slice does not appear to have been shuffled")
+			break
+		}
+		if numbers[i] != i {
+			// slice appears to have been shuffled
+			break
+		}
+	}
+}
