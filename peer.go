@@ -57,7 +57,7 @@ type Peer struct {
 	ourBitfield      []bool
 	peerBitfield     []bool
 	peerID           []byte
-	ticker           <-chan time.Time
+	ticker           *time.Ticker
 	lastTxMessage    time.Time
 	lastRxMessage    time.Time
 	infoHash         []byte
@@ -272,7 +272,6 @@ func NewPeer(
 		totalLength:      totalLength,
 		peerBitfield:     make([]bool, numPieces),
 		ourBitfield:      make([]bool, numPieces),
-		ticker:           make(chan time.Time),
 		lastTxMessage:    time.Now(),
 		lastRxMessage:    time.Now(),
 		amChoking:        true,
@@ -1014,7 +1013,8 @@ func (p *Peer) Run() {
 	log.Println("Peer : Run : Started:", p.peerName)
 	defer log.Println("Peer : Run : Completed:", p.peerName)
 
-	p.ticker = time.Tick(time.Second * 1)
+	p.ticker = time.NewTicker(time.Second)
+	defer p.ticker.Stop()
 
 	p.sendHandshake()
 
@@ -1030,7 +1030,7 @@ func (p *Peer) Run() {
 
 	for {
 		select {
-		case t := <-p.ticker:
+		case t := <-p.ticker.C:
 			if p.lastTxMessage.Add(time.Second * 30).Before(t) {
 				log.Println("No TxMessage for 30 seconds", p.peerName, p.lastTxMessage.Unix(), t.Unix())
 				p.sendKeepalive()
