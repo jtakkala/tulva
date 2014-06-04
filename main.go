@@ -50,7 +50,7 @@ func main() {
 		<-c
 		log.Println("Received Interrupt")
 		t.Stop()
-		os.Exit(1)
+		os.Exit(0)
 	}()
 
 	// Launch the torrent
