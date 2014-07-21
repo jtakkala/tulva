@@ -9,17 +9,17 @@ import (
 	"code.google.com/p/bencode-go"
 	"crypto/sha1"
 	"errors"
-	"launchpad.net/tomb"
 	"log"
 	"os"
+	"time"
 )
 
 type Torrent struct {
 	metaInfo MetaInfo
 	infoHash []byte
 	peer     chan PeerTuple
+	quit	 chan struct{}
 	Stats    Stats
-	t        tomb.Tomb
 }
 
 // Metainfo File Structure
@@ -45,10 +45,12 @@ type MetaInfo struct {
 	Encoding     string
 }
 
-// ParseTorrentFile opens the torrent filename specified and parses it,
+// NewTorrent opens the torrent filename specified and parses it,
 // returning a Torrent structure with the MetaInfo and SHA-1 hash of the
 // Info dictionary.
-func ParseTorrentFile(filename string) (torrent Torrent, err error) {
+func NewTorrent(filename string, quit chan struct{}) (*Torrent, error) {
+	torrent := &Torrent{quit: quit}
+
 	file, err := os.Open(filename)
 	if err != nil {
 		log.Fatal(err)
@@ -58,25 +60,25 @@ func ParseTorrentFile(filename string) (torrent Torrent, err error) {
 	// Decode the file into a generic bencode representation
 	m, err := bencode.Decode(file)
 	if err != nil {
-		return
+		return torrent, err
 	}
 	// WTF?: Understand the next line
 	metaMap, ok := m.(map[string]interface{})
 	if !ok {
 		err = errors.New("Couldn't parse torrent file")
-		return
+		return torrent, err
 	}
 	infoDict, ok := metaMap["info"]
 	if !ok {
 		err = errors.New("Unable to locate info dict in torrent file")
-		return
+		return torrent, err
 	}
 
 	// Create an Info dict based on the decoded file
 	var b bytes.Buffer
 	err = bencode.Marshal(&b, infoDict)
 	if err != nil {
-		return
+		return torrent, err
 	}
 
 	// Compute the info hash
@@ -88,13 +90,13 @@ func ParseTorrentFile(filename string) (torrent Torrent, err error) {
 	file.Seek(0, 0)
 	err = bencode.Unmarshal(file, &torrent.metaInfo)
 	if err != nil {
-		return
+		return torrent, err
 	}
 
 	log.Printf("Parse : ParseTorrentFile : Successfully parsed %s", filename)
 	log.Printf("Parse : ParseTorrentFile : The length of each piece is %d", torrent.metaInfo.Info.PieceLength)
 
-	return
+	return torrent, nil
 }
 
 // Init completes the initalization of the Torrent structure
@@ -110,17 +112,9 @@ func (t *Torrent) Init() {
 	// TODO: Read in the file and adjust bytes left
 }
 
-// Stop stops this Torrent session
-func (t *Torrent) Stop() error {
-	log.Println("Torrent : Stop : Stopping")
-	t.t.Kill(nil)
-	return t.t.Wait()
-}
-
 // Run starts the Torrent session and orchestrates all the child processes
 func (t *Torrent) Run() {
 	log.Println("Torrent : Run : Started")
-	defer t.t.Done()
 	defer log.Println("Torrent : Run : Completed")
 	t.Init()
 
@@ -161,16 +155,19 @@ func (t *Torrent) Run() {
 	go controller.Run()
 	go stats.Run()
 	go peerManager.Run()
-	go server.Run()
+	go server.Serve()
 	go trackerManager.Run(t.metaInfo, t.infoHash)
 
 	for {
 		select {
-		case <-t.t.Dying():
-			server.Stop()
-			peerManager.Stop()
-			trackerManager.Stop()
-			diskIO.Stop()
+		case <-t.quit:
+			// TODO: Some of these should block
+			close(server.quit)
+			close(peerManager.quit)
+			close(diskIO.quit)
+			close(controller.quit)
+			close(trackerManager.quit)
+			time.Sleep(time.Second)
 			return
 		}
 	}

@@ -8,7 +8,6 @@ import (
 	"code.google.com/p/bencode-go"
 	"encoding/hex"
 	//"fmt"
-	"launchpad.net/tomb"
 	"log"
 	"math/rand"
 	"net"
@@ -34,7 +33,7 @@ type trackerPeerChans struct {
 type trackerManager struct {
 	peerChans trackerPeerChans
 	port      uint16
-	t         tomb.Tomb
+	quit      chan struct{}
 }
 
 type TrackerResponse struct {
@@ -60,7 +59,7 @@ type tracker struct {
 	key         string
 	port        uint16
 	infoHash    []byte
-	t           tomb.Tomb
+	quit        chan struct{}
 }
 
 func initKey() string {
@@ -137,16 +136,8 @@ func (tr *tracker) Announce(event int) {
 	}
 }
 
-func (tr *tracker) Stop() error {
-	log.Println("Tracker : Stop : Stopping")
-	tr.Announce(Stopped)
-	tr.t.Kill(nil)
-	return tr.t.Wait()
-}
-
 func (tr *tracker) Run() {
 	log.Printf("Tracker : Run : Started (%s)\n", tr.announceURL)
-	defer tr.t.Done()
 	defer log.Printf("Tracker : Run : Completed (%s)\n", tr.announceURL)
 
 	tr.timer = make(<-chan time.Time)
@@ -154,7 +145,9 @@ func (tr *tracker) Run() {
 
 	for {
 		select {
-		case <-tr.t.Dying():
+		case <-tr.quit:
+			log.Println("Tracker : Stop : Stopping")
+			tr.Announce(Stopped)
 			return
 		case <-tr.completedCh:
 			go tr.Announce(Completed)
@@ -167,7 +160,7 @@ func (tr *tracker) Run() {
 	}
 }
 
-func newTracker(key string, chans trackerPeerChans, port uint16, infoHash []byte, announce string) *tracker {
+func newTracker(key string, chans trackerPeerChans, port uint16, infoHash []byte, announce string, quit chan struct{}) *tracker {
 	announceURL, err := url.Parse(announce)
 	if err != nil {
 		log.Fatal(err)
@@ -177,6 +170,7 @@ func newTracker(key string, chans trackerPeerChans, port uint16, infoHash []byte
 	}
 	tracker := &tracker{key: key, peerChans: chans, port: port, infoHash: infoHash, announceURL: announceURL}
 	tracker.infoHash = make([]byte, len(infoHash))
+	tracker.quit = quit
 	copy(tracker.infoHash, infoHash)
 	return tracker
 }
@@ -185,19 +179,12 @@ func NewTrackerManager(port uint16) *trackerManager {
 	chans := new(trackerPeerChans)
 	chans.peers = make(chan PeerTuple)
 	chans.stats = make(chan Stats)
-	return &trackerManager{peerChans: *chans, port: port}
-}
-
-func (tm *trackerManager) Stop() error {
-	log.Println("TrackerManager : Stop : Stopping")
-	tm.t.Kill(nil)
-	return tm.t.Wait()
+	return &trackerManager{peerChans: *chans, port: port, quit: make(chan struct{})}
 }
 
 // Run spawns trackers for each announce URL
 func (tm *trackerManager) Run(m MetaInfo, infoHash []byte) {
 	log.Println("TrackerManager : Run : Started")
-	defer tm.t.Done()
 	defer log.Println("TrackerManager : Run : Completed")
 
 	// TODO: Handle multiple announce URL's
@@ -210,13 +197,13 @@ func (tm *trackerManager) Run(m MetaInfo, infoHash []byte) {
 		}
 	*/
 
-	tr := newTracker(initKey(), tm.peerChans, tm.port, infoHash, m.Announce)
+	tr := newTracker(initKey(), tm.peerChans, tm.port, infoHash, m.Announce, tm.quit)
 	go tr.Run()
 
 	for {
 		select {
-		case <-tm.t.Dying():
-			tr.Stop()
+		case <-tm.quit:
+			log.Println("TrackerManager : Run : Stopping")
 			return
 		}
 	}

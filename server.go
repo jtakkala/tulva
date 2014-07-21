@@ -5,9 +5,9 @@
 package main
 
 import (
-	"launchpad.net/tomb"
 	"log"
 	"net"
+	"time"
 )
 
 type serverPeerChans struct {
@@ -18,13 +18,13 @@ type Server struct {
 	Port      uint16
 	Listener  *net.TCPListener
 	peerChans serverPeerChans
-	t         tomb.Tomb
+	quit	  chan struct{}
 }
 
 func NewServer() *Server {
-	sv := new(Server)
+	sv := &Server{quit: make(chan struct{})}
 
-	// Send any new connections we receive to PeerManager
+	// Channel used to send new connections we receive to PeerManager
 	sv.peerChans.conns = make(chan *net.TCPConn)
 
 	var err error
@@ -38,38 +38,32 @@ func NewServer() *Server {
 	return sv
 }
 
-func (sv *Server) Listen() {
-	log.Println("Server : Listen : Started")
-	defer sv.Listener.Close()
-	defer log.Println("Server : Listen : Completed")
+// Serve accepts new TCP connections and hands them off to PeerManager
+func (sv *Server) Serve() {
+	log.Println("Server : Serve : Started")
+	defer log.Println("Server : Serve : Completed")
 
 	for {
+		// Check if we should stop accepting connections and shutdown
+		select {
+		case <-sv.quit:
+			log.Println("Server : Serve : Shutting Down")
+			sv.Listener.Close()
+			return
+		default:
+		}
+		// Accept a new connection or timeout and loop again
+		sv.Listener.SetDeadline(time.Now().Add(time.Second))
 		conn, err := sv.Listener.AcceptTCP()
 		if err != nil {
+			// Loop if deadline expired
+			if opErr, ok := err.(*net.OpError); ok && opErr.Timeout() {
+				continue
+			}
 			log.Fatal(err)
 		}
 		log.Println("Server: New connection from:", conn.RemoteAddr())
-		sv.peerChans.conns <- conn
-	}
-}
-
-func (sv *Server) Stop() error {
-	log.Println("Server : Stop : Stopping")
-	sv.t.Kill(nil)
-	return sv.t.Wait()
-}
-
-func (sv *Server) Run() {
-	log.Println("Server : Run : Started")
-	defer sv.t.Done()
-	defer log.Println("Server : Run : Completed")
-
-	go sv.Listen()
-	for {
-		select {
-		case <-sv.t.Dying():
-			sv.Listener.Close()
-			return
-		}
+		// Hand the connection off to PeerManager
+		go func() {sv.peerChans.conns <- conn}()
 	}
 }

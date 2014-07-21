@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"launchpad.net/tomb"
 	"log"
 	"net"
 	"reflect"
@@ -72,7 +71,8 @@ type Peer struct {
 	contTxChans      PeerControllerChans
 	stats            PeerStats
 	statsCh          chan PeerStats
-	t                tomb.Tomb
+	quit		 chan struct{}
+	stopping	 chan bool
 }
 
 type PieceDownload struct {
@@ -138,7 +138,7 @@ type PeerManager struct {
 	contChans     ControllerPeerManagerChans
 	peerContChans PeerControllerChans
 	statsCh       chan PeerStats
-	t             tomb.Tomb
+	quit	      chan struct{}
 }
 
 type peerManagerChans struct {
@@ -239,6 +239,7 @@ func NewPeerManager(infoHash []byte, numPieces int, pieceLength int, totalLength
 	pm.contChans.seeding = make(chan bool)
 	pm.peerContChans.chokeStatus = make(chan PeerChokeStatus)
 	pm.peerContChans.havePiece = make(chan chan HavePiece)
+	pm.quit = make(chan struct{})
 	return pm
 }
 
@@ -285,7 +286,8 @@ func NewPeer(
 		contTxChans:      contTxChans,
 		peerManagerChans: peerManagerChans,
 		statsCh:          statsCh,
-		downloads:        make([]*PieceDownload, 0)}
+		downloads:        make([]*PieceDownload, 0),
+		stopping:	  make(chan bool)}
 	return p
 }
 
@@ -986,10 +988,10 @@ func (p *Peer) updateOurBitfield(havePieces []HavePiece) {
 	}
 }
 
-func (p *Peer) Stop() error {
+func (p *Peer) Stop() {
 	log.Println("Peer : Stop : Stopping:", p.peerName)
-	p.t.Kill(nil)
-	return p.t.Wait()
+	p.stopping <- true
+	return
 }
 
 func (p *Peer) processCancelFromController(cancelPiece CancelPiece) {
@@ -1072,7 +1074,11 @@ func (p *Peer) Run() {
 				p.sendNotInterested()
 			}
 
-		case <-p.t.Dying():
+		case <-p.stopping:
+			p.conn.Close()
+			p.peerManagerChans.deadPeer <- p.peerName
+			return
+		case <-p.quit:
 			p.conn.Close()
 			p.peerManagerChans.deadPeer <- p.peerName
 			return
@@ -1106,15 +1112,8 @@ func (p *Peer) initializePieceDownload(requestPiece RequestPiece) {
 	piece.numOutstandingBlocks = 0
 }
 
-func (pm *PeerManager) Stop() error {
-	log.Println("PeerManager : Stop : Stopping")
-	pm.t.Kill(nil)
-	return pm.t.Wait()
-}
-
 func (pm *PeerManager) Run() {
 	log.Println("PeerManager : Run : Started")
-	defer pm.t.Done()
 	defer log.Println("PeerManager : Run : Completed")
 
 	for {
@@ -1174,7 +1173,7 @@ func (pm *PeerManager) Run() {
 				pm.contChans.deadPeer <- peer
 			}()
 			delete(pm.peers, peer)
-		case <-pm.t.Dying():
+		case <-pm.quit:
 			for _, peer := range pm.peers {
 				go peer.Stop()
 			}
