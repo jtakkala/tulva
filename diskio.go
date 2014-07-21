@@ -9,7 +9,6 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"io"
-	"launchpad.net/tomb"
 	"log"
 	"os"
 	"path/filepath"
@@ -26,7 +25,7 @@ type DiskIO struct {
 	files     []*os.File
 	peerChans diskIOPeerChans
 	contChans ControllerDiskIOChans
-	t         tomb.Tomb
+	quit	  chan struct{}
 }
 
 // checkHash accepts a byte buffer and pieceIndex, computes the SHA-1 hash of
@@ -141,8 +140,7 @@ func openOrCreateFile(name string) (file *os.File) {
 }
 
 func NewDiskIO(metaInfo MetaInfo) *DiskIO {
-	diskio := new(DiskIO)
-	diskio.metaInfo = metaInfo
+	diskio := &DiskIO{metaInfo: metaInfo, quit: make(chan struct{})}
 	diskio.peerChans.writePiece = make(chan Piece)
 	diskio.peerChans.blockRequest = make(chan BlockRequest)
 	diskio.contChans.receivedPiece = make(chan ReceivedPiece)
@@ -264,15 +262,8 @@ func (diskio *DiskIO) requestBlock(block BlockInfo) BlockResponse {
 	return response
 }
 
-func (diskio *DiskIO) Stop() error {
-	log.Println("DiskIO : Stop : Stopping")
-	diskio.t.Kill(nil)
-	return diskio.t.Wait()
-}
-
 func (diskio *DiskIO) Run() {
 	log.Println("DiskIO : Run : Started")
-	defer diskio.t.Done()
 	defer log.Println("DiskIO : Run : Completed")
 
 	for {
@@ -287,7 +278,7 @@ func (diskio *DiskIO) Run() {
 			go func() {
 				blockRequest.response <- diskio.requestBlock(blockRequest.request)
 			}()
-		case <-diskio.t.Dying():
+		case <-diskio.quit:
 			return
 		}
 	}

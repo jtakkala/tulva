@@ -21,8 +21,8 @@ type Server struct {
 	quit	  chan struct{}
 }
 
-func NewServer(quit chan struct{}) *Server {
-	sv := &Server{quit: quit}
+func NewServer() *Server {
+	sv := &Server{quit: make(chan struct{})}
 
 	// Channel used to send new connections we receive to PeerManager
 	sv.peerChans.conns = make(chan *net.TCPConn)

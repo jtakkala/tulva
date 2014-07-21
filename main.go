@@ -5,7 +5,6 @@
 package main
 
 import (
-	//"errors"
 	"log"
 	"math/rand"
 	"net/http"
@@ -32,7 +31,9 @@ func main() {
 	if len(os.Args) != 2 {
 		log.Fatalf("Usage: %s: <torrent file>\n", os.Args[0])
 	}
-	t, err := ParseTorrentFile(os.Args[1])
+
+	quit := make(chan struct{})
+	t, err := NewTorrent(os.Args[1], quit)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -47,10 +48,12 @@ func main() {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
+		// Block waiting for a signal
 		<-c
-		log.Println("Received Interrupt")
-		t.Stop()
-		os.Exit(1)
+		// Unregister the signal handler
+		signal.Stop(c)
+		log.Println("Received Interrupt. Shutting down...")
+		close(t.quit)
 	}()
 
 	// Launch the torrent

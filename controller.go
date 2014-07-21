@@ -5,7 +5,6 @@
 package main
 
 import (
-	"launchpad.net/tomb"
 	"log"
 	"sort"
 	"math/rand"
@@ -77,7 +76,7 @@ type Controller struct {
 	maxSimultaneousDownloadsPerPeer int
 	downloadComplete                bool
 	rxChans                         *ControllerRxChans
-	t                               tomb.Tomb
+	quit				chan struct{}
 }
 
 type ControllerPeerChans struct {
@@ -130,8 +129,6 @@ type ControllerRxChans struct {
 func NewController(finishedPieces []bool, pieceHashes [][]byte, diskIOChans ControllerDiskIOChans,
 	peerManagerChans ControllerPeerManagerChans, peerChans PeerControllerChans) *Controller {
 
-	cont := new(Controller)
-
 	if len(finishedPieces) == 0 {
 		log.Fatalf("ERROR: can't construct controller with an empty finishedPieces slice")
 	}
@@ -140,8 +137,7 @@ func NewController(finishedPieces []bool, pieceHashes [][]byte, diskIOChans Cont
 		log.Fatalf("ERROR: can't construct controller with finishedPieces size of %d and pieceHahses size of %d", len(finishedPieces), len(pieceHashes))
 	}
 
-	cont.finishedPieces = finishedPieces
-	cont.pieceHashes = pieceHashes
+	cont := &Controller{finishedPieces: finishedPieces, pieceHashes: pieceHashes, quit: make(chan struct{})}
 	cont.rxChans = &ControllerRxChans{diskIOChans, peerManagerChans, peerChans}
 	cont.peers = make(map[string]*PeerInfo)
 	cont.activeRequestsTotals = make([]int, len(finishedPieces))
@@ -178,12 +174,6 @@ func (cont *Controller) updateCompletedFlagIfFinished(initializing bool) {
 	log.Println("**********************************************************************")
 	log.Println("")
 	log.Println("")
-}
-
-func (cont *Controller) Stop() error {
-	log.Println("Controller : Stop : Stopping")
-	cont.t.Kill(nil)
-	return cont.t.Wait()
 }
 
 func (cont *Controller) sendHaveToPeersWhoNeedPiece(pieceNum int) {
@@ -439,7 +429,6 @@ func (cont *Controller) removeUnfinishedWorkForPeer(peerInfo *PeerInfo) {
 
 func (cont *Controller) Run() {
 	log.Println("Controller : Run : Started")
-	defer cont.t.Done()
 	defer log.Println("Controller : Run : Completed")
 
 	for {
@@ -605,7 +594,7 @@ func (cont *Controller) Run() {
 			}
 		// === END OF MESSAGES FROM PEER ===
 
-		case <-cont.t.Dying():
+		case <-cont.quit:
 			return
 		}
 	}

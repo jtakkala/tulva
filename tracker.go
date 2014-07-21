@@ -175,11 +175,11 @@ func newTracker(key string, chans trackerPeerChans, port uint16, infoHash []byte
 	return tracker
 }
 
-func NewTrackerManager(port uint16, quit chan struct{}) *trackerManager {
+func NewTrackerManager(port uint16) *trackerManager {
 	chans := new(trackerPeerChans)
 	chans.peers = make(chan PeerTuple)
 	chans.stats = make(chan Stats)
-	return &trackerManager{peerChans: *chans, port: port, quit: quit}
+	return &trackerManager{peerChans: *chans, port: port, quit: make(chan struct{})}
 }
 
 // Run spawns trackers for each announce URL
