@@ -97,10 +97,6 @@ type ControllerDiskIOChans struct {
 	receivedPiece chan ReceivedPiece // Other end is IO
 }
 
-func NewControllerDiskIOChans() *ControllerDiskIOChans {
-	return &ControllerDiskIOChans{receivedPiece: make(chan ReceivedPiece)}
-}
-
 type ControllerPeerManagerChans struct {
 	newPeer  chan PeerComms
 	deadPeer chan string
@@ -369,7 +365,6 @@ func (cont *Controller) sendRequestsToPeer(peerInfo *PeerInfo, raritySlice []int
 
 		if len(downloadPriority) == 0 {
 			//log.Printf("Controller : SendRequestsToPeer : We aren't finished downloading, but %s doesn't have more pieces that we need", peerInfo.peerName)
-
 		} else {
 			for _, pieceNum := range downloadPriority {
 				if len(peerInfo.activeRequests) >= cont.maxSimultaneousDownloadsPerPeer {
