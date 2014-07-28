@@ -488,6 +488,7 @@ func assertRequestsReceived(t *testing.T, peerComms *PeerComms, expectedRequests
 		select {
 		case request := <-peerComms.chans.requestPiece:
 			if _, ok := expectedRequests[request.pieceNum]; !ok {
+				// invalid request
 				t.Errorf("Received request for piece %d, but not in list of expected requests %v for peer %s", request.pieceNum, expectedRequests, peerComms.peerName)
 			} else {
 				expectedRequests[request.pieceNum] = true
@@ -498,6 +499,7 @@ func assertRequestsReceived(t *testing.T, peerComms *PeerComms, expectedRequests
 		}
 	}
 exit:
+	// verify that all the requests were received
 	for request, value := range expectedRequests {
 		if value == false {
 			t.Errorf("Did not receive a request for piece %d for peer %s", request, peerComms.peerName)
@@ -554,7 +556,6 @@ func TestControllerDownloadPriorityForFourPeers(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	// Since peer2 isn't considered yet, piece 3 has rarity of 2 (not 3)
-	// TODO: Store expected pieces in a hash map with boolean values
 	peer1ExpectedRequests := map[int]bool{3: false, 8: false, 1: false, 4: false}
 	peer2ExpectedRequests := map[int]bool{2: false, 6: false, 3: false, 4: false}
 	peer3ExpectedRequests := map[int]bool{1: false, 4: false}
