@@ -479,22 +479,28 @@ func assertCancelReceived(t *testing.T, cancelCh chan CancelPiece, expectedPiece
 	}
 }
 
-func assertRequestOrder(t *testing.T, peerComms *PeerComms, expectedRequests []int) {
-
+func assertRequestsReceived(t *testing.T, peerComms *PeerComms, expectedRequests map[int]bool) {
 	// For every request received from the controller, tell it that we finished the piece, then wait
 	// for more requests in the request channel.
-	for _, expectedPieceNum := range expectedRequests {
-		time.Sleep(10 * time.Millisecond)
+	timer := make(<-chan time.Time)
+	timer = time.After(time.Second)
+	for numRequestsExpected := len(expectedRequests); numRequestsExpected > 0; numRequestsExpected-- {
 		select {
 		case request := <-peerComms.chans.requestPiece:
-
-			// Confirm that the piece that it was just told to get it what was expected
-			if request.pieceNum != expectedPieceNum {
-				t.Errorf("Expected %s to be told to get pieceNum %d next, but it was told to get pieceNum %d instead", peerComms.peerName, expectedPieceNum, request.pieceNum)
+			if _, ok := expectedRequests[request.pieceNum]; !ok {
+				t.Errorf("Received request for piece %d, but not in list of expected requests %v for peer %s", request.pieceNum, expectedRequests, peerComms.peerName)
+			} else {
+				expectedRequests[request.pieceNum] = true
 			}
-
-		default:
-			t.Errorf("%s wasn't told to get any more pieces, but it was expected to be told to get pieceNum %d", peerComms.peerName, expectedPieceNum)
+		case <-timer:
+			t.Errorf("Timer expired and %d outstanding requests for peer %s", numRequestsExpected, peerComms.peerName)
+			goto exit
+		}
+	}
+exit:
+	for request, value := range expectedRequests {
+		if value == false {
+			t.Errorf("Did not receive a request for piece %d for peer %s", request, peerComms.peerName)
 		}
 	}
 }
@@ -547,11 +553,13 @@ func TestControllerDownloadPriorityForFourPeers(t *testing.T) {
 
 	time.Sleep(10 * time.Millisecond)
 
-	peer1ExpectedRequests := []int{3, 8, 1, 4} // Since peer2 isn't considered yet, piece 3 has rarity of 2 (not 3)
-	peer2ExpectedRequests := []int{2, 6, 3, 4}
-	peer3ExpectedRequests := []int{1, 4}
+	// Since peer2 isn't considered yet, piece 3 has rarity of 2 (not 3)
+	// TODO: Store expected pieces in a hash map with boolean values
+	peer1ExpectedRequests := map[int]bool{3: false, 8: false, 1: false, 4: false}
+	peer2ExpectedRequests := map[int]bool{2: false, 6: false, 3: false, 4: false}
+	peer3ExpectedRequests := map[int]bool{1: false, 4: false}
 	// Note that peer4 won't be asked to get more than 5 pieces because of maxSimultaneousDownloadsPerPeer
-	peer4ExpectedRequests := []int{5, 7, 2, 6, 8}
+	peer4ExpectedRequests := map[int]bool{5: false, 7: false, 2: false, 6: false, 8: false}
 
 	// Send the unchoke message for peer3 first because he has the smallest list of needed pieces
 	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{peer3Name, false}
@@ -559,10 +567,10 @@ func TestControllerDownloadPriorityForFourPeers(t *testing.T) {
 	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{peer2Name, false}
 	cont.rxChans.peer.chokeStatus <- PeerChokeStatus{peer4Name, false}
 
-	assertRequestOrder(t, peer1Comms, peer1ExpectedRequests)
-	assertRequestOrder(t, peer2Comms, peer2ExpectedRequests)
-	assertRequestOrder(t, peer3Comms, peer3ExpectedRequests)
-	assertRequestOrder(t, peer4Comms, peer4ExpectedRequests)
+	assertRequestsReceived(t, peer1Comms, peer1ExpectedRequests)
+	assertRequestsReceived(t, peer2Comms, peer2ExpectedRequests)
+	assertRequestsReceived(t, peer3Comms, peer3ExpectedRequests)
+	assertRequestsReceived(t, peer4Comms, peer4ExpectedRequests)
 
 	close(cont.quit)
 }
