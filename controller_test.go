@@ -484,7 +484,7 @@ func assertRequestsReceived(t *testing.T, peerComms *PeerComms, expectedRequests
 	// for more requests in the request channel.
 	timer := make(<-chan time.Time)
 	timer = time.After(time.Second)
-	for numRequestsExpected := len(expectedRequests); numRequestsExpected > 0; numRequestsExpected-- {
+	for numRequestsOutstanding := len(expectedRequests); numRequestsOutstanding > 0; numRequestsOutstanding-- {
 		select {
 		case request := <-peerComms.chans.requestPiece:
 			if _, ok := expectedRequests[request.pieceNum]; !ok {
@@ -494,11 +494,10 @@ func assertRequestsReceived(t *testing.T, peerComms *PeerComms, expectedRequests
 				expectedRequests[request.pieceNum] = true
 			}
 		case <-timer:
-			t.Errorf("Timer expired and %d outstanding requests for peer %s", numRequestsExpected, peerComms.peerName)
-			goto exit
+			t.Errorf("Timer expired and %d outstanding requests for peer %s", numRequestsOutstanding, peerComms.peerName)
+			numRequestsOutstanding = 0
 		}
 	}
-exit:
 	// verify that all the requests were received
 	for request, value := range expectedRequests {
 		if value == false {
