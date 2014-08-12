@@ -222,6 +222,7 @@ func (diskio *DiskIO) Init() {
 			diskio.files = append(diskio.files, openOrCreateFile(name))
 		}
 		err = os.Chdir("..")
+		checkError(err)
 	} else {
 		// Single File Mode
 		diskio.files = append(diskio.files, openOrCreateFile(diskio.metaInfo.Info.Name))
