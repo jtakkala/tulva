@@ -524,7 +524,7 @@ func (cont *Controller) Run() {
 			peerInfo, exists := cont.peers[chokeStatus.peerName]
 
 			if !exists {
-				log.Printf("Controller : Run (Choke Status) : WARNING: Unable to process PeerChokeStatus from %s because it doesn't exist in the peers mapping")
+				log.Printf("Controller : Run (Choke Status) : WARNING: Unable to process PeerChokeStatus from %s because it doesn't exist in the peers mapping", chokeStatus.peerName)
 				return
 			}
 
