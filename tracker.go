@@ -82,7 +82,8 @@ func newTracker(key string, chans trackerPeerChans, port uint16, infoHash []byte
 	}
 
 	if strings.HasPrefix(announceURL.String(), "udp://") {
-		tracker := &UdpTracker{key: key, peerChans: chans, port: port, infoHash: infoHash, announceURL: announceURL}
+		
+		tracker := NewUdpTracker(key, chans, port, infoHash, announceURL)//&UdpTracker{&ntracker}
 		tracker.infoHash = make([]byte, len(infoHash))
 		tracker.quit = quit
 		copy(tracker.infoHash, infoHash)
