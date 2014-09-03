@@ -3,9 +3,10 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"errors"
+	"fmt"
 	"log"
+	"math"
 	"math/rand"
 	"net"
 	"net/url"
@@ -123,18 +124,18 @@ func (r *announceResponse) UnmarshalBinary(data []byte) error {
 	err = binary.Read(buf, binary.BigEndian, &r.interval)
 	err = binary.Read(buf, binary.BigEndian, &r.leechers)
 	err = binary.Read(buf, binary.BigEndian, &r.seeders)
-	
+
 	peerBytes := data[20:]
-	peers := len(peerBytes)/6
-	
-	for i := 0; i < peers; i++{
+	peers := len(peerBytes) / 6
+
+	for i := 0; i < peers; i++ {
 		peer := PeerTuple{}
 
-		ipBytes := peerBytes[i*6:i*6+4]
+		ipBytes := peerBytes[i*6 : i*6+4]
 		//log.Printf("ipbytes: %v\n", ipBytes)
 		peer.IP = net.IPv4(ipBytes[0], ipBytes[1], ipBytes[2], ipBytes[3])
 		binary.Read(bytes.NewReader(peerBytes[i*6+4:i*6+6]), binary.BigEndian, &peer.Port)
-	
+
 		log.Printf("peer: %s:%d\n", peer.IP.String(), peer.Port)
 		r.peers = append(r.peers, peer)
 	}
@@ -146,18 +147,17 @@ func NewUdpTracker(key string, chans trackerPeerChans, port uint16, infoHash []b
 	return &UdpTracker{&tracker{key: key, peerChans: chans, port: port, infoHash: infoHash, announceURL: announce}, 0, 0, &net.UDPAddr{}, &net.UDPConn{}}
 }
 
-func (p *PeerTuple) String () string {
+func (p *PeerTuple) String() string {
 	return fmt.Sprintf("%s:%d\n", p.IP.String(), p.Port)
 }
 
 func (tr *UdpTracker) Announce(event int) {
 	err := tr.connect()
 	if err != nil {
-		log.Println("Could not connect to tracker")
+		log.Printf("Tracker : Could not connect to tracker %s\n", tr.announceURL.String())
 		return
 	}
 
-	log.Println("udp announce")
 	key, _ := strconv.ParseUint(tr.key, 16, 4)
 	announce := &announceRequest{
 		connectionId:  tr.connectionId,
@@ -175,14 +175,13 @@ func (tr *UdpTracker) Announce(event int) {
 		port:          6881,
 	}
 	announceBytes, _ := announce.MarshalBinary()
-	tr.conn.WriteTo(announceBytes, tr.serverAddr)
-	
-	buff := make([]byte, 600)
 
-	tr.conn.ReadFrom(buff)
+	buff := make([]byte, 600)
+	length := tr.request(announceBytes, buff)
+
 	var response announceResponse
-	response.UnmarshalBinary(buff)
-	
+	response.UnmarshalBinary(buff[:length])
+
 	log.Printf("announce response: %+v\n", response.peers)
 
 	if event != Stopped {
@@ -190,35 +189,33 @@ func (tr *UdpTracker) Announce(event int) {
 			nextAnnounce := time.Second * 120
 			log.Printf("Tracker : Announce : Scheduling next announce in %v\n", nextAnnounce)
 			tr.timer = time.After(nextAnnounce)
-		}	
-		
+		}
+
 		for _, peer := range response.peers {
 			tr.peerChans.peers <- peer
 		}
 	}
 }
 
-
-func (tr *UdpTracker) connect () error {
+func (tr *UdpTracker) connect() error {
 	log.Printf("Tracker : Connect (%v)", tr.announceURL)
 
 	connectReq := connectRequest{connectionId: 0x41727101980, action: 0, transactionId: tr.transactionId}
 	connectBytes, _ := connectReq.MarshalBinary()
 
 	buff := make([]byte, 150)
-	tr.conn.WriteTo(connectBytes, tr.serverAddr)
-	tr.conn.ReadFrom(buff)
+	length := tr.request(connectBytes, buff)
 
 	var response connectResponse
-	response.UnmarshalBinary(buff)
+	response.UnmarshalBinary(buff[:length])
 
 	if response.action == 3 || tr.transactionId != response.transactionId {
 		error := errorResponse{}
 		error.UnmarshalBinary(buff)
 		return errors.New("Response Error: " + error.message)
 	}
-		
-	tr.connectionId = response.connectionId	
+
+	tr.connectionId = response.connectionId
 	return nil
 }
 
@@ -232,7 +229,7 @@ func (tr *UdpTracker) Run() {
 	if err != nil {
 		log.Println("Tracker : Could not resolve tracker host!")
 		return
-	}	
+	}
 
 	var conn *net.UDPConn
 	for port := 6881; err == nil && port < 6890; port++ {
@@ -263,4 +260,34 @@ func (tr *UdpTracker) Run() {
 			log.Println("read from stats", stats)
 		}
 	}
+}
+
+func (tr *UdpTracker) request(payload []byte, dest []byte) int {
+	attempt := 1
+	recvChan := make(chan bool)
+	
+	go func() {
+		tr.conn.WriteTo(payload, tr.serverAddr)
+		for {
+			timeout := time.Second * time.Duration(15*math.Pow(2.0, float64(attempt)))
+			timer := time.After(timeout)
+
+			select {
+			case <-recvChan:
+				break
+			case <-timer:
+				tr.conn.WriteTo(payload, tr.serverAddr)
+				if attempt < 8 {
+					attempt++
+				}
+			}
+		}
+	}()
+
+	length := 0
+	for length == 0 {
+		length, _, _ = tr.conn.ReadFrom(dest)
+	}
+	recvChan <- true
+	return length
 }
