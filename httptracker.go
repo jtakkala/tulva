@@ -1,7 +1,7 @@
 package main
 
 import (
-	"code.google.com/p/bencode-go"
+	"github.com/jackpal/bencode-go"
 	"log"
 	"time"
 	"net"
