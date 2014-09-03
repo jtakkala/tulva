@@ -39,7 +39,7 @@ func (s *Stats) Run() {
 			s.Uploaded += stat.write
 			s.Errors += stat.errors
 		case <-s.ticker:
-			fmt.Printf("\033[31mDownloaded: %d, Uploaded: %d, Errors: %d\033[0m\n", s.Downloaded, s.Uploaded, s.Errors)
+			fmt.Printf("\033[31mDownloaded: %d, Left: %d, Uploaded: %d, Errors: %d\033[0m\n", s.Downloaded, s.Left,s.Uploaded, s.Errors)
 		}
 	}
 }
