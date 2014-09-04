@@ -49,14 +49,12 @@ type errorResponse struct {
 	message       string
 }
 
-type shortString []byte
-
 type announceRequest struct {
 	connectionId  uint64
 	action        uint32
 	transactionId uint32
-	infoHash      shortString
-	peerId        shortString
+	infoHash      []byte
+	peerId        []byte
 	downloaded    uint64
 	left          uint64
 	uploaded      uint64
