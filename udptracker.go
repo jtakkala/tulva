@@ -187,7 +187,7 @@ func (tr *UdpTracker) Announce(event int) {
 	}
 	announceBytes, _ := announce.MarshalBinary()
 
-	buff := make([]byte, 60000)
+	buff := make([]byte, announceBufferSize)
 	length := tr.request(announceBytes, buff)
 
 	if length >= announceMinResponseLength {
@@ -196,8 +196,8 @@ func (tr *UdpTracker) Announce(event int) {
 
 		if event != Stopped {
 			if response.interval != 0 {
-				nextAnnounce := time.Second * 120
-				log.Printf("Tracker : Announce : Scheduling next announce in %v\n", nextAnnounce)
+				nextAnnounce := time.Second * time.Duration(response.interval)
+				log.Println("Tracker : Announce : Scheduling next announce in", nextAnnounce)
 				tr.timer = time.After(nextAnnounce)
 			}
 
@@ -214,7 +214,7 @@ func (tr *UdpTracker) connect() error {
 	connectReq := connectRequest{connectionId: 0x41727101980, action: 0, transactionId: tr.transactionId}
 	connectBytes, _ := connectReq.MarshalBinary()
 
-	buff := make([]byte, 150)
+	buff := make([]byte, connectBufferSize)
 	length := tr.request(connectBytes, buff)
 
 	if length >= connectMinResponseLength {
