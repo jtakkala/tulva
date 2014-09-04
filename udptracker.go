@@ -125,19 +125,21 @@ func (r *announceResponse) UnmarshalBinary(data []byte) error {
 	err = binary.Read(buf, binary.BigEndian, &r.leechers)
 	err = binary.Read(buf, binary.BigEndian, &r.seeders)
 
-	peerBytes := data[20:]
-	peers := len(peerBytes) / 6
+	if len(data) > 20 {
+		peerBytes := data[20:]
+		peers := len(peerBytes) / 6
 
-	for i := 0; i < peers; i++ {
-		peer := PeerTuple{}
+		for i := 0; i < peers; i++ {
+			peer := PeerTuple{}
 
-		ipBytes := peerBytes[i*6 : i*6+4]
-		//log.Printf("ipbytes: %v\n", ipBytes)
-		peer.IP = net.IPv4(ipBytes[0], ipBytes[1], ipBytes[2], ipBytes[3])
-		binary.Read(bytes.NewReader(peerBytes[i*6+4:i*6+6]), binary.BigEndian, &peer.Port)
+			ipBytes := peerBytes[i*6 : i*6+4]
+			//log.Printf("ipbytes: %v\n", ipBytes)
+			peer.IP = net.IPv4(ipBytes[0], ipBytes[1], ipBytes[2], ipBytes[3])
+			binary.Read(bytes.NewReader(peerBytes[i*6+4:i*6+6]), binary.BigEndian, &peer.Port)
 
-		log.Printf("peer: %s:%d\n", peer.IP.String(), peer.Port)
-		r.peers = append(r.peers, peer)
+			log.Printf("peer: %s:%d\n", peer.IP.String(), peer.Port)
+			r.peers = append(r.peers, peer)
+		}
 	}
 
 	return err
@@ -154,7 +156,7 @@ func (p *PeerTuple) String() string {
 func (tr *UdpTracker) Announce(event int) {
 	err := tr.connect()
 	if err != nil {
-		log.Printf("Tracker : Could not connect to tracker %s\n", tr.announceURL.String())
+		log.Printf("Tracker : Could not connect to tracker %s: \n", tr.announceURL.String(), err)
 		return
 	}
 
@@ -176,23 +178,25 @@ func (tr *UdpTracker) Announce(event int) {
 	}
 	announceBytes, _ := announce.MarshalBinary()
 
-	buff := make([]byte, 600)
+	buff := make([]byte, 60000)
 	length := tr.request(announceBytes, buff)
 
-	var response announceResponse
-	response.UnmarshalBinary(buff[:length])
+	if length >= 20 {
+		var response announceResponse
+		response.UnmarshalBinary(buff[:length])
 
-	log.Printf("announce response: %+v\n", response.peers)
+		log.Printf("announce response: %+v\n", response.peers)
 
-	if event != Stopped {
-		if response.interval != 0 {
-			nextAnnounce := time.Second * 120
-			log.Printf("Tracker : Announce : Scheduling next announce in %v\n", nextAnnounce)
-			tr.timer = time.After(nextAnnounce)
-		}
+		if event != Stopped {
+			if response.interval != 0 {
+				nextAnnounce := time.Second * 120
+				log.Printf("Tracker : Announce : Scheduling next announce in %v\n", nextAnnounce)
+				tr.timer = time.After(nextAnnounce)
+			}
 
-		for _, peer := range response.peers {
-			tr.peerChans.peers <- peer
+			for _, peer := range response.peers {
+				tr.peerChans.peers <- peer
+			}
 		}
 	}
 }
@@ -206,17 +210,21 @@ func (tr *UdpTracker) connect() error {
 	buff := make([]byte, 150)
 	length := tr.request(connectBytes, buff)
 
-	var response connectResponse
-	response.UnmarshalBinary(buff[:length])
+	if length >= 16 {
+		var response connectResponse
+		response.UnmarshalBinary(buff[:length])
 
-	if response.action == 3 || tr.transactionId != response.transactionId {
-		error := errorResponse{}
-		error.UnmarshalBinary(buff)
-		return errors.New("Response Error: " + error.message)
+		if response.action == 3 || tr.transactionId != response.transactionId {
+			error := errorResponse{}
+			error.UnmarshalBinary(buff)
+			return errors.New("Response Error: " + error.message)
+		}
+
+		tr.connectionId = response.connectionId
+		return nil
 	}
 
-	tr.connectionId = response.connectionId
-	return nil
+	return errors.New("Invalid connect response length")
 }
 
 func (tr *UdpTracker) Run() {
