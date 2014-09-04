@@ -14,6 +14,15 @@ import (
 	"time"
 )
 
+const (
+	connectMinResponseLength = 16
+	announceMinResponseLength = 20
+	connectBufferSize = 150
+	announceBufferSize = 20000
+	startPort = 6881
+	endPort = 6889
+)
+
 type UdpTracker struct {
 	*tracker
 	connectionId  uint64
@@ -125,19 +134,19 @@ func (r *announceResponse) UnmarshalBinary(data []byte) error {
 	err = binary.Read(buf, binary.BigEndian, &r.leechers)
 	err = binary.Read(buf, binary.BigEndian, &r.seeders)
 
-	if len(data) > 20 {
-		peerBytes := data[20:]
+	if len(data) > announceMinResponseLength {
+		peerBytes := data[announceMinResponseLength:]
 		peers := len(peerBytes) / 6
-
+		
+		ipLen := 4
+		portLen := 2
 		for i := 0; i < peers; i++ {
+			ipOffset := i*6
+			portOffset := ipOffset + ipLen	
 			peer := PeerTuple{}
-
-			ipBytes := peerBytes[i*6 : i*6+4]
-			//log.Printf("ipbytes: %v\n", ipBytes)
+			ipBytes := peerBytes[ipOffset : ipOffset + ipLen]
 			peer.IP = net.IPv4(ipBytes[0], ipBytes[1], ipBytes[2], ipBytes[3])
-			binary.Read(bytes.NewReader(peerBytes[i*6+4:i*6+6]), binary.BigEndian, &peer.Port)
-
-			log.Printf("peer: %s:%d\n", peer.IP.String(), peer.Port)
+			binary.Read(bytes.NewReader(peerBytes[portOffset : portOffset + portLen]), binary.BigEndian, &peer.Port)
 			r.peers = append(r.peers, peer)
 		}
 	}
@@ -181,11 +190,9 @@ func (tr *UdpTracker) Announce(event int) {
 	buff := make([]byte, 60000)
 	length := tr.request(announceBytes, buff)
 
-	if length >= 20 {
+	if length >= announceMinResponseLength {
 		var response announceResponse
 		response.UnmarshalBinary(buff[:length])
-
-		log.Printf("announce response: %+v\n", response.peers)
 
 		if event != Stopped {
 			if response.interval != 0 {
@@ -210,7 +217,7 @@ func (tr *UdpTracker) connect() error {
 	buff := make([]byte, 150)
 	length := tr.request(connectBytes, buff)
 
-	if length >= 16 {
+	if length >= connectMinResponseLength {
 		var response connectResponse
 		response.UnmarshalBinary(buff[:length])
 
@@ -240,11 +247,11 @@ func (tr *UdpTracker) Run() {
 	}
 
 	var conn *net.UDPConn
-	for port := 6881; err == nil && port < 6890; port++ {
+	for port := startPort; err == nil && port < endPort; port++ {
 		conn, err = net.ListenUDP("udp", &net.UDPAddr{Port: port})
 	}
 	if err != nil {
-		log.Println("Tracker : Could not bind to any port in range 6881-6889")
+		log.Printf("Tracker : Could not bind to any port in range %d-%d\n", startPort, endPort)
 		return
 	}
 
@@ -294,10 +301,8 @@ func (tr *UdpTracker) request(payload []byte, dest []byte) int {
 				break Listen
 			case <-timer:
 				tr.conn.WriteTo(payload, tr.serverAddr)
-				if n < 8 {
-					n++
-				}
 				totalAttempts++
+				if n < 8 { n++ }
 			}
 		}
 	}()
