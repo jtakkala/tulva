@@ -262,32 +262,50 @@ func (tr *UdpTracker) Run() {
 	}
 }
 
+// Send a udp packet to the tracker, fill in the dest buffer with the response
 func (tr *UdpTracker) request(payload []byte, dest []byte) int {
-	attempt := 1
-	recvChan := make(chan bool)
-	
-	go func() {
-		tr.conn.WriteTo(payload, tr.serverAddr)
-		for {
-			timeout := time.Second * time.Duration(15*math.Pow(2.0, float64(attempt)))
-			timer := time.After(timeout)
+	n := 0
+	totalAttempts := 0
 
+	// notify the sender when a response is recieved
+	recvChan := make(chan bool)
+
+	// keep sending the packet and wait for the specifed time
+	// before trying again, limit n to 8
+	go func() {
+
+		// initial send
+		tr.conn.WriteTo(payload, tr.serverAddr)
+	Listen:
+		for {
+			// timeout: 15 * 2 ^ n (0-8)
+			timeout := time.Second * time.Duration(15 * int(math.Pow(2.0, float64(n))))
+			timer := time.After(timeout)
 			select {
 			case <-recvChan:
-				break
+				break Listen
 			case <-timer:
 				tr.conn.WriteTo(payload, tr.serverAddr)
-				if attempt < 8 {
-					attempt++
+				if n < 8 {
+					n++
 				}
+				totalAttempts++
 			}
 		}
 	}()
 
+	// read until some data is received
+	var err error
 	length := 0
 	for length == 0 {
-		length, _, _ = tr.conn.ReadFrom(dest)
+		length, _, err = tr.conn.ReadFrom(dest)
+
+		// not sure what to do here?
+		if err != nil {
+			log.Println("Tracker : udp packet read error")
+		}
 	}
+
 	recvChan <- true
 	return length
 }
