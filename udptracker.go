@@ -158,10 +158,6 @@ func NewUdpTracker(key string, chans trackerPeerChans, port uint16, infoHash []b
 	return &UdpTracker{&tracker{key: key, peerChans: chans, port: port, infoHash: infoHash, announceURL: announce}, 0, 0, &net.UDPAddr{}, &net.UDPConn{}}
 }
 
-func (p *PeerTuple) String() string {
-	return fmt.Sprintf("%s:%d\n", p.IP.String(), p.Port)
-}
-
 func (tr *UdpTracker) Announce(event int) {
 	err := tr.connect()
 	if err != nil {
