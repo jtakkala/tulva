@@ -19,8 +19,6 @@ const (
 	announceMinResponseLength = 20
 	connectBufferSize = 150
 	announceBufferSize = 20000
-	startPort = 6881
-	endPort = 6889
 )
 
 type UdpTracker struct {
@@ -240,12 +238,9 @@ func (tr *UdpTracker) Run() {
 		return
 	}
 
-	var conn *net.UDPConn
-	for port := startPort; err == nil && port < endPort; port++ {
-		conn, err = net.ListenUDP("udp", &net.UDPAddr{Port: port})
-	}
+	conn, err := net.ListenUDP("udp", &net.UDPAddr{Port: 0})
 	if err != nil {
-		log.Printf("Tracker : Could not bind to any port in range %d-%d\n", startPort, endPort)
+		log.Println("Tracker : Could not bind to any port")
 		return
 	}
 
