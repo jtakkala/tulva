@@ -6,7 +6,7 @@ package main
 
 import (
 	"bytes"
-	"code.google.com/p/bencode-go"
+	"github.com/jackpal/bencode-go"
 	"crypto/sha1"
 	"errors"
 	"log"
