@@ -170,7 +170,7 @@ func NewUdpTracker(key string, chans trackerPeerChans, port uint16, infoHash []b
 func (tr *UdpTracker) Announce(event int) {
 	err := tr.connect()
 	if err != nil {
-		log.Printf("Tracker : Could not connect to tracker %s: \n", tr.announceURL.String(), err)
+		log.Printf("Tracker : Could not connect to tracker %s: %v\n", tr.announceURL.String(), err)
 		return
 	}
 
