@@ -18,6 +18,7 @@ import (
 )
 
 const (
+	initialConnectionId = 0x41727101980
 	connectMinResponseLength = 16
 	announceMinResponseLength = 20
 	connectBufferSize = 150
@@ -219,7 +220,7 @@ func (tr *UdpTracker) Announce(event int) {
 func (tr *UdpTracker) connect() error {
 	log.Printf("Tracker : Connect (%v)", tr.announceURL)
 
-	connectReq := connectRequest{ConnectionId: 0x41727101980, Action: 0, TransactionId: tr.TransactionId}
+	connectReq := connectRequest{ConnectionId: initialConnectionId, Action: 0, TransactionId: tr.TransactionId}
 	connectBytes, _ := connectReq.MarshalBinary()
 
 	buff := make([]byte, connectBufferSize)
