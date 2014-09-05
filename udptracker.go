@@ -18,11 +18,11 @@ import (
 )
 
 const (
-	initialConnectionId = 0x41727101980
-	connectMinResponseLength = 16
+	initialConnectionId       = 0x41727101980
+	connectMinResponseLength  = 16
 	announceMinResponseLength = 20
-	connectBufferSize = 150
-	announceBufferSize = 20000
+	connectBufferSize         = 150
+	announceBufferSize        = 20000
 )
 
 type UdpTracker struct {
@@ -89,7 +89,7 @@ func (r *connectResponse) UnmarshalBinary(data []byte) error {
 }
 
 func (r *errorResponse) UnmarshalBinary(data []byte) error {
-	buf := bytes.NewReader(append([]byte{0,0,0,data[0]}, data[4:]...))
+	buf := bytes.NewReader(append([]byte{0, 0, 0, data[0]}, data[4:]...))
 	err := binary.Read(buf, binary.BigEndian, &r.Action)
 	if err != nil {
 		return err
@@ -122,7 +122,7 @@ func (r *announceResponse) UnmarshalBinary(data []byte) error {
 	if err != nil {
 		return err
 	}
-	
+
 	err = binary.Read(buf, binary.BigEndian, &r.Interval)
 	if err != nil {
 		return err
@@ -141,7 +141,7 @@ func (r *announceResponse) UnmarshalBinary(data []byte) error {
 	if len(data) > announceMinResponseLength {
 		peerBytes := bytes.NewReader(data[announceMinResponseLength:])
 		peers := (len(data) - announceMinResponseLength) / 6
-		
+
 		for i := 0; i < peers; i++ {
 			var peer PeerTuple
 			var ipBuf [4]byte
@@ -155,7 +155,7 @@ func (r *announceResponse) UnmarshalBinary(data []byte) error {
 			if err != nil {
 				return err
 			}
-			
+
 			peer.IP = net.IPv4(ipBuf[0], ipBuf[1], ipBuf[2], ipBuf[3])
 			r.Peers = append(r.Peers, peer)
 		}
@@ -179,7 +179,7 @@ func (tr *UdpTracker) Announce(event int) {
 		ConnectionId:  tr.ConnectionId,
 		Action:        1,
 		TransactionId: tr.TransactionId,
-		PeerId: PeerID,
+		PeerId:        PeerID,
 		Downloaded:    uint64(tr.stats.Downloaded),
 		Left:          uint64(tr.stats.Left),
 		Uploaded:      uint64(tr.stats.Uploaded),
@@ -308,7 +308,7 @@ func (tr *UdpTracker) request(payload []byte, dest []byte) int {
 	Listen:
 		for {
 			// timeout: 15 * 2 ^ n (0-8)
-			timeout := time.Second * time.Duration(15 * int(math.Pow(2.0, float64(n))))
+			timeout := time.Second * time.Duration(15*int(math.Pow(2.0, float64(n))))
 			timer := time.After(timeout)
 			select {
 			case <-recvChan:
@@ -316,7 +316,9 @@ func (tr *UdpTracker) request(payload []byte, dest []byte) int {
 			case <-timer:
 				tr.Conn.WriteTo(payload, tr.ServerAddr)
 				totalAttempts++
-				if n < 8 { n++ }
+				if n < 8 {
+					n++
+				}
 			}
 		}
 	}()
