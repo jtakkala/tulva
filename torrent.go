@@ -19,7 +19,6 @@ type Torrent struct {
 	infoHash []byte
 	peer     chan PeerTuple
 	quit     chan struct{}
-	Stats    Stats
 }
 
 // Metainfo File Structure
@@ -101,15 +100,38 @@ func NewTorrent(filename string, quit chan struct{}) (*Torrent, error) {
 
 // Init completes the initalization of the Torrent structure
 func (t *Torrent) Init() {
-	// Initialize bytes left to download
+	// Initialize Length to total length of files when in Multiple File mode
 	if len(t.metaInfo.Info.Files) > 0 {
+		t.metaInfo.Info.Length = 0
 		for _, file := range t.metaInfo.Info.Files {
-			t.Stats.Left += file.Length
+			t.metaInfo.Info.Length += file.Length
+		}
+	}
+
+	numFiles := 0
+	if len(t.metaInfo.Info.Files) > 0 {
+		// Multiple File Mode
+		for i := 0; i < len(t.metaInfo.Info.Files); i++ {
+			numFiles += 1
 		}
 	} else {
-		t.Stats.Left = t.metaInfo.Info.Length
+		// Single File Mode
+		numFiles = 1
 	}
-	// TODO: Read in the file and adjust bytes left
+
+	log.Printf("Torrent : Run : The torrent contains %d file(s), which are split across %d pieces", numFiles, (len(t.metaInfo.Info.Pieces) / 20))
+	log.Printf("Torrent : Run : The total length of all file(s) is %d", t.metaInfo.Info.Length)
+}
+
+// calcBytesLeft calculates the bytes remaining to download
+func calcBytesLeft(bytesLeft, pieceLength int, pieces []bool) int {
+	// Compute bytes remaining to download
+	for _, piece := range pieces {
+		if piece {
+			bytesLeft -= pieceLength
+		}
+	}
+	return bytesLeft
 }
 
 // Run starts the Torrent session and orchestrates all the child processes
@@ -118,6 +140,7 @@ func (t *Torrent) Run() {
 	defer log.Println("Torrent : Run : Completed")
 	t.Init()
 
+	// initalize the slice of piece hashes
 	pieceHashes := make([][]byte, 0)
 	for offset := 0; offset <= len(t.metaInfo.Info.Pieces)-20; offset += 20 {
 		pieceHashes = append(pieceHashes, []byte(t.metaInfo.Info.Pieces[offset:offset+20]))
@@ -126,30 +149,13 @@ func (t *Torrent) Run() {
 	diskIO := NewDiskIO(t.metaInfo)
 	diskIO.Init()
 	pieces := diskIO.Verify()
-
 	go diskIO.Run()
-
-	totalLength := 0
-	numFiles := 0
-	if t.metaInfo.Info.Length != 0 {
-		// There is a single file
-		totalLength = t.metaInfo.Info.Length
-		numFiles = 1
-	} else {
-		// There are multiple files
-		for i := 0; i < len(t.metaInfo.Info.Files); i++ {
-			totalLength += t.metaInfo.Info.Files[i].Length
-			numFiles += 1
-		}
-	}
-
-	log.Printf("Torrent : Run : The torrent contains %d file(s), which are split across %d pieces", numFiles, (len(t.metaInfo.Info.Pieces) / 20))
-	log.Printf("Torrent : Run : The total length of all file(s) is %d", totalLength)
+	bytesLeft := calcBytesLeft(t.metaInfo.Info.Length, t.metaInfo.Info.PieceLength, pieces)
 
 	server := NewServer()
-	stats := NewStats()
+	stats := NewStats(bytesLeft, diskIO.statsCh)
 	trackerManager := NewTrackerManager(server.Port)
-	peerManager := NewPeerManager(t.infoHash, len(pieceHashes), t.metaInfo.Info.PieceLength, totalLength, diskIO.peerChans, server.peerChans, stats.peerCh, trackerManager.peerChans)
+	peerManager := NewPeerManager(t.infoHash, len(pieceHashes), t.metaInfo.Info.PieceLength, t.metaInfo.Info.Length, diskIO.peerChans, server.peerChans, stats.peerCh, trackerManager.peerChans)
 	controller := NewController(pieces, pieceHashes, diskIO.contChans, peerManager.contChans, peerManager.peerContChans)
 
 	go controller.Run()

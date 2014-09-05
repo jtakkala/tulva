@@ -7,6 +7,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"sync"
 	"time"
 )
 
@@ -16,13 +17,17 @@ type Stats struct {
 	Downloaded int
 	Errors     int
 	peerCh     chan PeerStats
+	diskIOCh   chan int
 	ticker     <-chan time.Time
+	mu         sync.Mutex
 }
 
-func NewStats() *Stats {
+func NewStats(bytesLeft int, diskIOCh chan int) *Stats {
 	return &Stats{
-		peerCh: make(chan PeerStats),
-		ticker: make(chan time.Time),
+		Left:     bytesLeft,
+		peerCh:   make(chan PeerStats),
+		ticker:   make(chan time.Time),
+		diskIOCh: diskIOCh,
 	}
 }
 
@@ -38,6 +43,10 @@ func (s *Stats) Run() {
 			s.Downloaded += stat.read
 			s.Uploaded += stat.write
 			s.Errors += stat.errors
+		case bytesWritten := <-s.diskIOCh:
+			s.mu.Lock()
+			s.Left -= bytesWritten
+			s.mu.Unlock()
 		case <-s.ticker:
 			fmt.Printf("\033[31mDownloaded: %d, Left: %d, Uploaded: %d, Errors: %d\033[0m\n", s.Downloaded, s.Left, s.Uploaded, s.Errors)
 		}

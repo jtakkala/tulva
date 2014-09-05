@@ -25,6 +25,7 @@ type DiskIO struct {
 	files     []*os.File
 	peerChans diskIOPeerChans
 	contChans ControllerDiskIOChans
+	statsCh   chan int // channel of bytes written to disk
 	quit      chan struct{}
 }
 
@@ -140,8 +141,11 @@ func openOrCreateFile(name string) (file *os.File) {
 }
 
 func NewDiskIO(metaInfo MetaInfo) *DiskIO {
-	diskio := &DiskIO{metaInfo: metaInfo, quit: make(chan struct{})}
-	diskio.peerChans.writePiece = make(chan Piece)
+	diskio := &DiskIO{
+		metaInfo: metaInfo,
+		statsCh:  make(chan int),
+		quit:     make(chan struct{}),
+	}
 	diskio.peerChans.blockRequest = make(chan BlockRequest)
 	diskio.contChans.receivedPiece = make(chan ReceivedPiece)
 	return diskio
@@ -273,6 +277,7 @@ func (diskio *DiskIO) Run() {
 			go func() {
 				diskio.writePiece(piece)
 				diskio.contChans.receivedPiece <- ReceivedPiece{pieceNum: piece.index, peerName: piece.peerName}
+				diskio.statsCh <- len(piece.data)
 			}()
 		case blockRequest := <-diskio.peerChans.blockRequest:
 			log.Println("Received block request:", blockRequest)
