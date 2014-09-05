@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"log"
 	"math"
 	"math/rand"
@@ -27,131 +26,140 @@ const (
 
 type UdpTracker struct {
 	*tracker
-	connectionId  uint64
-	transactionId uint32
-	serverAddr    *net.UDPAddr
-	conn          *net.UDPConn
+	ConnectionId  uint64
+	TransactionId uint32
+	ServerAddr    *net.UDPAddr
+	Conn          *net.UDPConn
 }
 
 type connectRequest struct {
-	connectionId  uint64
-	action        uint32
-	transactionId uint32
+	ConnectionId  uint64
+	Action        uint32
+	TransactionId uint32
 }
 
 type connectResponse struct {
-	action        uint32
-	transactionId uint32
-	connectionId  uint64
+	Action        uint32
+	TransactionId uint32
+	ConnectionId  uint64
 }
 
 type errorResponse struct {
-	action        uint32
-	transactionId uint32
-	message       string
+	Action        uint32
+	TransactionId uint32
+	Message       string
 }
 
 type announceRequest struct {
-	connectionId  uint64
-	action        uint32
-	transactionId uint32
-	infoHash      []byte
-	peerId        []byte
-	downloaded    uint64
-	left          uint64
-	uploaded      uint64
-	event         uint32
-	ipAddr        uint32
-	key           uint32
-	numWant       int32
-	port          uint16
+	ConnectionId  uint64
+	Action        uint32
+	TransactionId uint32
+	InfoHash      [20]byte
+	PeerId        [20]byte
+	Downloaded    uint64
+	Left          uint64
+	Uploaded      uint64
+	Event         uint32
+	IpAddr        uint32
+	Key           uint32
+	NumWant       int32
+	Port          uint16
 }
 
 type announceResponse struct {
-	action        uint32
-	transactionId uint32
-	interval      uint32
-	leechers      uint32
-	seeders       uint32
-	peers         []PeerTuple
+	Action        uint32
+	TransactionId uint32
+	Interval      uint32
+	Leechers      uint32
+	Seeders       uint32
+	Peers         []PeerTuple
 }
 
 func (r *connectRequest) MarshalBinary() ([]byte, error) {
 	buf := new(bytes.Buffer)
-	err := binary.Write(buf, binary.BigEndian, r.connectionId)
-	err = binary.Write(buf, binary.BigEndian, r.action)
-	err = binary.Write(buf, binary.BigEndian, r.transactionId)
+	err := binary.Write(buf, binary.BigEndian, r)
 	return buf.Bytes(), err
 }
 
 func (r *connectResponse) UnmarshalBinary(data []byte) error {
-	buf := bytes.NewReader(data[4:])
-	actionBytes := append([]byte{0, 0, 0}, data[0])
-	err := binary.Read(bytes.NewReader(actionBytes), binary.BigEndian, &r.action)
-	err = binary.Read(buf, binary.BigEndian, &r.transactionId)
-	err = binary.Read(buf, binary.BigEndian, &r.connectionId)
+	buf := bytes.NewReader(data)
+	err := binary.Read(buf, binary.BigEndian, r)
 	return err
 }
 
-func (r *connectResponse) MarshalBinary() ([]byte, error) {
-	var b bytes.Buffer
-	fmt.Fprintln(&b, r.connectionId, r.action, r.transactionId)
-	return b.Bytes(), nil
-}
-
 func (r *errorResponse) UnmarshalBinary(data []byte) error {
-	actionBytes := append([]byte{0, 0, 0}, data[0])
-	err := binary.Read(bytes.NewReader(actionBytes), binary.BigEndian, &r.action)
-	err = binary.Read(bytes.NewReader(data[4:]), binary.BigEndian, &r.transactionId)
-	r.message = string(data[8:])
+	buf := bytes.NewReader(append([]byte{0,0,0,data[0]}, data[4:]...))
+	err := binary.Read(buf, binary.BigEndian, &r.Action)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.BigEndian, &r.TransactionId)
+	if err != nil {
+		return err
+	}
+
+	r.Message = string(data[8:])
 	return err
 }
 
 func (r *announceRequest) MarshalBinary() ([]byte, error) {
 	buf := new(bytes.Buffer)
-	err := binary.Write(buf, binary.BigEndian, r.connectionId)
-	err = binary.Write(buf, binary.BigEndian, r.action)
-	err = binary.Write(buf, binary.BigEndian, r.transactionId)
-	err = binary.Write(buf, binary.BigEndian, r.infoHash)
-	err = binary.Write(buf, binary.BigEndian, r.peerId)
-	err = binary.Write(buf, binary.BigEndian, r.downloaded)
-	err = binary.Write(buf, binary.BigEndian, r.left)
-	err = binary.Write(buf, binary.BigEndian, r.uploaded)
-	err = binary.Write(buf, binary.BigEndian, r.event)
-	err = binary.Write(buf, binary.BigEndian, r.ipAddr)
-	err = binary.Write(buf, binary.BigEndian, r.key)
-	err = binary.Write(buf, binary.BigEndian, r.numWant)
-	err = binary.Write(buf, binary.BigEndian, r.port)
+	err := binary.Write(buf, binary.BigEndian, r)
 	return buf.Bytes(), err
 }
 
 func (r *announceResponse) UnmarshalBinary(data []byte) error {
-	buf := bytes.NewReader(data[4:])
-	actionBytes := append([]byte{0, 0, 0}, data[0])
-	err := binary.Read(bytes.NewReader(actionBytes), binary.BigEndian, &r.action)
-	err = binary.Read(buf, binary.BigEndian, &r.transactionId)
-	err = binary.Read(buf, binary.BigEndian, &r.interval)
-	err = binary.Read(buf, binary.BigEndian, &r.leechers)
-	err = binary.Read(buf, binary.BigEndian, &r.seeders)
+	buf := bytes.NewReader(data)
 
-	if len(data) > announceMinResponseLength {
-		peerBytes := data[announceMinResponseLength:]
-		peers := len(peerBytes) / 6
-		
-		ipLen := 4
-		portLen := 2
-		for i := 0; i < peers; i++ {
-			ipOffset := i*6
-			portOffset := ipOffset + ipLen	
-			peer := PeerTuple{}
-			ipBytes := peerBytes[ipOffset : ipOffset + ipLen]
-			peer.IP = net.IPv4(ipBytes[0], ipBytes[1], ipBytes[2], ipBytes[3])
-			binary.Read(bytes.NewReader(peerBytes[portOffset : portOffset + portLen]), binary.BigEndian, &peer.Port)
-			r.peers = append(r.peers, peer)
-		}
+	err := binary.Read(buf, binary.BigEndian, &r.Action)
+	if err != nil {
+		return err
 	}
 
-	return err
+	err = binary.Read(buf, binary.BigEndian, &r.TransactionId)
+	if err != nil {
+		return err
+	}
+	
+	err = binary.Read(buf, binary.BigEndian, &r.Interval)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.BigEndian, &r.Leechers)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.BigEndian, &r.Seeders)
+	if err != nil {
+		return err
+	}
+
+	if len(data) > announceMinResponseLength {
+		peerBytes := bytes.NewReader(data[announceMinResponseLength:])
+		peers := (len(data) - announceMinResponseLength) / 6
+		
+		for i := 0; i < peers; i++ {
+			var peer PeerTuple
+			var ipBuf [4]byte
+
+			err = binary.Read(peerBytes, binary.BigEndian, &ipBuf)
+			if err != nil {
+				return err
+			}
+
+			err = binary.Read(peerBytes, binary.BigEndian, &peer.Port)
+			if err != nil {
+				return err
+			}
+			
+			peer.IP = net.IPv4(ipBuf[0], ipBuf[1], ipBuf[2], ipBuf[3])
+			r.Peers = append(r.Peers, peer)
+		}
+	}
+	return nil
 }
 
 func NewUdpTracker(key string, chans trackerPeerChans, port uint16, infoHash []byte, announce *url.URL) *UdpTracker {
@@ -167,21 +175,25 @@ func (tr *UdpTracker) Announce(event int) {
 
 	key, _ := strconv.ParseUint(tr.key, 16, 4)
 	announce := &announceRequest{
-		connectionId:  tr.connectionId,
-		action:        1,
-		transactionId: tr.transactionId,
-		infoHash:      tr.infoHash,
-		peerId:        PeerID[:],
-		downloaded:    uint64(tr.stats.Downloaded),
-		left:          uint64(tr.stats.Left),
-		uploaded:      uint64(tr.stats.Uploaded),
-		event:         uint32(event),
-		ipAddr:        0,
-		key:           uint32(key),
-		numWant:       -1,
-		port:          6881,
+		ConnectionId:  tr.ConnectionId,
+		Action:        1,
+		TransactionId: tr.TransactionId,
+		PeerId: PeerID,
+		Downloaded:    uint64(tr.stats.Downloaded),
+		Left:          uint64(tr.stats.Left),
+		Uploaded:      uint64(tr.stats.Uploaded),
+		Event:         uint32(event),
+		IpAddr:        0,
+		Key:           uint32(key),
+		NumWant:       -1,
+		Port:          6881,
 	}
-	announceBytes, _ := announce.MarshalBinary()
+	copy(announce.InfoHash[:20], tr.infoHash)
+	announceBytes, err := announce.MarshalBinary()
+	if err != nil {
+		log.Println("Tracker : Announce : Invalid response")
+		return
+	}
 
 	buff := make([]byte, announceBufferSize)
 	length := tr.request(announceBytes, buff)
@@ -191,13 +203,13 @@ func (tr *UdpTracker) Announce(event int) {
 		response.UnmarshalBinary(buff[:length])
 
 		if event != Stopped {
-			if response.interval != 0 {
-				nextAnnounce := time.Second * time.Duration(response.interval)
+			if response.Interval != 0 {
+				nextAnnounce := time.Second * time.Duration(response.Interval)
 				log.Println("Tracker : Announce : Scheduling next announce in", nextAnnounce)
 				tr.timer = time.After(nextAnnounce)
 			}
 
-			for _, peer := range response.peers {
+			for _, peer := range response.Peers {
 				tr.peerChans.peers <- peer
 			}
 		}
@@ -207,7 +219,7 @@ func (tr *UdpTracker) Announce(event int) {
 func (tr *UdpTracker) connect() error {
 	log.Printf("Tracker : Connect (%v)", tr.announceURL)
 
-	connectReq := connectRequest{connectionId: 0x41727101980, action: 0, transactionId: tr.transactionId}
+	connectReq := connectRequest{ConnectionId: 0x41727101980, Action: 0, TransactionId: tr.TransactionId}
 	connectBytes, _ := connectReq.MarshalBinary()
 
 	buff := make([]byte, connectBufferSize)
@@ -215,15 +227,23 @@ func (tr *UdpTracker) connect() error {
 
 	if length >= connectMinResponseLength {
 		var response connectResponse
-		response.UnmarshalBinary(buff[:length])
-
-		if response.action == 3 || tr.transactionId != response.transactionId {
-			error := errorResponse{}
-			error.UnmarshalBinary(buff)
-			return errors.New("Response Error: " + error.message)
+		err := response.UnmarshalBinary(buff[:length])
+		if err != nil {
+			log.Println("Tracker : Connect : Invalid response")
+			return err
 		}
 
-		tr.connectionId = response.connectionId
+		if response.Action == 3 || tr.TransactionId != response.TransactionId {
+			error := errorResponse{}
+			err := error.UnmarshalBinary(buff)
+			if err != nil {
+				return errors.New(error.Message)
+			} else {
+				return err
+			}
+		}
+
+		tr.ConnectionId = response.ConnectionId
 		return nil
 	}
 
@@ -248,9 +268,9 @@ func (tr *UdpTracker) Run() {
 		return
 	}
 
-	tr.transactionId = rand.Uint32()
-	tr.serverAddr = serverAddr
-	tr.conn = conn
+	tr.TransactionId = rand.Uint32()
+	tr.ServerAddr = serverAddr
+	tr.Conn = conn
 	tr.Announce(Started)
 
 	for {
@@ -283,7 +303,7 @@ func (tr *UdpTracker) request(payload []byte, dest []byte) int {
 	go func() {
 
 		// initial send
-		tr.conn.WriteTo(payload, tr.serverAddr)
+		tr.Conn.WriteTo(payload, tr.ServerAddr)
 	Listen:
 		for {
 			// timeout: 15 * 2 ^ n (0-8)
@@ -293,7 +313,7 @@ func (tr *UdpTracker) request(payload []byte, dest []byte) int {
 			case <-recvChan:
 				break Listen
 			case <-timer:
-				tr.conn.WriteTo(payload, tr.serverAddr)
+				tr.Conn.WriteTo(payload, tr.ServerAddr)
 				totalAttempts++
 				if n < 8 { n++ }
 			}
@@ -304,7 +324,7 @@ func (tr *UdpTracker) request(payload []byte, dest []byte) int {
 	var err error
 	length := 0
 	for length == 0 {
-		length, _, err = tr.conn.ReadFrom(dest)
+		length, _, err = tr.Conn.ReadFrom(dest)
 
 		// not sure what to do here?
 		if err != nil {
