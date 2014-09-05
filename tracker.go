@@ -109,18 +109,20 @@ func (tm *trackerManager) Run(m MetaInfo, infoHash []byte) {
 	log.Println("TrackerManager : Run : Started")
 	defer log.Println("TrackerManager : Run : Completed")
 
-	// TODO: Handle multiple announce URL's
-	/*
-		for announceURL := m.AnnounceList {
-			tr := new(Tracker)
-			tr.metaInfo = m
-			tr.announceURL = announceURL
-			tr.Run()
+	// Handle multiple announce URL's
+	for i := range m.AnnounceList {
+		for _, announceURL := range m.AnnounceList[i] {
+			log.Println("TrackerManager : Starting Tracker", announceURL)
+			tr := newTracker(initKey(), tm.peerChans, tm.port, infoHash, announceURL, tm.quit)
+			go tr.Run()
 		}
-	*/
-
-	tr := newTracker(initKey(), tm.peerChans, tm.port, infoHash, m.Announce, tm.quit)
-	go tr.Run()
+	}
+	// Handle a single announce URL
+	if len(m.Announce) > 0 {
+		log.Println("TrackerManager : Starting Tracker", m.Announce)
+		tr := newTracker(initKey(), tm.peerChans, tm.port, infoHash, m.Announce, tm.quit)
+		go tr.Run()
+	}
 
 	for {
 		select {

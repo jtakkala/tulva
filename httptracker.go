@@ -17,11 +17,11 @@ import (
 type HttpTracker tracker
 
 func (tr *HttpTracker) Announce(event int) {
-	log.Println("Tracker : Announce : Started")
-	defer log.Println("Tracker : Announce : Completed")
+	log.Println("HttpTracker : Announce : Started")
+	defer log.Println("HttpTracker : Announce : Completed")
 
 	if tr.infoHash == nil {
-		log.Println("Tracker : Announce : Error: infoHash undefined")
+		log.Println("HttpTracker : Announce : Error: infoHash undefined")
 		return
 	}
 
@@ -50,7 +50,8 @@ func (tr *HttpTracker) Announce(event int) {
 	log.Printf("Announce: %s\n", announceURL.String())
 	resp, err := http.Get(announceURL.String())
 	if err != nil {
-		log.Fatal(err)
+		log.Println("HttpTracker Error (%s): %v", announceURL.String(), err)
+		return
 	}
 	defer resp.Body.Close()
 
