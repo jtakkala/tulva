@@ -6,8 +6,8 @@ package main
 
 import (
 	"log"
-	"sort"
 	"math/rand"
+	"sort"
 	"time"
 )
 
@@ -36,7 +36,7 @@ func (r *RarityMap) put(rarity int, pieceNum int) {
 }
 
 func shuffle(ints []int) {
-	// Do an in-place Fisher Yates shuffle. 
+	// Do an in-place Fisher Yates shuffle.
 	rand.Seed(time.Now().UnixNano())
 	for i := (len(ints) - 1); i > 0; i-- {
 		j := rand.Intn(i + 1)
@@ -76,7 +76,7 @@ type Controller struct {
 	maxSimultaneousDownloadsPerPeer int
 	downloadComplete                bool
 	rxChans                         *ControllerRxChans
-	quit				chan struct{}
+	quit                            chan struct{}
 }
 
 type ControllerPeerChans struct {

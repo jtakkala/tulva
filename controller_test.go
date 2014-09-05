@@ -95,7 +95,7 @@ func TestPiecePrioritySliceSortingThree(t *testing.T) {
 // AssertSliceContainsValue asserts that integer i is present in slice of integers s
 func AssertSliceContainsValue(t *testing.T, s []int, i int) {
 	found := false
-	for _, v:= range s {
+	for _, v := range s {
 		if v == i {
 			found = true
 			break
@@ -193,23 +193,23 @@ func createTestController() *Controller {
 	finishedPieces := []bool{true, false, false, false, false, false, false, false, false, true}
 	pieceHashes := make([][]byte, len(finishedPieces))
 	/*
-	// Populate the pieceHashes with some dummy values
-	for i := range pieceHashes {
-		pieceHashes[i] = make([]byte, 1)
-		pieceHashes[i][0] = byte(i)
-	}
+		// Populate the pieceHashes with some dummy values
+		for i := range pieceHashes {
+			pieceHashes[i] = make([]byte, 1)
+			pieceHashes[i][0] = byte(i)
+		}
 	*/
 
 	// Create stubs and channels for DiskIO, PeerManager, and Peer
 	diskIOStub := ControllerDiskIOChans{receivedPiece: make(chan ReceivedPiece)}
 	peerManagerStub := ControllerPeerManagerChans{
-		newPeer: make(chan PeerComms),
+		newPeer:  make(chan PeerComms),
 		deadPeer: make(chan string),
-		seeding: make(chan bool),
+		seeding:  make(chan bool),
 	}
 	peerStub := PeerControllerChans{
 		chokeStatus: make(chan PeerChokeStatus),
-		havePiece: make(chan chan HavePiece),
+		havePiece:   make(chan chan HavePiece),
 	}
 
 	// Create the controller and return it

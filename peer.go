@@ -71,8 +71,8 @@ type Peer struct {
 	contTxChans      PeerControllerChans
 	stats            PeerStats
 	statsCh          chan PeerStats
-	quit		 chan struct{}
-	stopping	 chan bool
+	quit             chan struct{}
+	stopping         chan bool
 }
 
 type PieceDownload struct {
@@ -138,7 +138,7 @@ type PeerManager struct {
 	contChans     ControllerPeerManagerChans
 	peerContChans PeerControllerChans
 	statsCh       chan PeerStats
-	quit	      chan struct{}
+	quit          chan struct{}
 }
 
 type peerManagerChans struct {
@@ -287,7 +287,7 @@ func NewPeer(
 		peerManagerChans: peerManagerChans,
 		statsCh:          statsCh,
 		downloads:        make([]*PieceDownload, 0),
-		stopping:	  make(chan bool)}
+		stopping:         make(chan bool)}
 	return p
 }
 

@@ -3,15 +3,14 @@ package main
 import (
 	"github.com/jackpal/bencode-go"
 	"log"
-	"time"
 	"net"
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 )
 
 type HttpTracker tracker
-
 
 func (tr *HttpTracker) Announce(event int) {
 	log.Println("Tracker : Announce : Started")
@@ -101,4 +100,3 @@ func (tr *HttpTracker) Run() {
 		}
 	}
 }
-

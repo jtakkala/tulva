@@ -25,7 +25,7 @@ type DiskIO struct {
 	files     []*os.File
 	peerChans diskIOPeerChans
 	contChans ControllerDiskIOChans
-	quit	  chan struct{}
+	quit      chan struct{}
 }
 
 // checkHash accepts a byte buffer and pieceIndex, computes the SHA-1 hash of

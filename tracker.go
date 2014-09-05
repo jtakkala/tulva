@@ -9,8 +9,8 @@ import (
 	"log"
 	"math/rand"
 	"net/url"
-	"time"
 	"strings"
+	"time"
 )
 
 // Possible reasons for tracker requests with the event parameter
@@ -45,7 +45,7 @@ type TrackerResponse struct {
 	//	Peers          []Peers "peers"
 }
 
-type Tracker interface{
+type Tracker interface {
 	Announce(event int)
 	Run()
 }
@@ -63,7 +63,7 @@ type tracker struct {
 	quit        chan struct{}
 }
 
-func initKey () string {
+func initKey() string {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	key := make([]byte, 4)
 	for i := 0; i < 4; i++ {
@@ -93,7 +93,7 @@ func newTracker(key string, chans trackerPeerChans, port uint16, infoHash []byte
 	tracker.infoHash = make([]byte, len(infoHash))
 	tracker.quit = quit
 	copy(tracker.infoHash, infoHash)
-	
+
 	return tracker
 }
 

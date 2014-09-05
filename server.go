@@ -18,7 +18,7 @@ type Server struct {
 	Port      uint16
 	Listener  *net.TCPListener
 	peerChans serverPeerChans
-	quit	  chan struct{}
+	quit      chan struct{}
 }
 
 func NewServer() *Server {
@@ -64,6 +64,6 @@ func (sv *Server) Serve() {
 		}
 		log.Println("Server: New connection from:", conn.RemoteAddr())
 		// Hand the connection off to PeerManager
-		go func() {sv.peerChans.conns <- conn}()
+		go func() { sv.peerChans.conns <- conn }()
 	}
 }
