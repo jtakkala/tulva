@@ -1,7 +1,7 @@
 Tulva
 =====
 
-Tulva is BitTorrent client written entirely in Go as a project for Hacker School fall 2013. It's currently a work in progress. We aim for correctness and protocol completeness: designing an optimal download strategy, implementing both upload and download, multiple tracker support, and the resumption of interrupted downloads. The authors are Jari Takkala and Brian Dignan. The name Tulva comes from the Finnish word for flood.
+Tulva is BitTorrent client written entirely in Go as a project for Hacker School fall 2013. It's currently a work in progress. We aim for correctness and protocol completeness: designing an optimal download strategy, implementing both upload and download, multiple tracker support, and the resumption of interrupted downloads. The authors are Jari Takkala and Brian Dignan. The name <i>Tulva</i> comes from the Finnish word for flood.
 
 ## Status
 
@@ -20,6 +20,7 @@ Tulva is BitTorrent client written entirely in Go as a project for Hacker School
 - Verify received pieces and write to disk
 - Read pieces from disk and write to peer
 - Signal handler for CTRL-C and to initiate clean shutdown
+- UDP tracker support thanks to Rob Bassi
 
 ### To-do
 - Handle multiple trackers and backup trackers
