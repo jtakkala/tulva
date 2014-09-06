@@ -146,6 +146,7 @@ func NewDiskIO(metaInfo MetaInfo) *DiskIO {
 		statsCh:  make(chan int),
 		quit:     make(chan struct{}),
 	}
+	diskio.peerChans.writePiece = make(chan Piece)
 	diskio.peerChans.blockRequest = make(chan BlockRequest)
 	diskio.contChans.receivedPiece = make(chan ReceivedPiece)
 	return diskio
