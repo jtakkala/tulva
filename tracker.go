@@ -111,6 +111,7 @@ func (tm *trackerManager) Run(m MetaInfo, infoHash []byte) {
 
 	// Handle multiple announce URL's
 	for i := range m.AnnounceList {
+		// TODO: Correctly implement BEP 12 - currently connects to all trackers on all tiers
 		for _, announceURL := range m.AnnounceList[i] {
 			log.Println("TrackerManager : Starting Tracker", announceURL)
 			tr := newTracker(initKey(), tm.peerChans, tm.port, infoHash, announceURL, tm.quit)
