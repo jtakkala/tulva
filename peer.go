@@ -38,6 +38,7 @@ const (
 const (
 	downloadBlockSize             = 16384
 	maxSimultaneousBlockDownloads = 20
+	maxPeers                      = 100
 )
 
 // PeerTuple represents a single IP+port pair of a peer
@@ -128,6 +129,7 @@ type PeerManager struct {
 	peers         map[string]*Peer
 	infoHash      []byte
 	numPieces     int
+	numPeers      int
 	pieceLength   int
 	totalLength   int
 	seeding       bool
@@ -1128,7 +1130,7 @@ func (pm *PeerManager) Run() {
 				}
 			default:
 			}
-			if !pm.seeding {
+			if !pm.seeding && pm.numPeers < maxPeers {
 				peerName := fmt.Sprintf("%s:%d", peer.IP.String(), peer.Port)
 				_, ok := pm.peers[peerName]
 				if !ok {
@@ -1166,6 +1168,7 @@ func (pm *PeerManager) Run() {
 			// Associate the connection with the peer object and start the peer
 			pm.peers[conn.RemoteAddr().String()].conn = conn
 			go pm.peers[conn.RemoteAddr().String()].Run()
+			pm.numPeers += 1
 		case peer := <-pm.peerChans.deadPeer:
 			log.Printf("PeerManager : Deleting peer %s\n", peer)
 			// Tell the controller that this peer is dead
@@ -1173,6 +1176,7 @@ func (pm *PeerManager) Run() {
 				pm.contChans.deadPeer <- peer
 			}()
 			delete(pm.peers, peer)
+			pm.numPeers -= 1
 		case <-pm.quit:
 			for _, peer := range pm.peers {
 				go peer.Stop()
