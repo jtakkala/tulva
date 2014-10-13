@@ -211,10 +211,11 @@ func (tr *UdpTracker) Announce(event int) {
 			}
 
 			for _, peer := range response.Peers {
-				// need to copy peer to a local temporary variable before sending
-				// inside an anonymous goroutine
-				tmpPeer := peer
-				go func() { tr.peerChans.peers <- tmpPeer }()
+				// avoid a race condition by copying peer to p
+				go func(p PeerTuple) {
+					// send the peer to peer manager
+					tr.peerChans.peers <- p
+				}(peer)
 			}
 		}
 	}
