@@ -201,7 +201,11 @@ func (tr *UdpTracker) Announce(event int) {
 
 	if length >= announceMinResponseLength {
 		var response announceResponse
-		response.UnmarshalBinary(buff[:length])
+		err := response.UnmarshalBinary(buff[:length])
+		if err != nil {
+			// TODO: Handle tracker errors gracefully
+			log.Fatal(err)
+		}
 
 		if event != Stopped {
 			if response.Interval != 0 {
