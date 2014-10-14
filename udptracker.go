@@ -205,12 +205,12 @@ func (tr *UdpTracker) Announce(event int) {
 		return
 	}
 
-	buff := make([]byte, announceBufferSize)
-	length := tr.request(announceBytes, buff)
+	buf := make([]byte, announceBufferSize)
+	length := tr.request(announceBytes, buf)
 
 	if length >= announceMinResponseLength {
 		var response announceResponse
-		err := response.UnmarshalBinary(buff[:length])
+		err := response.UnmarshalBinary(buf[:length])
 		if err != nil {
 			// TODO: Handle tracker errors gracefully
 			log.Fatal(err)
@@ -240,12 +240,12 @@ func (tr *UdpTracker) connect() error {
 	connectReq := connectRequest{ConnectionId: initialConnectionId, Action: Connect, TransactionId: tr.TransactionId}
 	connectBytes, _ := connectReq.MarshalBinary()
 
-	buff := make([]byte, connectBufferSize)
-	length := tr.request(connectBytes, buff)
+	buf := make([]byte, connectBufferSize)
+	length := tr.request(connectBytes, buf)
 
 	if length >= connectMinResponseLength {
 		var response connectResponse
-		err := response.UnmarshalBinary(buff[:length])
+		err := response.UnmarshalBinary(buf[:length])
 		if err != nil {
 			log.Println("Tracker : Connect : Invalid response")
 			return err
@@ -253,7 +253,7 @@ func (tr *UdpTracker) connect() error {
 
 		if response.Action == Error || tr.TransactionId != response.TransactionId {
 			error := errorResponse{}
-			err := error.UnmarshalBinary(buff)
+			err := error.UnmarshalBinary(buf)
 			if err != nil {
 				return errors.New(error.Message)
 			} else {
