@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// UDP tracker support. See BEP 15.
+
 package main
 
 import (
@@ -23,6 +25,13 @@ const (
 	announceMinResponseLength = 20
 	connectBufferSize         = 150
 	announceBufferSize        = 20000
+)
+
+const (
+	Connect uint32 = iota
+	Announce
+	Scrape
+	Error
 )
 
 type UdpTracker struct {
@@ -177,7 +186,7 @@ func (tr *UdpTracker) Announce(event int) {
 	key, _ := strconv.ParseUint(tr.key, 16, 4)
 	announce := &announceRequest{
 		ConnectionId:  tr.ConnectionId,
-		Action:        1,
+		Action:        Announce,
 		TransactionId: tr.TransactionId,
 		PeerId:        PeerID,
 		Downloaded:    uint64(tr.stats.Downloaded),
@@ -228,7 +237,7 @@ func (tr *UdpTracker) Announce(event int) {
 func (tr *UdpTracker) connect() error {
 	log.Printf("Tracker : Connect (%v)", tr.announceURL)
 
-	connectReq := connectRequest{ConnectionId: initialConnectionId, Action: 0, TransactionId: tr.TransactionId}
+	connectReq := connectRequest{ConnectionId: initialConnectionId, Action: Connect, TransactionId: tr.TransactionId}
 	connectBytes, _ := connectReq.MarshalBinary()
 
 	buff := make([]byte, connectBufferSize)
@@ -242,7 +251,7 @@ func (tr *UdpTracker) connect() error {
 			return err
 		}
 
-		if response.Action == 3 || tr.TransactionId != response.TransactionId {
+		if response.Action == Error || tr.TransactionId != response.TransactionId {
 			error := errorResponse{}
 			err := error.UnmarshalBinary(buff)
 			if err != nil {
