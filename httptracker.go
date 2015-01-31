@@ -50,7 +50,7 @@ func (tr *HttpTracker) Announce(event int) {
 	log.Printf("Announce: %s\n", announceURL.String())
 	resp, err := http.Get(announceURL.String())
 	if err != nil {
-		log.Println("HttpTracker Error (%s): %v", announceURL.String(), err)
+		log.Printf("HttpTracker Error (%s): %v", announceURL.String(), err)
 		return
 	}
 	defer resp.Body.Close()
