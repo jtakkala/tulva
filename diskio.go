@@ -216,7 +216,7 @@ func (diskio *DiskIO) Init() {
 		for _, file := range diskio.metaInfo.Info.Files {
 			// Create any sub-directories if required
 			if len(file.Path) > 1 {
-				directory = filepath.Join(file.Path[1:]...)
+				directory = filepath.Join(file.Path[:len(file.Path)-1]...)
 				if _, err := os.Stat(directory); os.IsNotExist(err) {
 					err = os.MkdirAll(directory, os.ModeDir|os.ModePerm)
 					checkError(err)
