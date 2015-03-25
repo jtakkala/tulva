@@ -24,7 +24,7 @@ type Torrent struct {
 // Metainfo File Structure
 type MetaInfo struct {
 	Info struct {
-		PieceLength int "piece length"
+		PieceLength int `bencode:"piece length"`
 		Pieces      string
 		Private     int
 		Name        string
@@ -37,10 +37,10 @@ type MetaInfo struct {
 		}
 	}
 	Announce     string
-	AnnounceList [][]string "announce-list"
-	CreationDate int        "creation date"
+	AnnounceList [][]string `bencode:"announce-list"`
+	CreationDate int        `bencode:"creation date"`
 	Comment      string
-	CreatedBy    string "created by"
+	CreatedBy    string `bencode:"created by"`
 	Encoding     string
 }
 

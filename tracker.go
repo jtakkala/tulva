@@ -33,14 +33,14 @@ type trackerManager struct {
 }
 
 type TrackerResponse struct {
-	FailureReason  string "failure reason"
-	WarningMessage string "warning message"
+	FailureReason  string `bencode:"failure reason"`
+	WarningMessage string `bencode:"warning message"`
 	Interval       int
-	MinInterval    int    "min interval"
-	TrackerId      string "tracker id"
+	MinInterval    int    `bencode:"min interval"`
+	TrackerId      string `bencode:"tracker id"`
 	Complete       int
 	Incomplete     int
-	Peers          string "peers"
+	Peers          string `bencode:"peers"`
 	//TODO: Figure out how to handle dict of peers
 	//	Peers          []Peers "peers"
 }
