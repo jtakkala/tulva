@@ -1120,25 +1120,25 @@ func (pm *PeerManager) Run() {
 
 	for {
 		select {
+		case seeding := <-pm.contChans.seeding:
+			if !seeding {
+				log.Fatal("PeerManager : Unexpectedly received a false over the seeding channel")
+			} else {
+				pm.seeding = true
+			}
 		case peer := <-pm.trackerChans.peers:
-			select {
-			case finished := <-pm.contChans.seeding:
-				if !finished {
-					log.Fatalf("PeerManager : Unexpectedly received a false over the seeding channel.")
-				} else {
-					pm.seeding = true
-				}
-			default:
+			if pm.seeding || pm.numPeers >= maxPeers {
+				// Not accepting any more peers because we're
+				// either seeding or at max
+				break
 			}
-			if !pm.seeding && pm.numPeers < maxPeers {
-				peerName := fmt.Sprintf("%s:%d", peer.IP.String(), peer.Port)
-				_, ok := pm.peers[peerName]
-				if !ok {
-					// Have the 'peer' routine create an outbound
-					// TCP connection to the remote peer
-					go connectToPeer(peer, pm.serverChans.conns)
-				}
+			peerName := fmt.Sprintf("%s:%d", peer.IP.String(), peer.Port)
+			_, ok := pm.peers[peerName]
+			if ok {
+				log.Printf("PeerManager: Peer %s already exists!", peerName)
+				break
 			}
+			go connectToPeer(peer, pm.serverChans.conns)
 		case conn := <-pm.serverChans.conns:
 			_, ok := pm.peers[conn.RemoteAddr().String()]
 			if !ok {
