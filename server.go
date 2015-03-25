@@ -28,7 +28,7 @@ func NewServer() *Server {
 	sv.peerChans.conns = make(chan *net.TCPConn)
 
 	var err error
-	sv.Listener, err = net.ListenTCP("tcp4", &net.TCPAddr{net.ParseIP("0.0.0.0"), 0, ""})
+	sv.Listener, err = net.ListenTCP("tcp4", &net.TCPAddr{})
 	if err != nil {
 		log.Fatal(err)
 	}

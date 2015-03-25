@@ -243,7 +243,7 @@ func NewPeerManager(infoHash []byte, numPieces int, pieceLength int, totalLength
 }
 
 func connectToPeer(peerTuple PeerTuple, connCh chan *net.TCPConn) {
-	raddr := net.TCPAddr{peerTuple.IP, int(peerTuple.Port), ""}
+	raddr := net.TCPAddr{IP: peerTuple.IP, Port: int(peerTuple.Port)}
 	log.Println("Peer : Connecting to", raddr)
 	conn, err := net.DialTCP("tcp4", nil, &raddr)
 	if err != nil {
