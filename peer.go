@@ -91,13 +91,13 @@ func (piece *PieceDownload) remainingRequestsToSend() int {
 }
 
 func (p *Peer) newPieceDownload(requestPiece RequestPiece) *PieceDownload {
-	pd := new(PieceDownload)
-	pd.pieceNum = requestPiece.pieceNum
-	pd.expectedHash = requestPiece.expectedHash
-	pd.data = make([]byte, p.expectedLengthForPiece(requestPiece.pieceNum))
-	pd.numBlocksInPiece = p.expectedNumBlocksForPiece(requestPiece.pieceNum)
-	pd.isFinished = false
-	return pd
+	return &PieceDownload{
+		pieceNum:         requestPiece.pieceNum,
+		expectedHash:     requestPiece.expectedHash,
+		data:             make([]byte, p.expectedLengthForPiece(requestPiece.pieceNum)),
+		numBlocksInPiece: p.expectedNumBlocksForPiece(requestPiece.pieceNum),
+		isFinished:       false,
+	}
 }
 
 type PeerStats struct {
@@ -153,10 +153,10 @@ type PeerComms struct {
 }
 
 func NewPeerComms(peerName string, cpc ControllerPeerChans) *PeerComms {
-	pc := new(PeerComms)
-	pc.peerName = peerName
-	pc.chans = cpc
-	return pc
+	return &PeerComms{
+		peerName: peerName,
+		chans:    cpc,
+	}
 }
 
 type PeerInfo struct {
@@ -177,16 +177,13 @@ type Handshake struct {
 }
 
 func NewPeerInfo(quantityOfPieces int, peerComms PeerComms) *PeerInfo {
-	pi := new(PeerInfo)
-
-	pi.peerName = peerComms.peerName
-	pi.chans = peerComms.chans
-
-	pi.isChoked = true // By default, a peer starts as being choked by the other side.
-	pi.availablePieces = make([]bool, quantityOfPieces)
-	pi.activeRequests = make(map[int]struct{})
-
-	return pi
+	return &PeerInfo{
+		peerName:        peerComms.peerName,
+		chans:           peerComms.chans,
+		isChoked:        true, // By default, a peer starts as being choked by the other side.
+		availablePieces: make([]bool, quantityOfPieces),
+		activeRequests:  make(map[int]struct{}),
+	}
 }
 
 // Sent by the peer to controller indicating a 'choke' state change. It either went from unchoked to choked,
@@ -406,11 +403,11 @@ func checkHash(block []byte, expectedHash []byte) bool {
 }
 
 func (p *Peer) sendFinishedPieceToDiskIO(pieceNum int, data []byte) {
-	piece := new(Piece)
-	piece.index = pieceNum
-	piece.data = data
-	piece.peerName = p.peerName
-	p.diskIOChans.writePiece <- *piece
+	p.diskIOChans.writePiece <- Piece{
+		index:    pieceNum,
+		data:     data,
+		peerName: p.peerName,
+	}
 }
 
 func (p *Peer) weShouldBeInterested() bool {

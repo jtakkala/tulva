@@ -21,9 +21,9 @@ type RarityMap struct {
 }
 
 func NewRarityMap() *RarityMap {
-	r := new(RarityMap)
-	r.data = make(map[int][]int)
-	return r
+	return &RarityMap{
+		data: make(map[int][]int),
+	}
 }
 
 // Add a new rarity -> pieceNum mapping.
@@ -175,17 +175,8 @@ func (cont *Controller) updateCompletedFlagIfFinished(initializing bool) {
 func (cont *Controller) sendHaveToPeersWhoNeedPiece(pieceNum int) {
 	for _, peerInfo := range cont.peers {
 		if !peerInfo.availablePieces[pieceNum] {
-
 			// This peer doesn't have the piece that we just finished. Send them a HAVE message.
 			//log.Printf("Controller : sendHaveToPeersWhoNeedPiece : Sending HAVE to %s for piece %x", peerInfo.peerName, pieceNum)
-
-			haveMessage := new(HavePiece)
-
-			// When sent from the controller to the peer, the only relevant field is the piece number
-			// field. The peerName field doesn't need to be set, because the message is being sent
-			// directly to the peer
-			haveMessage.pieceNum = pieceNum
-
 			go sendHaveToPeer(pieceNum, peerInfo.chans.havePiece)
 		}
 	}
@@ -219,8 +210,7 @@ func (cont *Controller) removePieceFromActiveRequests(piece ReceivedPiece) {
 				// Decrement activeRequestsTotals for this piece by one (one less peer is downloading it)
 				cont.activeRequestsTotals[piece.pieceNum]--
 
-				cancelMessage := new(CancelPiece)
-				cancelMessage.pieceNum = piece.pieceNum
+				cancelMessage := &CancelPiece{pieceNum: piece.pieceNum}
 
 				// Tell this peer to stop downloading this piece because it's already finished.
 				//go func() { peerInfo.chans.cancelPiece <- *cancelMessage }()
@@ -338,10 +328,11 @@ func (cont *Controller) createDownloadPriorityForPeer(peerInfo *PeerInfo, rarity
 				// 2) We need this piece, because it's in the raritySlice
 				// 3) The peer is not already working on this piece (not in activeRequests)
 
-				pp := new(PiecePriority)
-				pp.pieceNum = pieceNum
-				pp.activeRequestsTotal = cont.activeRequestsTotals[pieceNum]
-				pp.rarityIndex = rarityIndex
+				pp := &PiecePriority{
+					pieceNum:            pieceNum,
+					activeRequestsTotal: cont.activeRequestsTotals[pieceNum],
+					rarityIndex:         rarityIndex,
+				}
 
 				piecePrioritySlice = append(piecePrioritySlice, *pp)
 			}
@@ -373,9 +364,10 @@ func (cont *Controller) sendRequestsToPeer(peerInfo *PeerInfo, raritySlice []int
 				}
 
 				// Create a new RequestPiece message and send it to the peer
-				requestMessage := new(RequestPiece)
-				requestMessage.pieceNum = pieceNum
-				requestMessage.expectedHash = cont.pieceHashes[pieceNum]
+				requestMessage := &RequestPiece{
+					pieceNum:     pieceNum,
+					expectedHash: cont.pieceHashes[pieceNum],
+				}
 				//log.Printf("Controller : SendRequestsToPeer : Requesting %s to get piece %x", peerInfo.peerName, pieceNum)
 				go func() { peerInfo.chans.requestPiece <- *requestMessage }()
 
@@ -402,9 +394,10 @@ func sendBitfieldOverChannel(outerChan chan<- chan HavePiece, peerName string, b
 
 		for pieceNum, havePiece := range bitfield {
 			if havePiece {
-				haveMessage := new(HavePiece)
-				haveMessage.peerName = peerName
-				haveMessage.pieceNum = pieceNum
+				haveMessage := &HavePiece{
+					peerName: peerName,
+					pieceNum: pieceNum,
+				}
 				innerChan <- *haveMessage
 			}
 		}
