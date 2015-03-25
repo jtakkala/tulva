@@ -86,11 +86,11 @@ type ControllerPeerChans struct {
 }
 
 func NewControllerPeerChans() *ControllerPeerChans {
-	cpc := new(ControllerPeerChans)
-	cpc.requestPiece = make(chan RequestPiece)
-	cpc.cancelPiece = make(chan CancelPiece)
-	cpc.havePiece = make(chan chan HavePiece)
-	return cpc
+	return &ControllerPeerChans{
+		requestPiece: make(chan RequestPiece),
+		cancelPiece:  make(chan CancelPiece),
+		havePiece:    make(chan chan HavePiece),
+	}
 }
 
 type ControllerDiskIOChans struct {
