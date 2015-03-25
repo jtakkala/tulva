@@ -1140,34 +1140,43 @@ func (pm *PeerManager) Run() {
 			}
 			go connectToPeer(peer, pm.serverChans.conns)
 		case conn := <-pm.serverChans.conns:
-			_, ok := pm.peers[conn.RemoteAddr().String()]
-			if !ok {
-				// Create the Controller->Peer chans struct
-				contTxChans := *NewControllerPeerChans()
-
-				// Construct the Peer object
-				peerName := conn.RemoteAddr().String()
-				pm.peers[peerName] = NewPeer(
-					peerName,
-					pm.infoHash,
-					pm.numPieces,
-					pm.pieceLength,
-					pm.totalLength,
-					pm.diskIOChans,
-					contTxChans,
-					pm.peerContChans,
-					pm.peerChans,
-					pm.statsCh)
-
-				// Give the controller the channels that it will use to
-				// transmit messages to this new peer
-				go func() {
-					pm.contChans.newPeer <- PeerComms{peerName: peerName, chans: contTxChans}
-				}()
+			if pm.numPeers >= maxPeers {
+				// Not accepting any more peers because we're
+				// at the max
+				conn.Close()
+				break
 			}
+			peerName := conn.RemoteAddr().String()
+			_, ok := pm.peers[peerName]
+			if ok {
+				log.Printf("PeerManager: Peer %s already exists!", peerName)
+				conn.Close()
+				break
+			}
+
+			// Create the Controller->Peer chans struct
+			contTxChans := *NewControllerPeerChans()
+			// Construct the Peer object
+			pm.peers[peerName] = NewPeer(
+				peerName,
+				pm.infoHash,
+				pm.numPieces,
+				pm.pieceLength,
+				pm.totalLength,
+				pm.diskIOChans,
+				contTxChans,
+				pm.peerContChans,
+				pm.peerChans,
+				pm.statsCh)
+
+			// Give the controller the channels that it will use to
+			// transmit messages to this new peer
+			go func() {
+				pm.contChans.newPeer <- PeerComms{peerName: peerName, chans: contTxChans}
+			}()
 			// Associate the connection with the peer object and start the peer
-			pm.peers[conn.RemoteAddr().String()].conn = conn
-			go pm.peers[conn.RemoteAddr().String()].Run()
+			pm.peers[peerName].conn = conn
+			go pm.peers[peerName].Run()
 			pm.numPeers += 1
 		case peer := <-pm.peerChans.deadPeer:
 			log.Printf("PeerManager : Deleting peer %s\n", peer)
