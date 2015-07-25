@@ -101,28 +101,28 @@ func (p *Peer) newPieceDownload(requestPiece RequestPiece) *PieceDownload {
 }
 
 type PeerStats struct {
-	mu     sync.Mutex
+	sync.Mutex
 	read   int
 	write  int
 	errors int
 }
 
 func (ps *PeerStats) addRead(value int) {
-	ps.mu.Lock()
+	ps.Lock()
 	ps.read += value
-	ps.mu.Unlock()
+	ps.Unlock()
 }
 
 func (ps *PeerStats) addWrite(value int) {
-	ps.mu.Lock()
+	ps.Lock()
 	ps.write += value
-	ps.mu.Unlock()
+	ps.Unlock()
 }
 
 func (ps *PeerStats) addError(value int) {
-	ps.mu.Lock()
+	ps.Lock()
 	ps.errors += value
-	ps.mu.Unlock()
+	ps.Unlock()
 }
 
 type PeerManager struct {
